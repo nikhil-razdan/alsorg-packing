@@ -82,6 +82,33 @@ const parseAssignees = (value) =>
     )
   ).slice(0, 12);
 
+const DESIGN_TASK_STATUS_OPTIONS = Object.freeze([
+  { value: "PENDING", label: "Pending / Yet To Start" },
+  { value: "WIP", label: "WIP" },
+  { value: "COMPLETED", label: "Completed" },
+]);
+
+const designTaskStatusLabel = (status) => {
+  const value = String(status || "").toUpperCase();
+  if (["COMPLETED", "DONE", "CANCELLED"].includes(value)) return "Completed";
+  if (["WIP", "WORKING", "HOLD", "IN_PROGRESS"].includes(value)) return "WIP";
+  return "Pending / Yet To Start";
+};
+
+const designTaskStatusAccent = (status) => {
+  const value = String(status || "").toUpperCase();
+  if (["COMPLETED", "DONE", "CANCELLED"].includes(value)) return "var(--mf-success-text)";
+  if (["WIP", "WORKING", "HOLD", "IN_PROGRESS"].includes(value)) return "var(--mf-primary-text)";
+  return "var(--mf-text-secondary)";
+};
+
+const designTaskStatusGroup = (status) => {
+  const value = String(status || "").toUpperCase();
+  if (["COMPLETED", "DONE", "CANCELLED"].includes(value)) return "COMPLETED";
+  if (["WIP", "WORKING", "HOLD", "IN_PROGRESS"].includes(value)) return "WIP";
+  return "PENDING";
+};
+
 const auditDetails = (event) => {
   if (!event?.detailsJson) return {};
   if (typeof event.detailsJson === "object") return event.detailsJson;
@@ -210,6 +237,11 @@ const TABS_BY_FOCUS = Object.freeze({
   ],
 });
 
+const JUNIOR_DESIGN_TABS = Object.freeze([
+  ["designTasks", "My Tasks"],
+  ["queries", "Related Issues"],
+]);
+
 const visibleInFocus = (row, focus) => {
   const stage = String(row?.stage || "").toUpperCase();
   if (focus === "DESIGN") {
@@ -273,8 +305,7 @@ const fileAttention = (row, focus) => {
   if (["RED", "AMBER"].includes(health)) return true;
   if (focus === "DESIGN") {
     return Number(row?.openQueries || 0) > 0
-      || Number(row?.designTaskProgress?.overdue || 0) > 0
-      || Number(row?.designTaskProgress?.hold || 0) > 0;
+      || Number(row?.designTaskProgress?.overdue || 0) > 0;
   }
   if (focus === "ENGINEERING") {
     return Number(row?.openQueries || 0) > 0
@@ -399,6 +430,7 @@ const EMPTY_DESIGN_TASK = {
   receivedAt: "",
   dueAt: "",
   priority: "NORMAL",
+  status: "PENDING",
   blocking: "true",
   remarks: "",
 };
@@ -444,6 +476,8 @@ export function MatFlowWorkWorkspacePage() {
     MATFLOW_ROLES.ENGINEERING,
     MATFLOW_ROLES.ENGINEERING_JUNIOR
   );
+  const juniorDesignerOnly = hasRole(MATFLOW_ROLES.DESIGNER_JUNIOR)
+    && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER);
   const juniorEngineerOnly = hasRole(MATFLOW_ROLES.ENGINEERING_JUNIOR)
     && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING);
   const canCreateEngineeringTask = canEngineeringReview || juniorEngineerOnly;
@@ -486,9 +520,9 @@ export function MatFlowWorkWorkspacePage() {
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [health, setHealth] = useState("");
   const [stage, setStage] = useState("");
-  const [tab, setTab] = useState(searchParams.get("tab") || "overview");
+  const [tab, setTab] = useState(searchParams.get("tab") || (juniorDesignerOnly ? "designTasks" : "overview"));
   const [selectedQueryId, setSelectedQueryId] = useState(searchParams.get("queryId") || "");
-  const [workspaceView, setWorkspaceView] = useState("FILES");
+  const [workspaceView, setWorkspaceView] = useState(juniorDesignerOnly ? "TASKS" : "FILES");
   const [workspaceFocus, setWorkspaceFocus] = useState(resolvedInitialFocus);
   const [groupBy, setGroupBy] = useState("PD");
   const [expandedGroupKey, setExpandedGroupKey] = useState("");
@@ -499,7 +533,6 @@ export function MatFlowWorkWorkspacePage() {
   const [setup, setSetup] = useState(EMPTY_SETUP);
   const [action, setAction] = useState(EMPTY_ACTION);
   const [designTaskDialog, setDesignTaskDialog] = useState(null);
-  const [designTaskStatusDialog, setDesignTaskStatusDialog] = useState(null);
   const [revisionType, setRevisionType] = useState("DESIGN_DRAWING");
   const [revisionNo, setRevisionNo] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
@@ -512,14 +545,14 @@ export function MatFlowWorkWorkspacePage() {
    */
   useEffect(() => {
     const urlFileId = searchParams.get("fileId") || "";
-    const urlTab = searchParams.get("tab") || "overview";
+    const urlTab = searchParams.get("tab") || (juniorDesignerOnly ? "designTasks" : "overview");
     const urlQueryId = searchParams.get("queryId") || "";
     const urlSearch = searchParams.get("q") || "";
     if (urlFileId && urlFileId !== selectedId) setSelectedId(urlFileId);
     if (urlTab !== tab) setTab(urlTab);
     if (urlQueryId !== selectedQueryId) setSelectedQueryId(urlQueryId);
     if (urlSearch && urlSearch !== search) setSearch(urlSearch);
-  }, [searchParams]);
+  }, [searchParams, juniorDesignerOnly]);
 
   useEffect(() => {
     if (!canDesignTeam && canEngineeringReview && revisionType !== "ENGINEERING_DRAWING") {
@@ -533,13 +566,20 @@ export function MatFlowWorkWorkspacePage() {
     if (!focusOptions.some((item) => item.value === workspaceFocus)) setWorkspaceFocus(resolvedInitialFocus);
   }, [focusOptions, workspaceFocus, resolvedInitialFocus]);
 
+  const visibleTabs = useMemo(
+    () => juniorDesignerOnly && workspaceFocus === "DESIGN"
+      ? JUNIOR_DESIGN_TABS
+      : (TABS_BY_FOCUS[workspaceFocus] || TABS_BY_FOCUS.MANAGEMENT),
+    [juniorDesignerOnly, workspaceFocus]
+  );
+
   useEffect(() => {
-    const tabs = TABS_BY_FOCUS[workspaceFocus] || TABS_BY_FOCUS.MANAGEMENT;
-    if (!tabs.some(([value]) => value === tab)) setTab("overview");
+    const tabs = visibleTabs;
+    if (!tabs.some(([value]) => value === tab)) setTab(tabs[0]?.[0] || "overview");
     if (workspaceFocus !== "DESIGN" && workspaceView === "TASKS") setWorkspaceView("FILES");
     const allowedStages = STAGES_BY_FOCUS[workspaceFocus] || STAGES_BY_FOCUS.MANAGEMENT;
     if (stage && !allowedStages.includes(stage)) setStage("");
-  }, [workspaceFocus, tab, workspaceView, stage]);
+  }, [workspaceFocus, tab, workspaceView, stage, visibleTabs]);
 
   const loadList = useCallback(
     async ({ quiet = false } = {}) => {
@@ -746,6 +786,7 @@ export function MatFlowWorkWorkspacePage() {
       receivedAt: toInputDateTime(item.receivedAt),
       dueAt: toInputDateTime(item.dueAt),
       priority: item.priority || "NORMAL",
+      status: item.status || "PENDING",
       blocking: item.blocking === false ? "false" : "true",
       remarks: item.remarks || "",
     });
@@ -779,10 +820,6 @@ export function MatFlowWorkWorkspacePage() {
   };
 
   const requestDesignTaskStatus = (item, nextStatus) => {
-    if (["HOLD", "CANCELLED"].includes(nextStatus)) {
-      setDesignTaskStatusDialog({ item, status: nextStatus, note: "" });
-      return;
-    }
     execute(
       () =>
         matflowApi.setDesignTaskStatus(file.id, item.id, {
@@ -792,20 +829,6 @@ export function MatFlowWorkWorkspacePage() {
         }),
       "Unable to update Design task."
     );
-  };
-
-  const saveDesignTaskStatus = async () => {
-    if (!designTaskStatusDialog || !file) return;
-    const ok = await execute(
-      () =>
-        matflowApi.setDesignTaskStatus(file.id, designTaskStatusDialog.item.id, {
-          status: designTaskStatusDialog.status,
-          note: designTaskStatusDialog.note,
-          rowVersion: designTaskStatusDialog.item.rowVersion,
-        }),
-      "Unable to update Design task."
-    );
-    if (ok) setDesignTaskStatusDialog(null);
   };
 
   const sendQueryMessage = (item, message) => {
@@ -910,10 +933,12 @@ export function MatFlowWorkWorkspacePage() {
     <Box sx={pageSx}>
       <PageHero
         badge={workspaceFocus === "DESIGN" ? "DESIGN" : workspaceFocus === "ENGINEERING" ? "ENGINEERING" : workspaceFocus === "PPC" ? "PPC" : "CONTROL"}
-        title={workspaceFocus === "DESIGN" ? "Design Work" : workspaceFocus === "ENGINEERING" ? "Engineering Work" : workspaceFocus === "PPC" ? "PPC Control" : "Work"}
+        title={workspaceFocus === "DESIGN" ? (juniorDesignerOnly ? "My Design Work" : "Design Work") : workspaceFocus === "ENGINEERING" ? "Engineering Work" : workspaceFocus === "PPC" ? "PPC Control" : "Work"}
         subtitle={
           workspaceFocus === "DESIGN"
-            ? "Start with Client / PD, then open the Product that needs Design action."
+            ? juniorDesignerOnly
+              ? "Only your assigned Design tasks and their related Product / PD information are shown."
+              : "Start with Client / PD, then open the Product that needs Design action."
             : workspaceFocus === "ENGINEERING"
               ? "Start with Client / PD, then open the Product that needs Engineering action."
               : workspaceFocus === "PPC"
@@ -923,13 +948,13 @@ export function MatFlowWorkWorkspacePage() {
         actions={(
           <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap" }}>
             {focusOptions.length > 1 && focusOptions.map((item) => (
-              <Button key={item.value} onClick={() => { setWorkspaceFocus(item.value); setWorkspaceView("FILES"); setTab("overview"); }} sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}>
+              <Button key={item.value} onClick={() => { setWorkspaceFocus(item.value); setWorkspaceView("FILES"); setTab(juniorDesignerOnly && item.value === "DESIGN" ? "designTasks" : "overview"); }} sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}>
                 {item.label}
               </Button>
             ))}
             {workspaceFocus === "DESIGN" && departmentAccess.design && (
               <Button onClick={() => setWorkspaceView(workspaceView === "TASKS" ? "FILES" : "TASKS")} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>
-                {workspaceView === "TASKS" ? "Products" : "Task Desk"}
+                {workspaceView === "TASKS" ? (juniorDesignerOnly ? "Assigned Products" : "Products") : (juniorDesignerOnly ? "My Tasks" : "Task Desk")}
               </Button>
             )}
             {workspaceView === "FILES" && <Button startIcon={<RefreshOutlinedIcon />} onClick={refresh} sx={secondaryBtnSx}>Refresh</Button>}
@@ -939,11 +964,11 @@ export function MatFlowWorkWorkspacePage() {
       {error && <ErrorBox>{error}</ErrorBox>}
 
       {workspaceView === "TASKS" ? (
-        <DesignTaskDesk selectedPlantParam={selectedPlantParam} onOpenFile={(fileId) => { setSelectedQueryId(""); setSelectedId(fileId); setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); setTab("designTasks"); }} />
+        <DesignTaskDesk selectedPlantParam={selectedPlantParam} juniorDesignerOnly={juniorDesignerOnly} currentUsername={currentUsername} onOpenFile={(fileId) => { setSelectedQueryId(""); setSelectedId(fileId); setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); setTab("designTasks"); }} />
       ) : (
       <>
       <Card sx={{ ...panelSx, p: 1.2 }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(260px,2fr) 135px 165px minmax(180px,1fr) auto" }, gap: 0.8 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: juniorDesignerOnly ? "minmax(280px,2fr) 150px auto" : "minmax(260px,2fr) 135px 165px minmax(180px,1fr) auto" }, gap: 0.8 }}>
           <TextField
             size="small"
             label="Search PD No. / Client / Project / Product / Drawing"
@@ -956,16 +981,16 @@ export function MatFlowWorkWorkspacePage() {
             <MenuItem value="PD">PD No.</MenuItem>
             <MenuItem value="CLIENT">Client</MenuItem>
           </TextField>
-          <TextField select size="small" label="Health" value={health} onChange={(e) => setHealth(e.target.value)} sx={fieldSx}>
+          {!juniorDesignerOnly && <TextField select size="small" label="Health" value={health} onChange={(e) => setHealth(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
             {HEALTH_FILTERS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}>
+          </TextField>}
+          {!juniorDesignerOnly && <TextField select size="small" label="Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All stages</MenuItem>
             {(STAGES_BY_FOCUS[workspaceFocus] || STAGES_BY_FOCUS.MANAGEMENT).map((value) => (
               <MenuItem key={value} value={value}>{readable(value)}</MenuItem>
             ))}
-          </TextField>
+          </TextField>}
           <Button onClick={() => loadList()} sx={secondaryBtnSx}>Search</Button>
         </Box>
       </Card>
@@ -975,10 +1000,10 @@ export function MatFlowWorkWorkspacePage() {
           <Box sx={{ px: 1.25, py: 1.05, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
             <Box>
               <Typography sx={{ fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>
-                {groupBy === "PD" ? "PD Work Queue" : "Client Work Queue"}
+                {juniorDesignerOnly ? (groupBy === "PD" ? "My PD Assignments" : "My Client Assignments") : (groupBy === "PD" ? "PD Work Queue" : "Client Work Queue")}
               </Typography>
               <Typography sx={{ mt: 0.1, fontSize: 9.3, color: "var(--mf-text-muted)" }}>
-                {queueGroups.length} group{queueGroups.length === 1 ? "" : "s"} · attention first
+                {queueGroups.length} group{queueGroups.length === 1 ? "" : "s"}{juniorDesignerOnly ? " · assigned to you" : " · attention first"}
               </Typography>
             </Box>
             <Typography sx={{ fontSize: 9.3, fontWeight: 800, color: "var(--mf-text-muted)" }}>
@@ -1125,7 +1150,7 @@ export function MatFlowWorkWorkspacePage() {
           </Card>
         ) : (
           <Box sx={{ minWidth: 0 }}>
-            <Card sx={productionFileHeaderSx(file.releaseHealth)}>
+            <Card sx={productionFileHeaderSx(juniorDesignerOnly ? "" : file.releaseHealth)}>
               <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1.2 }}>
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ mb: 0.35, fontSize: 9.2, fontWeight: 900, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
@@ -1142,24 +1167,35 @@ export function MatFlowWorkWorkspacePage() {
                   />
                 </Box>
                 <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
-                  {healthVisual(file.releaseHealth).label && (
+                  {!juniorDesignerOnly && healthVisual(file.releaseHealth).label && (
                     <Typography sx={{ color: healthVisual(file.releaseHealth).accent, fontSize: 10, fontWeight: 900 }}>
                       {healthVisual(file.releaseHealth).label}
                     </Typography>
                   )}
-                  <Chip label={readable(file.stage)} sx={statusSx} />
+                  {juniorDesignerOnly
+                    ? <Typography sx={{ fontSize: 9.8, fontWeight: 900, color: "var(--mf-primary-text)" }}>Assigned Design Work</Typography>
+                    : <Chip label={readable(file.stage)} sx={statusSx} />}
                   {canSetup && <Button onClick={openSetup} sx={secondaryBtnSx}>Setup</Button>}
                 </Box>
               </Box>
 
               <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.75 }}>
                 {workspaceFocus === "DESIGN" && (
-                  <>
-                    <SummaryCard label="Checklist" value={`${file.designChecklistProgress?.percent || 0}%`} helper={`${file.designChecklistProgress?.pending || 0} pending`} />
-                    <SummaryCard label="Tasks" value={`${file.designTaskProgress?.done || 0}/${file.designTaskProgress?.total || 0}`} helper={`${file.designTaskProgress?.hold || 0} hold · ${file.designTaskProgress?.overdue || 0} overdue`} tone={file.designTaskProgress?.hold || file.designTaskProgress?.overdue ? "warning" : "success"} />
-                    <SummaryCard label="Design Head" value={readable(file.designHeadDecision || "PENDING")} helper={file.designHead || "Not assigned"} tone={file.designHeadDecision === "APPROVED" ? "success" : "warning"} />
-                    <SummaryCard label="Handoff" value={detail.designHandoffReady ? "READY" : "BLOCKED"} helper={detail.designHandoffReady ? "Ready for PPC" : `${detail.designHandoffBlockers?.length || 0} blocker(s)`} tone={detail.designHandoffReady ? "success" : "warning"} />
-                  </>
+                  juniorDesignerOnly ? (
+                    <>
+                      <SummaryCard label="My Tasks" value={(detail.designTasks || []).length} helper="Only tasks assigned to you" />
+                      <SummaryCard label="Pending / Yet To Start" value={(detail.designTasks || []).filter((task) => designTaskStatusGroup(task.status) === "PENDING").length} />
+                      <SummaryCard label="WIP" value={(detail.designTasks || []).filter((task) => designTaskStatusGroup(task.status) === "WIP").length} />
+                      <SummaryCard label="Completed" value={(detail.designTasks || []).filter((task) => designTaskStatusGroup(task.status) === "COMPLETED").length} tone="success" />
+                    </>
+                  ) : (
+                    <>
+                      <SummaryCard label="Checklist" value={`${file.designChecklistProgress?.percent || 0}%`} helper={`${file.designChecklistProgress?.pending || 0} pending`} />
+                      <SummaryCard label="Tasks" value={`${(detail.designTasks || []).filter((task) => designTaskStatusGroup(task.status) === "COMPLETED").length}/${(detail.designTasks || []).length}`} helper={`${(detail.designTasks || []).filter((task) => designTaskStatusGroup(task.status) === "PENDING").length} pending · ${(detail.designTasks || []).filter((task) => designTaskStatusGroup(task.status) === "WIP").length} WIP · ${file.designTaskProgress?.overdue || 0} overdue`} tone={file.designTaskProgress?.overdue ? "warning" : "success"} />
+                      <SummaryCard label="Design Head" value={readable(file.designHeadDecision || "PENDING")} helper={file.designHead || "Not assigned"} tone={file.designHeadDecision === "APPROVED" ? "success" : "warning"} />
+                      <SummaryCard label="Handoff" value={detail.designHandoffReady ? "READY" : "BLOCKED"} helper={detail.designHandoffReady ? "Ready for PPC" : `${detail.designHandoffBlockers?.length || 0} blocker(s)`} tone={detail.designHandoffReady ? "success" : "warning"} />
+                    </>
+                  )
                 )}
                 {workspaceFocus === "ENGINEERING" && (
                   <>
@@ -1190,13 +1226,13 @@ export function MatFlowWorkWorkspacePage() {
 
             <Card sx={{ ...panelSx, p: 0 }}>
               <Tabs value={tab} onChange={(_, value) => selectWorkspaceTab(value)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: "1px solid var(--mf-border)", px: 1, minHeight: 42 }}>
-                {(TABS_BY_FOCUS[workspaceFocus] || TABS_BY_FOCUS.MANAGEMENT).map(([value, label]) => <Tab key={value} value={value} label={value === "queries" && Number(file.openQueries || 0) > 0 ? `${label} · ${file.openQueries}` : label} sx={{ minHeight: 42, py: 0.6 }} />)}
+                {visibleTabs.map(([value, label]) => <Tab key={value} value={value} label={value === "queries" && Number(file.openQueries || 0) > 0 ? `${label} · ${file.openQueries}` : label} sx={{ minHeight: 42, py: 0.6 }} />)}
               </Tabs>
               <Box sx={{ p: 1.45 }}>
                 {tab === "overview" && <Overview focus={workspaceFocus} file={file} detail={detail} canDesignHead={canDesignHead} canPpc={canPpc} canEngineeringReview={canEngineeringReview} canEngineeringDecision={canEngineeringDecision} setAction={setAction} />}
-                {tab === "designChecklist" && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={canDesignTeam && DESIGN_STAGES.includes(file.stage)} working={working} onSave={saveChecklist} />}
+                {tab === "designChecklist" && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={!juniorDesignerOnly && canDesignTeam && DESIGN_STAGES.includes(file.stage)} working={working} onSave={saveChecklist} />}
                 {tab === "designTasks" && <DesignTasks items={detail.designTasks || []} progress={file.designTaskProgress} canHead={canDesignHead && DESIGN_STAGES.includes(file.stage)} canWork={canDesignTeam && DESIGN_STAGES.includes(file.stage)} onCreate={openNewDesignTask} onEdit={openEditDesignTask} onStatus={requestDesignTaskStatus} />}
-                {tab === "drawings" && <Revisions file={file} rows={(detail.revisions || []).filter((row) => workspaceFocus === "DESIGN" ? row.type === "DESIGN_DRAWING" : workspaceFocus === "ENGINEERING" ? row.type === "ENGINEERING_DRAWING" : true)} canUploadDesign={workspaceFocus === "DESIGN" && canDesignTeam} canUploadEngineering={workspaceFocus === "ENGINEERING" && canEngineeringReview} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={workspaceFocus === "ENGINEERING" && canEngineeringDecision} setAction={setAction} working={working} />}
+                {tab === "drawings" && <Revisions file={file} rows={(detail.revisions || []).filter((row) => workspaceFocus === "DESIGN" ? row.type === "DESIGN_DRAWING" : workspaceFocus === "ENGINEERING" ? row.type === "ENGINEERING_DRAWING" : true)} canUploadDesign={workspaceFocus === "DESIGN" && canDesignTeam && !juniorDesignerOnly} canUploadEngineering={workspaceFocus === "ENGINEERING" && canEngineeringReview} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={workspaceFocus === "ENGINEERING" && canEngineeringDecision} setAction={setAction} working={working} />}
                 {tab === "engineeringChecklist" && <Checklist title="Engineering Technical Checklist" area="ENGINEERING" items={detail.engineeringChecklist || []} progress={file.engineeringChecklistProgress} canEdit={canEngineeringReview && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage)} working={working} onSave={saveChecklist} />}
                 {tab === "queries" && <IssueChat
                   items={detail.queries || []}
@@ -1258,13 +1294,12 @@ export function MatFlowWorkWorkspacePage() {
       </Dialog>
 
       <DesignTaskDialog value={designTaskDialog} setValue={setDesignTaskDialog} working={working} onSave={saveDesignTask} />
-      <DesignTaskStatusDialog value={designTaskStatusDialog} setValue={setDesignTaskStatusDialog} working={working} onSave={saveDesignTaskStatus} />
       <ActionDialog action={action} setAction={setAction} working={working} submit={submitAction} />
     </Box>
   );
 }
 
-function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
+function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = false, currentUsername = "" }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1279,7 +1314,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
       const response = await matflowApi.listDesignTasks({
         plantCode: selectedPlantParam,
         search: clean(search) || undefined,
-        assignee: clean(assignee) || undefined,
+        assignee: juniorDesignerOnly ? (clean(currentUsername) || undefined) : (clean(assignee) || undefined),
         status: status || undefined,
       });
       setRows(Array.isArray(response?.data) ? response.data : []);
@@ -1288,17 +1323,17 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedPlantParam, search, assignee, status]);
+  }, [selectedPlantParam, search, assignee, status, juniorDesignerOnly, currentUsername]);
 
   useEffect(() => { load(); }, [selectedPlantParam, status]);
 
   const stats = useMemo(() => {
     const tasks = rows.map((row) => row.task || {});
-    const active = tasks.filter((task) => !["DONE", "CANCELLED"].includes(task.status)).length;
-    const working = tasks.filter((task) => task.status === "WORKING").length;
-    const hold = tasks.filter((task) => task.status === "HOLD").length;
-    const overdue = tasks.filter((task) => task.dueAt && new Date(task.dueAt) < new Date() && !["DONE", "CANCELLED"].includes(task.status)).length;
-    return { total: tasks.length, active, working, hold, overdue };
+    const pending = tasks.filter((task) => designTaskStatusGroup(task.status) === "PENDING").length;
+    const wip = tasks.filter((task) => designTaskStatusGroup(task.status) === "WIP").length;
+    const completed = tasks.filter((task) => designTaskStatusGroup(task.status) === "COMPLETED").length;
+    const overdue = tasks.filter((task) => task.dueAt && new Date(task.dueAt) < new Date() && designTaskStatusGroup(task.status) !== "COMPLETED").length;
+    return { total: tasks.length, pending, wip, completed, overdue };
   }, [rows]);
 
   const exportExcel = async () => {
@@ -1316,24 +1351,23 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
         taskType: readable(task.taskType),
         designer: task.designer1,
         assignedBy: task.assignedBy,
-        assignedUsers: (task.assignees || []).join(", "),
-        status: readable(task.status),
+        assignedUsers: juniorDesignerOnly ? currentUsername : (task.assignees || []).join(", "),
+        status: designTaskStatusLabel(task.status),
         priority: task.priority,
         receivedAt: toDateTime(task.receivedAt),
         dueAt: toDateTime(task.dueAt),
         startedAt: toDateTime(task.startedAt),
         completedAt: toDateTime(task.completedAt),
-        holdReason: task.holdReason,
         remarks: task.remarks,
       };
     });
     await downloadMatFlowExcel({
       fileName: `MatFlow_Design_Task_Report_${new Date().toISOString().slice(0, 10)}`,
       sheetName: "Design Tasks",
-      title: "Design Department · Task Assignment Report",
+      title: juniorDesignerOnly ? "My Design Tasks" : "Design Department · Task Assignment Report",
       subtitle: "Product Name + PD No. identify every assignment.",
       rows: exportRows,
-      metadata: [selectedPlantParam ? `Plant ${selectedPlantParam}` : "All permitted plants", assignee ? `User ${assignee}` : "All users", status ? `Status ${readable(status)}` : "All statuses", `${rows.length} row(s)`],
+      metadata: [selectedPlantParam ? `Plant ${selectedPlantParam}` : "All permitted plants", juniorDesignerOnly ? `User ${currentUsername}` : (assignee ? `User ${assignee}` : "All users"), status ? `Status ${designTaskStatusLabel(status)}` : "All statuses", `${rows.length} row(s)`],
       columns: [
         { key: "productName", label: "Product Name" },
         { key: "projectCode", label: "PD No." },
@@ -1353,7 +1387,6 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
         { key: "dueAt", label: "Due At" },
         { key: "startedAt", label: "Started At" },
         { key: "completedAt", label: "Completed At" },
-        { key: "holdReason", label: "Hold Reason" },
         { key: "remarks", label: "Remarks" },
       ],
     });
@@ -1363,19 +1396,19 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
     <Box sx={{ display: "grid", gap: 1 }}>
       {error && <ErrorBox>{error}</ErrorBox>}
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.7 }}>
-        <SummaryCard label="Tasks" value={stats.total} />
-        <SummaryCard label="Active" value={stats.active} />
-        <SummaryCard label="On Hold" value={stats.hold} tone={stats.hold ? "warning" : "success"} />
+        <SummaryCard label="Pending / Yet To Start" value={stats.pending} />
+        <SummaryCard label="WIP" value={stats.wip} />
+        <SummaryCard label="Completed" value={stats.completed} tone="success" />
         <SummaryCard label="Overdue" value={stats.overdue} tone={stats.overdue ? "danger" : "success"} />
       </Box>
 
       <Card sx={{ ...panelSx, p: 1.1 }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 170px auto auto" }, gap: 0.7 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: juniorDesignerOnly ? "2fr 170px auto auto" : "2fr 1fr 170px auto auto" }, gap: 0.7 }}>
           <TextField size="small" label="Search Product / PD / client / project / task" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
-          <TextField size="small" label="Assigned user" value={assignee} onChange={(e) => setAssignee(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
+          {!juniorDesignerOnly && <TextField size="small" label="Assigned user" value={assignee} onChange={(e) => setAssignee(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />}
           <TextField select size="small" label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
-            {["NEED_TO_START", "ASSIGNED", "WORKING", "HOLD", "DONE", "CANCELLED"].map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
+            {DESIGN_TASK_STATUS_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
           </TextField>
           <Button disabled={loading} onClick={load} sx={secondaryBtnSx}>Search</Button>
           <Button disabled={!rows.length} onClick={exportExcel} sx={secondaryBtnSx}>Excel</Button>
@@ -1394,9 +1427,9 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
               <Box><Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{row.clientName || "Client not assigned"}</Typography></Box>
               <Box><Typography sx={{ fontSize: 10.8, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>
               <Box><Typography sx={{ fontSize: 9.8, color: "var(--mf-text-secondary)" }}>{toDateTime(task.receivedAt)}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Due {toDateTime(task.dueAt)}</Typography></Box>
-              <Box><Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{(task.assignees || []).join(", ") || "Unassigned"}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Assigned by {task.assignedBy || task.designer1 || "—"}</Typography></Box>
-              <Box><Chip label={readable(task.status)} sx={{ ...statusSx, color: task.status === "HOLD" ? "var(--mf-warning-text)" : task.status === "DONE" ? "var(--mf-success-text)" : "var(--mf-text-secondary)" }} />{task.holdReason && <Typography sx={{ mt: 0.2, fontSize: 8.8, color: "var(--mf-warning-text)" }}>{task.holdReason}</Typography>}</Box>
-              <Button size="small" onClick={() => onOpenFile(row.productionFileId)} sx={secondaryBtnSx}>Open File</Button>
+              <Box><Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{juniorDesignerOnly ? (currentUsername || "You") : ((task.assignees || []).join(", ") || "Unassigned")}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Assigned by {task.assignedBy || task.designer1 || "—"}</Typography></Box>
+              <Box><Chip label={designTaskStatusLabel(task.status)} sx={{ ...statusSx, color: designTaskStatusAccent(task.status) }} /></Box>
+              <Button size="small" onClick={() => onOpenFile(row.productionFileId)} sx={secondaryBtnSx}>{juniorDesignerOnly ? "Open Task" : "Open File"}</Button>
             </Box>
           );
         })}
@@ -1609,11 +1642,11 @@ function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onSt
       </Box>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5,1fr)" }, gap: 0.8, mb: 1 }}>
-        <SummaryCard label="Total" value={progress?.total || 0} />
-        <SummaryCard label="Working" value={progress?.working || 0} />
-        <SummaryCard label="On Hold" value={progress?.hold || 0} tone={progress?.hold ? "warning" : "success"} />
+        <SummaryCard label="Pending / Yet To Start" value={items.filter((item) => designTaskStatusGroup(item.status) === "PENDING").length} />
+        <SummaryCard label="WIP" value={items.filter((item) => designTaskStatusGroup(item.status) === "WIP").length} />
+        <SummaryCard label="Completed" value={items.filter((item) => designTaskStatusGroup(item.status) === "COMPLETED").length} tone="success" />
         <SummaryCard label="Overdue" value={progress?.overdue || 0} tone={progress?.overdue ? "danger" : "success"} />
-        <SummaryCard label="Done" value={`${progress?.done || 0} · ${progress?.percent || 0}%`} tone="success" />
+        <SummaryCard label="Completion" value={`${progress?.percent || 0}%`} tone="success" />
       </Box>
 
       {items.length === 0 ? (
@@ -1621,7 +1654,7 @@ function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onSt
       ) : (
         <Box sx={{ display: "grid", gap: 0.8 }}>
           {items.map((item) => {
-            const active = !["DONE", "CANCELLED"].includes(item.status);
+            const active = designTaskStatusGroup(item.status) !== "COMPLETED";
             return (
               <Card key={item.id} sx={{ ...panelSx, p: 1.3 }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -1629,7 +1662,7 @@ function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onSt
                     <Box sx={{ display: "flex", gap: 0.6, alignItems: "center", flexWrap: "wrap" }}>
                       <Typography sx={{ fontSize: 11.8, fontWeight: 950, color: "var(--mf-text)" }}>{item.taskNo}</Typography>
                       <Chip label={readable(item.taskType)} sx={statusSx} />
-                      <Chip label={readable(item.status)} sx={{ ...statusSx, color: item.status === "HOLD" ? "var(--mf-warning-text)" : item.status === "DONE" ? "var(--mf-success-text)" : "var(--mf-text-secondary)" }} />
+                      <Chip label={designTaskStatusLabel(item.status)} sx={{ ...statusSx, color: designTaskStatusAccent(item.status) }} />
                       {item.blocking && <Chip label="Handoff blocking" sx={{ ...statusSx, color: "var(--mf-danger-text)" }} />}
                     </Box>
                     <Typography sx={{ mt: 0.55, fontSize: 12.5, fontWeight: 900, color: "var(--mf-text)" }}>{item.title}</Typography>
@@ -1650,16 +1683,13 @@ function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onSt
                   {(item.assignees || []).map((assignee) => <Chip key={assignee} label={assignee} sx={statusSx} />)}
                 </Box>
 
-                {item.holdReason && <Alert severity="warning" sx={{ mt: 0.8 }}>Hold: {item.holdReason}</Alert>}
                 {item.remarks && <Typography sx={{ mt: 0.6, fontSize: 9.8, color: "var(--mf-text-muted)" }}>Remarks: {item.remarks}</Typography>}
 
                 {canWork && active && (
                   <Box sx={{ mt: 0.9, display: "flex", gap: 0.55, flexWrap: "wrap" }}>
-                    {["NEED_TO_START", "ASSIGNED"].includes(item.status) && <Button size="small" onClick={() => onStatus(item, "WORKING")} sx={primaryBtnSx}>Start</Button>}
-                    {item.status === "WORKING" && <Button size="small" onClick={() => onStatus(item, "HOLD")} sx={secondaryBtnSx}>Hold</Button>}
-                    {item.status === "HOLD" && <Button size="small" onClick={() => onStatus(item, "WORKING")} sx={primaryBtnSx}>Resume</Button>}
-                    {["WORKING", "HOLD", "ASSIGNED"].includes(item.status) && <Button size="small" onClick={() => onStatus(item, "DONE")} sx={primaryBtnSx}>Mark Done</Button>}
-                    {canHead && <Button size="small" onClick={() => onStatus(item, "CANCELLED")} sx={secondaryBtnSx}>Cancel</Button>}
+                    {designTaskStatusGroup(item.status) === "PENDING" && <Button size="small" onClick={() => onStatus(item, "WIP")} sx={primaryBtnSx}>Start WIP</Button>}
+                    {designTaskStatusGroup(item.status) === "WIP" && <Button size="small" onClick={() => onStatus(item, "PENDING")} sx={secondaryBtnSx}>Move to Pending</Button>}
+                    {designTaskStatusGroup(item.status) !== "COMPLETED" && <Button size="small" onClick={() => onStatus(item, "COMPLETED")} sx={primaryBtnSx}>Mark Completed</Button>}
                   </Box>
                 )}
               </Card>
@@ -2055,12 +2085,7 @@ function Timeline({ rows }) {
 function DesignTaskDialog({ value, setValue, working, onSave }) {
   const open = Boolean(value);
   if (!value) return null;
-  return <Dialog open={open} onClose={() => !working && setValue(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{value.mode === "edit" ? "Edit Design Task" : "Delegate Design Task"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.1, mt: 0.5 }}><TextField select label="Task Type" value={value.taskType} onChange={(e) => setValue((row) => ({ ...row, taskType: e.target.value }))} sx={fieldSx}>{DESIGN_TASK_TYPES.map((type) => <MenuItem key={type} value={type}>{readable(type)}</MenuItem>)}</TextField><TextField select label="Priority" value={value.priority} onChange={(e) => setValue((row) => ({ ...row, priority: e.target.value }))} sx={fieldSx}><MenuItem value="LOW">Low</MenuItem><MenuItem value="NORMAL">Normal</MenuItem><MenuItem value="HIGH">High</MenuItem><MenuItem value="URGENT">Urgent</MenuItem></TextField><TextField label="Task Title *" value={value.title} onChange={(e) => setValue((row) => ({ ...row, title: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Description / task details" multiline minRows={3} value={value.description} onChange={(e) => setValue((row) => ({ ...row, description: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Junior Designer / Design team assignees *" multiline minRows={2} helperText="Comma separated. One task may be shared by multiple members." value={value.assigneesText} onChange={(e) => setValue((row) => ({ ...row, assigneesText: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField type="datetime-local" label="Received Date / Time" InputLabelProps={{ shrink: true }} value={value.receivedAt} onChange={(e) => setValue((row) => ({ ...row, receivedAt: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due Date / Time" InputLabelProps={{ shrink: true }} value={value.dueAt} onChange={(e) => setValue((row) => ({ ...row, dueAt: e.target.value }))} sx={fieldSx} /><TextField select label="Blocks Design Handoff?" value={value.blocking} onChange={(e) => setValue((row) => ({ ...row, blocking: e.target.value }))} sx={fieldSx}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField><TextField label="Remarks" value={value.remarks} onChange={(e) => setValue((row) => ({ ...row, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setValue(null)} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{value.mode === "edit" ? "Save Task" : "Delegate Task"}</Button></DialogActions></Dialog>;
-}
-
-function DesignTaskStatusDialog({ value, setValue, working, onSave }) {
-  if (!value) return null;
-  return <Dialog open fullWidth maxWidth="sm" onClose={() => !working && setValue(null)} PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{readable(value.status)} · {value.item.title}</DialogTitle><DialogContent sx={dialogContentSx}><TextField autoFocus fullWidth label={value.status === "HOLD" ? "Hold reason *" : "Cancellation reason *"} multiline minRows={3} value={value.note} onChange={(e) => setValue((row) => ({ ...row, note: e.target.value }))} sx={{ ...fieldSx, mt: 0.8 }} /></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setValue(null)} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || !String(value.note || "").trim()} onClick={onSave} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog>;
+  return <Dialog open={open} onClose={() => !working && setValue(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{value.mode === "edit" ? "Edit Design Task" : "Delegate Design Task"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.1, mt: 0.5 }}><TextField select label="Task Type" value={value.taskType} onChange={(e) => setValue((row) => ({ ...row, taskType: e.target.value }))} sx={fieldSx}>{DESIGN_TASK_TYPES.map((type) => <MenuItem key={type} value={type}>{readable(type)}</MenuItem>)}</TextField><TextField select label="Priority" value={value.priority} onChange={(e) => setValue((row) => ({ ...row, priority: e.target.value }))} sx={fieldSx}><MenuItem value="LOW">Low</MenuItem><MenuItem value="NORMAL">Normal</MenuItem><MenuItem value="HIGH">High</MenuItem><MenuItem value="URGENT">Urgent</MenuItem></TextField><TextField label="Status" value={designTaskStatusLabel(value.status || "PENDING")} InputProps={{ readOnly: true }} helperText={value.mode === "edit" ? "Status is managed from the task card: Pending, WIP or Completed." : "Every new assignment starts as Pending / Yet To Start."} sx={fieldSx} /><TextField label="Task Title *" value={value.title} onChange={(e) => setValue((row) => ({ ...row, title: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Description / task details" multiline minRows={3} value={value.description} onChange={(e) => setValue((row) => ({ ...row, description: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Junior Designer / Design team assignees *" multiline minRows={2} helperText="Comma separated. One task may be shared by multiple members." value={value.assigneesText} onChange={(e) => setValue((row) => ({ ...row, assigneesText: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField type="datetime-local" label="Received Date / Time" InputLabelProps={{ shrink: true }} value={value.receivedAt} onChange={(e) => setValue((row) => ({ ...row, receivedAt: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due Date / Time" InputLabelProps={{ shrink: true }} value={value.dueAt} onChange={(e) => setValue((row) => ({ ...row, dueAt: e.target.value }))} sx={fieldSx} /><TextField select label="Blocks Design Handoff?" value={value.blocking} onChange={(e) => setValue((row) => ({ ...row, blocking: e.target.value }))} sx={fieldSx}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField><TextField label="Remarks" value={value.remarks} onChange={(e) => setValue((row) => ({ ...row, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setValue(null)} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{value.mode === "edit" ? "Save Task" : "Delegate Task"}</Button></DialogActions></Dialog>;
 }
 
 function ActionDialog({ action, setAction, working, submit }) {

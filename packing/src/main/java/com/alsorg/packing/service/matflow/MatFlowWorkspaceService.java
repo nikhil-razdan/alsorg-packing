@@ -102,9 +102,12 @@ public class MatFlowWorkspaceService {
         String q = clean(search);
         q = q == null ? "" : q.toLowerCase(Locale.ROOT);
         final String term = q;
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        Set<UUID> juniorVisibleFiles = juniorDesignerOnly ? juniorDesignerVisibleFileIds() : Set.of();
         return fileRepository.findAllByOrderByUpdatedAtDesc().stream()
                 .filter(f -> f.isActive() && accessService.canAccessPlant(f.getPlantCode()))
                 .filter(f -> plant == null || plant.equalsIgnoreCase(f.getPlantCode()))
+                .filter(f -> !juniorDesignerOnly || juniorVisibleFiles.contains(f.getId()))
                 .filter(f -> stageFilter == null || f.getStage() == stageFilter)
                 .filter(f -> healthFilter == null || f.getReleaseHealth() == healthFilter)
                 .filter(f -> term.isBlank() || contains(f.getProductionFileNo(), term) || contains(f.getProjectCode(), term)
@@ -126,8 +129,9 @@ public class MatFlowWorkspaceService {
         accessService.requireDesignRead();
         String plant = upperOrNull(plantCode);
         if (plant != null) accessService.requirePlantAccess(plant);
-        DesignTaskStatus statusFilter = enumOrNull(DesignTaskStatus.class, status);
-        String assigned = clean(assignee);
+        String statusFilter = clean(status);
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        String assigned = juniorDesignerOnly ? accessService.actor() : clean(assignee);
         String term = clean(search);
         term = term == null ? "" : term.toLowerCase(Locale.ROOT);
         final String q = term;
@@ -135,11 +139,11 @@ public class MatFlowWorkspaceService {
                 .filter(task -> task.getProductionFile() != null && task.getProductionFile().isActive())
                 .filter(task -> accessService.canAccessPlant(task.getProductionFile().getPlantCode()))
                 .filter(task -> plant == null || plant.equalsIgnoreCase(task.getProductionFile().getPlantCode()))
-                .filter(task -> statusFilter == null || task.getStatus() == statusFilter)
+                .filter(task -> matchesDesignTaskStatusFilter(task.getStatus(), statusFilter))
                 .filter(task -> assigned == null || task.getAssignees().stream().anyMatch(value -> value.equalsIgnoreCase(assigned)))
                 .filter(task -> q.isBlank() || designTaskContains(task, q))
                 .sorted(Comparator
-                        .comparing((MatFlowDesignTask task) -> Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
+                        .comparingInt((MatFlowDesignTask task) -> designTaskStatusRank(task.getStatus()))
                         .thenComparing(MatFlowDesignTask::getDueAt, Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(MatFlowDesignTask::getReceivedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::toDesignTaskQueue)
@@ -290,7 +294,9 @@ public class MatFlowWorkspaceService {
         row.setDesigner1(file.getDesigner());
         row.setAssignedBy(accessService.actor());
         row.setAssignees(assignees);
-        row.setStatus(DesignTaskStatus.ASSIGNED);
+        // A delegated Design task always starts as Pending / Yet To Start.
+        // Assignment and lifecycle status are intentionally separate concepts.
+        row.setStatus(DesignTaskStatus.NEED_TO_START);
         row.setPriority(request.priority());
         row.setBlocking(request.blocking() == null || request.blocking());
         row.setReceivedAt(received);
@@ -332,8 +338,10 @@ public class MatFlowWorkspaceService {
         if (request.assignees() != null) {
             List<String> assignees = normalizeAssignees(request.assignees());
             row.setAssignees(assignees);
-            if (assignees.isEmpty() && row.getStatus() != DesignTaskStatus.DONE && row.getStatus() != DesignTaskStatus.CANCELLED) row.setStatus(DesignTaskStatus.NEED_TO_START);
-            else if (!assignees.isEmpty() && row.getStatus() == DesignTaskStatus.NEED_TO_START) row.setStatus(DesignTaskStatus.ASSIGNED);
+            // Reassignment never changes lifecycle status. Pending means assigned but not yet started.
+            if (assignees.isEmpty() && !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(row.getStatus())) {
+                row.setStatus(DesignTaskStatus.NEED_TO_START);
+            }
         }
         if (request.receivedAt() != null) row.setReceivedAt(request.receivedAt());
         if (request.dueAt() != null || request.receivedAt() != null) row.setDueAt(request.dueAt());
@@ -365,12 +373,12 @@ public class MatFlowWorkspaceService {
         if (juniorDesignerOnly && row.getAssignees().stream().noneMatch(name -> accessService.actor().equalsIgnoreCase(name))) {
             throw conflict("Junior Designer can update only a Design task assigned to their username");
         }
-        DesignTaskStatus next = enumValue(DesignTaskStatus.class, request.status(), "Invalid Design task status");
+        DesignTaskStatus next = parseDesignTaskStatus(request.status());
         requireDesignTaskTransition(row.getStatus(), next);
         if (next == DesignTaskStatus.CANCELLED) accessService.requireDesignHeadWrite();
         String note = clean(request.note());
-        if ((next == DesignTaskStatus.HOLD || next == DesignTaskStatus.CANCELLED) && note == null) {
-            throw badRequest("Reason is required for Hold or Cancelled Design tasks");
+        if (next == DesignTaskStatus.CANCELLED && note == null) {
+            throw badRequest("Reason is required when cancelling a Design task");
         }
         if (next != DesignTaskStatus.NEED_TO_START && next != DesignTaskStatus.CANCELLED && row.getAssignees().isEmpty()) {
             throw conflict("Assign at least one Junior Designer / Design team member before starting this task");
@@ -378,8 +386,9 @@ public class MatFlowWorkspaceService {
 
         if ((next == DesignTaskStatus.WORKING || next == DesignTaskStatus.DONE) && row.getStartedAt() == null) row.setStartedAt(now());
         row.setStatus(next);
-        if (next == DesignTaskStatus.HOLD) row.setHoldReason(note);
-        else if (next != DesignTaskStatus.HOLD) row.setHoldReason(null);
+        // HOLD/ASSIGNED remain legacy persistence values only. The public lifecycle is
+        // Pending / Yet To Start -> WIP -> Completed.
+        row.setHoldReason(null);
         if (next == DesignTaskStatus.DONE || next == DesignTaskStatus.CANCELLED) {
             if (next == DesignTaskStatus.CANCELLED) row.setBlocking(false);
             row.setCompletedAt(now());
@@ -398,7 +407,8 @@ public class MatFlowWorkspaceService {
         refreshHealth(file);
         fileRepository.save(file);
         auditService.log("DESIGN_TASK", row.getId(), "DESIGN_TASK_STATUS_CHANGED", file,
-                auditService.details("taskNo", row.getTaskNo(), "status", next.name(), "note", note));
+                auditService.details("taskNo", row.getTaskNo(), "status", publicDesignTaskStatus(next),
+                        "internalStatus", next.name(), "note", note));
         return toDetail(file);
     }
 
@@ -991,39 +1001,57 @@ public class MatFlowWorkspaceService {
 
     private ProductionFileDetailResponse toDetail(MatFlowProductionFile file){
         boolean management = accessService.hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DIRECTOR");
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         boolean design = management || accessService.hasAnyRole("MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
         boolean engineering = management || accessService.hasAnyRole("MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
         boolean ppc = management || accessService.hasAnyRole("MATFLOW_PPC");
+        String actor = accessService.actor();
 
-        List<String> designBlockers = (design || ppc) ? designHandoffBlockers(file) : List.of();
+        // Junior Designer sees only their assignment context, never department-wide
+        // checklist, reference, timeline or unrelated Design-task information.
+        List<String> designBlockers = (!juniorDesignerOnly && (design || ppc)) ? designHandoffBlockers(file) : List.of();
         List<String> gate2 = (engineering || ppc) ? gate2Blockers(file) : List.of();
 
-        List<WorkItemResponse> designChecklist = design
+        List<WorkItemResponse> designChecklist = (design && !juniorDesignerOnly)
                 ? mapItems(items(file.getId(),WorkItemType.DESIGN_CHECK).stream().filter(x->x.getStatus()!=WorkItemStatus.CANCELLED).toList())
                 : List.of();
         List<DesignTaskResponse> designTaskRows = design
-                ? designTasks(file.getId()).stream().map(this::toDesignTask).toList()
+                ? designTasks(file.getId()).stream()
+                        .filter(task -> !juniorDesignerOnly || isDesignTaskAssignedTo(task, actor))
+                        .map(this::toDesignTask).toList()
                 : List.of();
         List<WorkItemResponse> engineeringChecklist = engineering
                 ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_CHECK))
                 : List.of();
-        List<WorkItemResponse> sharedQueries = (design || engineering || ppc)
-                ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_QUERY))
+        List<MatFlowWorkItem> visibleQueryRows = (design || engineering || ppc)
+                ? items(file.getId(),WorkItemType.ENGINEERING_QUERY).stream()
+                        .filter(item -> !juniorDesignerOnly || isQueryRelatedToActor(item, actor))
+                        .toList()
                 : List.of();
+        List<WorkItemResponse> sharedQueries = mapItems(visibleQueryRows);
         boolean juniorEngineerOnly = accessService.hasAnyRole("MATFLOW_ENGINEERING_JUNIOR")
                 && !accessService.hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
         List<WorkItemResponse> engineeringTasks = engineering
                 ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_TASK).stream()
                         .filter(item -> !juniorEngineerOnly || (clean(item.getAssignedTo()) != null
-                                && accessService.actor().equalsIgnoreCase(item.getAssignedTo())))
+                                && actor.equalsIgnoreCase(item.getAssignedTo())))
                         .toList())
                 : List.of();
-        List<RevisionResponse> revisions = revisionRepository.findByProductionFile_IdOrderByCreatedAtDesc(file.getId()).stream()
-                .filter(row -> management
-                        || (design && row.getRevisionType() == RevisionType.DESIGN_DRAWING)
-                        || engineering)
-                .map(this::toRevision)
-                .toList();
+        List<RevisionResponse> revisions = juniorDesignerOnly ? List.of()
+                : revisionRepository.findByProductionFile_IdOrderByCreatedAtDesc(file.getId()).stream()
+                        .filter(row -> management
+                                || (design && row.getRevisionType() == RevisionType.DESIGN_DRAWING)
+                                || engineering)
+                        .map(this::toRevision)
+                        .toList();
+
+        Set<UUID> visibleQueryIds = visibleQueryRows.stream().map(MatFlowWorkItem::getId).collect(java.util.stream.Collectors.toSet());
+        List<AuditEventResponse> timeline = juniorDesignerOnly
+                ? auditService.timeline(file.getId()).stream()
+                        .filter(audit -> visibleQueryIds.contains(audit.getEntityId()))
+                        .filter(audit -> audit.getAction() != null && audit.getAction().contains("QUERY"))
+                        .map(this::toAudit).toList()
+                : auditService.timeline(file.getId()).stream().map(this::toAudit).toList();
 
         return new ProductionFileDetailResponse(
                 toFileResponse(file),
@@ -1033,36 +1061,58 @@ public class MatFlowWorkspaceService {
                 sharedQueries,
                 engineeringTasks,
                 revisions,
-                auditService.timeline(file.getId()).stream().map(this::toAudit).toList(),
+                timeline,
                 designBlockers.isEmpty(), designBlockers, gate2.isEmpty(), gate2);
     }
 
     private ProductionFileResponse toFileResponse(MatFlowProductionFile file){
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        String actor = accessService.actor();
         List<MatFlowWorkItem> tasks=items(file.getId(),WorkItemType.ENGINEERING_TASK);
-        int completed=(int)tasks.stream().filter(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count();
-        int pending=tasks.size()-completed;
-        MatFlowBom bom=latestBom(file.getId());
+        int completed=juniorDesignerOnly ? 0 : (int)tasks.stream().filter(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count();
+        int pending=juniorDesignerOnly ? 0 : tasks.size()-completed;
+        MatFlowBom bom=juniorDesignerOnly ? null : latestBom(file.getId());
+        DesignTaskProgress designProgress = juniorDesignerOnly
+                ? designTaskProgress(file.getId(), actor)
+                : designTaskProgress(file.getId());
+        int visibleQueries = juniorDesignerOnly
+                ? (int) items(file.getId(), WorkItemType.ENGINEERING_QUERY).stream()
+                        .filter(item -> isQueryRelatedToActor(item, actor))
+                        .filter(item -> OPEN_QUERY_STATUSES.contains(item.getStatus()))
+                        .count()
+                : (int) openQueryCount(file.getId());
+
         return new ProductionFileResponse(
                 file.getId(),file.getProductionFileNo(),file.getProject().getId(),file.getProduct().getId(),file.getProjectCode(),file.getProjectName(),file.getClientName(),file.getProductName(),file.getDrawingNo(),file.getPlantCode(),
-                file.getStage().name(),file.getReleaseHealth().name(),file.getEngineeringDecision().name(),file.getCurrentDepartment(),file.getCurrentOwner(),
-                file.getDesigner(),file.getDesignHead(),file.getDesignHeadDecision(),file.getDesignHeadReviewedBy(),file.getDesignHeadReviewedAt(),file.getDesignHeadRemarks(),
-                file.getPpcOwner(),file.getEngineeringHead(),file.getAssignedEngineer(),file.getControlledReleaseReason(),file.getPlannedProductionReleaseDate(),file.getPlannedDispatchDate(),
-                file.getPpcGate1Decision(),file.getPpcGate2Decision(),file.isRevisionReviewRequired(),file.getDownstreamWorkflowKey(),file.getDownstreamWorkflowStatus(),file.getProductionReleasedAt(),file.getProjectCode(),
-                progress(file.getId(),WorkItemType.DESIGN_CHECK),designTaskProgress(file.getId()),progress(file.getId(),WorkItemType.ENGINEERING_CHECK),
-                (int)openQueryCount(file.getId()),pending,completed,bom==null?null:bom.getId(),bom==null?null:bom.getStatus().name(),file.getRowVersion(),file.getUpdatedAt());
+                file.getStage().name(),juniorDesignerOnly?null:file.getReleaseHealth().name(),juniorDesignerOnly?null:file.getEngineeringDecision().name(),
+                juniorDesignerOnly?"DESIGN":file.getCurrentDepartment(),juniorDesignerOnly?actor:file.getCurrentOwner(),
+                juniorDesignerOnly?null:file.getDesigner(),juniorDesignerOnly?null:file.getDesignHead(),juniorDesignerOnly?null:file.getDesignHeadDecision(),
+                juniorDesignerOnly?null:file.getDesignHeadReviewedBy(),juniorDesignerOnly?null:file.getDesignHeadReviewedAt(),juniorDesignerOnly?null:file.getDesignHeadRemarks(),
+                juniorDesignerOnly?null:file.getPpcOwner(),juniorDesignerOnly?null:file.getEngineeringHead(),juniorDesignerOnly?null:file.getAssignedEngineer(),
+                juniorDesignerOnly?null:file.getControlledReleaseReason(),juniorDesignerOnly?null:file.getPlannedProductionReleaseDate(),juniorDesignerOnly?null:file.getPlannedDispatchDate(),
+                juniorDesignerOnly?null:file.getPpcGate1Decision(),juniorDesignerOnly?null:file.getPpcGate2Decision(),juniorDesignerOnly?false:file.isRevisionReviewRequired(),
+                juniorDesignerOnly?null:file.getDownstreamWorkflowKey(),juniorDesignerOnly?null:file.getDownstreamWorkflowStatus(),juniorDesignerOnly?null:file.getProductionReleasedAt(),file.getProjectCode(),
+                juniorDesignerOnly?null:progress(file.getId(),WorkItemType.DESIGN_CHECK),designProgress,juniorDesignerOnly?null:progress(file.getId(),WorkItemType.ENGINEERING_CHECK),
+                visibleQueries,pending,completed,bom==null?null:bom.getId(),bom==null?null:bom.getStatus().name(),file.getRowVersion(),file.getUpdatedAt());
     }
 
     private DesignTaskResponse toDesignTask(MatFlowDesignTask x) {
-        return new DesignTaskResponse(x.getId(),x.getTaskNo(),x.getTaskType().name(),x.getTitle(),x.getDescription(),x.getDesigner1(),x.getAssignedBy(),
-                List.copyOf(x.getAssignees()),x.getStatus().name(),x.getPriority(),x.isBlocking(),x.getReceivedAt(),x.getDueAt(),x.getStartedAt(),x.getCompletedAt(),
-                x.getCompletedBy(),x.getHoldReason(),x.getRemarks(),x.getRowVersion(),x.getCreatedAt(),x.getUpdatedAt());
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        List<String> visibleAssignees = juniorDesignerOnly && isDesignTaskAssignedTo(x, accessService.actor())
+                ? List.of(accessService.actor())
+                : List.copyOf(x.getAssignees());
+        return new DesignTaskResponse(x.getId(),x.getTaskNo(),x.getTaskType().name(),x.getTitle(),x.getDescription(),
+                juniorDesignerOnly ? null : x.getDesigner1(),x.getAssignedBy(),visibleAssignees,publicDesignTaskStatus(x.getStatus()),x.getPriority(),x.isBlocking(),
+                x.getReceivedAt(),x.getDueAt(),x.getStartedAt(),x.getCompletedAt(),x.getCompletedBy(),x.getHoldReason(),x.getRemarks(),x.getRowVersion(),x.getCreatedAt(),x.getUpdatedAt());
     }
 
     private DesignTaskQueueResponse toDesignTaskQueue(MatFlowDesignTask task) {
         MatFlowProductionFile file = task.getProductionFile();
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         return new DesignTaskQueueResponse(toDesignTask(task), file.getId(), file.getProductionFileNo(),
                 file.getProjectCode(), file.getProjectName(), file.getClientName(), file.getProductName(),
-                file.getDrawingNo(), file.getStage().name(), file.getReleaseHealth().name(), file.getDesignHead());
+                file.getDrawingNo(), file.getStage().name(), juniorDesignerOnly ? null : file.getReleaseHealth().name(),
+                juniorDesignerOnly ? null : file.getDesignHead());
     }
 
     private boolean designTaskContains(MatFlowDesignTask task, String q) {
@@ -1074,7 +1124,13 @@ public class MatFlowWorkspaceService {
     }
 
     private DesignTaskProgress designTaskProgress(UUID fileId) {
-        List<MatFlowDesignTask> rows = designTasks(fileId);
+        return designTaskProgress(fileId, null);
+    }
+
+    private DesignTaskProgress designTaskProgress(UUID fileId, String assignee) {
+        List<MatFlowDesignTask> rows = designTasks(fileId).stream()
+                .filter(task -> assignee == null || isDesignTaskAssignedTo(task, assignee))
+                .toList();
         int need=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.NEED_TO_START).count();
         int assigned=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.ASSIGNED).count();
         int working=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.WORKING).count();
@@ -1094,6 +1150,43 @@ public class MatFlowWorkspaceService {
 
     private List<MatFlowDesignTask> designTasks(UUID fileId) {
         return designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(fileId);
+    }
+
+    private boolean isDesignTaskAssignedTo(MatFlowDesignTask task, String username) {
+        String actor = clean(username);
+        return task != null && actor != null && task.getAssignees() != null
+                && task.getAssignees().stream().anyMatch(name -> actor.equalsIgnoreCase(clean(name)));
+    }
+
+    private boolean juniorDesignerCanAccessFile(UUID fileId) {
+        if (!accessService.isJuniorDesignerOnly()) return true;
+        String actor = accessService.actor();
+        return designTasks(fileId).stream().anyMatch(task -> isDesignTaskAssignedTo(task, actor));
+    }
+
+    private Set<UUID> juniorDesignerVisibleFileIds() {
+        if (!accessService.isJuniorDesignerOnly()) return Set.of();
+        String actor = accessService.actor();
+        return designTaskRepository.findAllForQueue().stream()
+                .filter(task -> task.getProductionFile() != null)
+                .filter(task -> isDesignTaskAssignedTo(task, actor))
+                .map(task -> task.getProductionFile().getId())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private boolean isQueryRelatedToActor(MatFlowWorkItem item, String username) {
+        String actor = clean(username);
+        if (item == null || actor == null) return false;
+        return equalsIgnoreCase(item.getCreatedBy(), actor)
+                || equalsIgnoreCase(item.getAssignedTo(), actor)
+                || equalsIgnoreCase(item.getRespondedBy(), actor)
+                || equalsIgnoreCase(item.getClosedBy(), actor);
+    }
+
+    private boolean equalsIgnoreCase(String left, String right) {
+        String a = clean(left);
+        String b = clean(right);
+        return a != null && b != null && a.equalsIgnoreCase(b);
     }
 
     private MatFlowDesignTask requireDesignTask(UUID fileId, UUID taskId) {
@@ -1123,19 +1216,58 @@ public class MatFlowWorkspaceService {
         return base + "-" + String.format("%03d", next) + "-" + suffix;
     }
 
+    private DesignTaskStatus parseDesignTaskStatus(String value) {
+        String normalized = upper(value);
+        return switch (normalized) {
+            case "PENDING", "PENDING_YET_TO_START", "YET_TO_START", "NEED_TO_START", "ASSIGNED" -> DesignTaskStatus.NEED_TO_START;
+            case "WIP", "IN_PROGRESS", "WORK_IN_PROGRESS", "WORKING", "HOLD" -> DesignTaskStatus.WORKING;
+            case "COMPLETED", "COMPLETE", "DONE" -> DesignTaskStatus.DONE;
+            case "CANCELLED" -> DesignTaskStatus.CANCELLED;
+            default -> throw badRequest("Design task status must be PENDING, WIP or COMPLETED");
+        };
+    }
+
+    private boolean matchesDesignTaskStatusFilter(DesignTaskStatus current, String filter) {
+        String normalized = upper(filter);
+        if (normalized.isBlank()) return true;
+        return switch (normalized) {
+            case "PENDING", "PENDING_YET_TO_START", "YET_TO_START", "NEED_TO_START", "ASSIGNED" ->
+                    Set.of(DesignTaskStatus.NEED_TO_START, DesignTaskStatus.ASSIGNED).contains(current);
+            case "WIP", "IN_PROGRESS", "WORK_IN_PROGRESS", "WORKING", "HOLD" ->
+                    Set.of(DesignTaskStatus.WORKING, DesignTaskStatus.HOLD).contains(current);
+            case "COMPLETED", "COMPLETE", "DONE", "CANCELLED" ->
+                    Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(current);
+            default -> false;
+        };
+    }
+
+    private String publicDesignTaskStatus(DesignTaskStatus status) {
+        if (status == null) return "PENDING";
+        return switch (status) {
+            case NEED_TO_START, ASSIGNED -> "PENDING";
+            case WORKING, HOLD -> "WIP";
+            case DONE, CANCELLED -> "COMPLETED";
+        };
+    }
+
+    private int designTaskStatusRank(DesignTaskStatus status) {
+        String visible = publicDesignTaskStatus(status);
+        if ("PENDING".equals(visible)) return 0;
+        if ("WIP".equals(visible)) return 1;
+        return 2;
+    }
+
     private void requireDesignTaskTransition(DesignTaskStatus current, DesignTaskStatus next) {
         if (current == next) return;
         if (Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(current)) {
-            throw conflict("Completed/Cancelled Design task cannot be reopened. Create a follow-up or Revision task.");
+            throw conflict("Completed Design task cannot be reopened. Create a follow-up or Revision task.");
         }
-        boolean allowed = switch (current) {
-            case NEED_TO_START -> Set.of(DesignTaskStatus.ASSIGNED, DesignTaskStatus.CANCELLED).contains(next);
-            case ASSIGNED -> Set.of(DesignTaskStatus.WORKING, DesignTaskStatus.HOLD, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next);
-            case WORKING -> Set.of(DesignTaskStatus.HOLD, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next);
-            case HOLD -> Set.of(DesignTaskStatus.WORKING, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next);
-            case DONE, CANCELLED -> false;
-        };
-        if (!allowed) throw conflict("Design task cannot move from " + current + " to " + next);
+
+        boolean pending = Set.of(DesignTaskStatus.NEED_TO_START, DesignTaskStatus.ASSIGNED).contains(current);
+        boolean wip = Set.of(DesignTaskStatus.WORKING, DesignTaskStatus.HOLD).contains(current);
+        boolean allowed = (pending && Set.of(DesignTaskStatus.WORKING, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next))
+                || (wip && Set.of(DesignTaskStatus.NEED_TO_START, DesignTaskStatus.WORKING, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next));
+        if (!allowed) throw conflict("Design task can move only between Pending / Yet To Start, WIP and Completed");
     }
 
     private boolean isDesignStage(MatFlowProductionFile file) {
@@ -1156,7 +1288,14 @@ public class MatFlowWorkspaceService {
         }
     }
 
-    private MatFlowProductionFile requireFile(UUID id){ MatFlowProductionFile file=fileRepository.findById(id).orElseThrow(()->notFound("Production File not found")); accessService.requirePlantAccess(file.getPlantCode()); return file; }
+    private MatFlowProductionFile requireFile(UUID id){
+        MatFlowProductionFile file=fileRepository.findById(id).orElseThrow(()->notFound("Production File not found"));
+        accessService.requirePlantAccess(file.getPlantCode());
+        if (accessService.isJuniorDesignerOnly() && !juniorDesignerCanAccessFile(file.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This Product / PD is not assigned to your Junior Designer task queue");
+        }
+        return file;
+    }
     private MatFlowWorkItem requireWork(UUID fileId,UUID id,WorkItemType type){ MatFlowWorkItem x=workRepository.findById(id).orElseThrow(()->notFound("Work item not found")); if(!fileId.equals(x.getProductionFile().getId())||x.getItemType()!=type)throw notFound("Work item not found"); return x; }
     private List<MatFlowWorkItem> items(UUID fileId,WorkItemType type){ return workRepository.findByProductionFile_IdAndItemTypeOrderByDisplayOrderAscCreatedAtAsc(fileId,type); }
     private String nextEngineeringTaskKey(UUID fileId) {

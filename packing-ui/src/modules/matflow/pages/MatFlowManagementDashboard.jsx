@@ -8,6 +8,7 @@ import {
   ErrorBox,
   LoadingBlock,
   MatFlowProductIdentity,
+  MATFLOW_ROLES,
   getMatFlowDepartmentAccess,
   pageSx,
   panelSx,
@@ -21,7 +22,7 @@ import {
 const DESIGN_STAGES = new Set(["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED"]);
 const ENGINEERING_STAGES = new Set(["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW"]);
 const PPC_STAGES = new Set(["PPC_GATE_1", "PPC_GATE_2"]);
-const CLOSED_DESIGN = new Set(["DONE", "CANCELLED"]);
+const CLOSED_DESIGN = new Set(["COMPLETED", "DONE", "CANCELLED"]);
 
 const focusLabel = (focus) => ({
   DESIGN: "Design",
@@ -74,6 +75,8 @@ function Metric({ label, value, helper, attention = false }) {
 export function MatFlowDashboardPage() {
   const { selectedPlantParam, roles } = useMatFlow();
   const navigate = useNavigate();
+  const juniorDesignerOnly = useMemo(() => roles.includes(MATFLOW_ROLES.DESIGNER_JUNIOR)
+    && !roles.some((role) => [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER].includes(role)), [roles]);
   const access = useMemo(() => getMatFlowDepartmentAccess(roles), [roles]);
   const preferred = useMemo(() => primaryMatFlowDepartment(roles), [roles]);
   const focusOptions = useMemo(() => {
@@ -135,12 +138,22 @@ export function MatFlowDashboardPage() {
     const tasks = designTasks.map((row) => row.task || {});
     const now = new Date();
     return {
-      active: tasks.filter((task) => !CLOSED_DESIGN.has(task.status)).length,
-      working: tasks.filter((task) => task.status === "WORKING").length,
-      hold: tasks.filter((task) => task.status === "HOLD").length,
-      overdue: tasks.filter((task) => task.dueAt && new Date(task.dueAt) < now && !CLOSED_DESIGN.has(task.status)).length,
+      pending: tasks.filter((task) => String(task.status || "").toUpperCase() === "PENDING").length,
+      wip: tasks.filter((task) => String(task.status || "").toUpperCase() === "WIP").length,
+      completed: tasks.filter((task) => CLOSED_DESIGN.has(String(task.status || "").toUpperCase())).length,
+      overdue: tasks.filter((task) => task.dueAt && new Date(task.dueAt) < now && !CLOSED_DESIGN.has(String(task.status || "").toUpperCase())).length,
     };
   }, [designTasks]);
+
+  const juniorTaskRows = useMemo(() => {
+    if (!juniorDesignerOnly) return [];
+    const term = search.trim().toLowerCase();
+    return designTasks.filter((row) => {
+      const task = row.task || {};
+      return !term || [row.productName, row.projectCode, row.projectName, row.clientName, row.drawingNo, task.taskNo, task.title]
+        .some((value) => String(value || "").toLowerCase().includes(term));
+    });
+  }, [juniorDesignerOnly, designTasks, search]);
 
   const attention = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -158,9 +171,9 @@ export function MatFlowDashboardPage() {
 
   const metrics = useMemo(() => {
     if (focus === "DESIGN") return [
-      ["Active Tasks", designStats.active, "Assigned Design work"],
-      ["Working", designStats.working, "Currently in progress"],
-      ["On Hold", designStats.hold, "Needs intervention", designStats.hold > 0],
+      ["Pending / Yet To Start", designStats.pending, "Assigned but not started"],
+      ["WIP", designStats.wip, "Currently in progress"],
+      ["Completed", designStats.completed, "Finished Design tasks"],
       ["Overdue", designStats.overdue, "Past due date", designStats.overdue > 0],
     ];
     if (focus === "ENGINEERING") return [
@@ -196,10 +209,10 @@ export function MatFlowDashboardPage() {
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: { xs: "flex-start", md: "center" }, flexWrap: "wrap" }}>
         <Box>
           <Typography component="h1" sx={{ fontSize: { xs: 24, md: 29 }, lineHeight: 1.05, fontWeight: 950, letterSpacing: "-.03em", color: "var(--mf-text)" }}>
-            {focusLabel(focus)} Overview
+            {juniorDesignerOnly ? "My Design Work" : `${focusLabel(focus)} Overview`}
           </Typography>
           <Typography sx={{ mt: 0.25, fontSize: 10.2, color: "var(--mf-text-muted)" }}>
-            Product Name + PD No. first. Only the department information needed for this view is shown.
+            {juniorDesignerOnly ? "Only your assigned tasks and their related Product / PD information are shown." : "Product Name + PD No. first. Only the department information needed for this view is shown."}
           </Typography>
         </Box>
         <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap" }}>
@@ -225,7 +238,29 @@ export function MatFlowDashboardPage() {
         <TextField fullWidth size="small" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find Product Name / PD No. / client / project" />
       </Card>
 
-      <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+      {juniorDesignerOnly ? (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+          <Box sx={{ px: 1.25, py: 0.9, borderBottom: "1px solid var(--mf-border)" }}>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>My assigned tasks</Typography>
+            <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>No other Design users, products or department-wide work is included.</Typography>
+          </Box>
+          {!juniorTaskRows.length ? (
+            <Box sx={{ p: 2.5, textAlign: "center", fontSize: 10.5, color: "var(--mf-text-muted)" }}>No assigned Design tasks match the current search.</Box>
+          ) : juniorTaskRows.map((row) => {
+            const task = row.task || {};
+            return (
+              <Box key={task.id || `${row.productionFileId}-${task.taskNo}`} sx={{ px: 1.25, py: 0.95, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.35fr .95fr 1.3fr .8fr auto" }, gap: 0.9, alignItems: "center", borderBottom: "1px solid var(--mf-border)", "&:last-child": { borderBottom: 0 } }}>
+                <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                <Box><Typography sx={{ fontSize: 10.1, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "Client not assigned"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>
+                <Box><Typography sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{task.title || "Assigned task"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo || "—"} · {readable(task.taskType || "OTHER")}</Typography></Box>
+                <Box><Typography sx={{ fontSize: 9.6, fontWeight: 900, color: String(task.status || "").toUpperCase() === "COMPLETED" ? "var(--mf-success-text)" : String(task.status || "").toUpperCase() === "WIP" ? "var(--mf-primary-text)" : "var(--mf-warning-text)" }}>{String(task.status || "PENDING").toUpperCase() === "PENDING" ? "Pending / Yet To Start" : task.status}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>Due {task.dueAt ? new Date(task.dueAt).toLocaleString() : "—"}</Typography></Box>
+                <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}&tab=designTasks`)} sx={secondaryBtnSx}>Open task</Button>
+              </Box>
+            );
+          })}
+        </Card>
+      ) : (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
         <Box sx={{ px: 1.25, py: 0.9, borderBottom: "1px solid var(--mf-border)" }}>
           <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>Needs attention</Typography>
           <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>Only records relevant to {focusLabel(focus).toLowerCase()} are listed here.</Typography>
@@ -259,7 +294,8 @@ export function MatFlowDashboardPage() {
             </Button>
           </Box>
         ))}
-      </Card>
+        </Card>
+      )}
     </Box>
   );
 }

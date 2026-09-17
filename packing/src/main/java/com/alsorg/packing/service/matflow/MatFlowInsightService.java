@@ -61,6 +61,8 @@ public class MatFlowInsightService {
         String plant = cleanUpper(plantCode);
         if (plant != null) accessService.requirePlantAccess(plant);
 
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        String actor = accessService.actor();
         List<MatFlowProductionFile> files = readableFiles(plant, true);
         Map<String, Long> stageCounts = new LinkedHashMap<>();
         for (ProductionFileStage stage : ProductionFileStage.values()) {
@@ -75,21 +77,23 @@ public class MatFlowInsightService {
             List<MatFlowWorkItem> items = workRepository.findByProductionFile_IdOrderByDisplayOrderAscCreatedAtAsc(file.getId());
             long queries = items.stream()
                     .filter(item -> item.getItemType() == WorkItemType.ENGINEERING_QUERY)
+                    .filter(item -> !juniorDesignerOnly || isQueryRelatedToActor(item, actor))
                     .filter(item -> OPEN_QUERY_STATUSES.contains(item.getStatus()))
                     .count();
-            long pendingTasks = items.stream()
+            long pendingTasks = juniorDesignerOnly ? 0 : items.stream()
                     .filter(item -> item.getItemType() == WorkItemType.ENGINEERING_TASK)
                     .filter(item -> !CLOSED_WORK_STATUSES.contains(item.getStatus()))
                     .count();
-            long overdueItems = items.stream()
+            long overdueItems = juniorDesignerOnly ? 0 : items.stream()
                     .filter(item -> item.getDueAt() != null && item.getDueAt().isBefore(now()))
                     .filter(item -> !CLOSED_WORK_STATUSES.contains(item.getStatus()))
                     .count();
-            List<MatFlowDesignTask> designTasks = designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(file.getId());
+            List<MatFlowDesignTask> designTasks = designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(file.getId()).stream()
+                    .filter(task -> !juniorDesignerOnly || isDesignTaskAssignedTo(task, actor))
+                    .toList();
             long pendingDesignTasks = designTasks.stream()
                     .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
                     .count();
-            long designHolds = designTasks.stream().filter(task -> task.getStatus() == DesignTaskStatus.HOLD).count();
             long overdueDesignTasks = designTasks.stream()
                     .filter(task -> task.getDueAt() != null && task.getDueAt().isBefore(now()))
                     .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
@@ -99,22 +103,23 @@ public class MatFlowInsightService {
             openQueries += queries;
             overdue += totalOverdue;
 
-            boolean needsAttention = file.getReleaseHealth() != ReleaseHealth.GREEN
-                    || file.isRevisionReviewRequired()
-                    || queries > 0
-                    || totalOverdue > 0
-                    || designHolds > 0;
+            boolean needsAttention = juniorDesignerOnly
+                    ? queries > 0 || overdueDesignTasks > 0
+                    : file.getReleaseHealth() != ReleaseHealth.GREEN
+                            || file.isRevisionReviewRequired()
+                            || queries > 0
+                            || totalOverdue > 0;
             if (!needsAttention) continue;
 
             List<String> blockers = new ArrayList<>();
-            if (file.isRevisionReviewRequired()) blockers.add("Revision review");
-            if (pendingDesignTasks > 0 && Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(file.getStage())) blockers.add(pendingDesignTasks + " Design task" + (pendingDesignTasks == 1 ? "" : "s") + " pending");
-            if (designHolds > 0) blockers.add(designHolds + " Design task" + (designHolds == 1 ? "" : "s") + " on hold");
-            if (queries > 0) blockers.add(queries + " open issue" + (queries == 1 ? "" : "s"));
-            if (pendingTasks > 0) blockers.add(pendingTasks + " engineering task" + (pendingTasks == 1 ? "" : "s"));
-            if (totalOverdue > 0) blockers.add(totalOverdue + " overdue work item" + (totalOverdue == 1 ? "" : "s"));
-            if (blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.RED) blockers.add("Critical release information pending");
-            if (blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.AMBER) blockers.add("Controlled release limitation");
+            if (!juniorDesignerOnly && file.isRevisionReviewRequired()) blockers.add("Revision review");
+            if (pendingDesignTasks > 0) blockers.add(pendingDesignTasks + " assigned task" + (pendingDesignTasks == 1 ? "" : "s") + " not completed");
+            if (queries > 0) blockers.add(queries + " related open issue" + (queries == 1 ? "" : "s"));
+            if (!juniorDesignerOnly && pendingTasks > 0) blockers.add(pendingTasks + " engineering task" + (pendingTasks == 1 ? "" : "s"));
+            if (juniorDesignerOnly && overdueDesignTasks > 0) blockers.add(overdueDesignTasks + " assigned task" + (overdueDesignTasks == 1 ? "" : "s") + " overdue");
+            if (!juniorDesignerOnly && totalOverdue > 0) blockers.add(totalOverdue + " overdue work item" + (totalOverdue == 1 ? "" : "s"));
+            if (!juniorDesignerOnly && blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.RED) blockers.add("Critical release information pending");
+            if (!juniorDesignerOnly && blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.AMBER) blockers.add("Controlled release limitation");
 
             attention.add(new ProductionRiskRow(
                     file.getId(),
@@ -124,11 +129,11 @@ public class MatFlowInsightService {
                     file.getProductName(),
                     file.getDrawingNo(),
                     file.getStage().name(),
-                    file.getReleaseHealth().name(),
-                    file.getCurrentDepartment(),
-                    file.getCurrentOwner(),
-                    file.getPlannedProductionReleaseDate(),
-                    file.getPlannedDispatchDate(),
+                    juniorDesignerOnly ? null : file.getReleaseHealth().name(),
+                    juniorDesignerOnly ? "DESIGN" : file.getCurrentDepartment(),
+                    juniorDesignerOnly ? actor : file.getCurrentOwner(),
+                    juniorDesignerOnly ? null : file.getPlannedProductionReleaseDate(),
+                    juniorDesignerOnly ? null : file.getPlannedDispatchDate(),
                     (int) queries,
                     (int) pendingTasks,
                     (int) totalOverdue,
@@ -150,9 +155,9 @@ public class MatFlowInsightService {
         return new DashboardResponse(
                 activeProjects,
                 files.size(),
-                countHealth(files, ReleaseHealth.GREEN),
-                countHealth(files, ReleaseHealth.AMBER),
-                countHealth(files, ReleaseHealth.RED),
+                juniorDesignerOnly ? 0 : countHealth(files, ReleaseHealth.GREEN),
+                juniorDesignerOnly ? 0 : countHealth(files, ReleaseHealth.AMBER),
+                juniorDesignerOnly ? 0 : countHealth(files, ReleaseHealth.RED),
                 attention.size(),
                 countStages(files, ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION, ProductionFileStage.DESIGN_SUBMITTED),
                 countStages(files, ProductionFileStage.PPC_GATE_1),
@@ -224,11 +229,36 @@ public class MatFlowInsightService {
     }
 
     private List<MatFlowProductionFile> readableFiles(String plant, boolean activeOnly) {
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        String actor = juniorDesignerOnly ? accessService.actor() : null;
+        Set<java.util.UUID> juniorVisibleFiles = juniorDesignerOnly
+                ? designTaskRepository.findAllForQueue().stream()
+                        .filter(task -> task.getProductionFile() != null)
+                        .filter(task -> isDesignTaskAssignedTo(task, actor))
+                        .map(task -> task.getProductionFile().getId())
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet())
+                : Set.of();
         return fileRepository.findAllByOrderByUpdatedAtDesc().stream()
                 .filter(file -> !activeOnly || file.isActive())
                 .filter(file -> accessService.canAccessPlant(file.getPlantCode()))
                 .filter(file -> plant == null || plant.equalsIgnoreCase(file.getPlantCode()))
+                .filter(file -> !juniorDesignerOnly || juniorVisibleFiles.contains(file.getId()))
                 .toList();
+    }
+
+    private boolean isDesignTaskAssignedTo(MatFlowDesignTask task, String username) {
+        if (task == null || username == null || task.getAssignees() == null) return false;
+        return task.getAssignees().stream().anyMatch(name -> name != null && username.equalsIgnoreCase(name.trim()));
+    }
+
+    private boolean isQueryRelatedToActor(MatFlowWorkItem item, String username) {
+        if (item == null || username == null) return false;
+        return same(item.getCreatedBy(), username) || same(item.getAssignedTo(), username)
+                || same(item.getRespondedBy(), username) || same(item.getClosedBy(), username);
+    }
+
+    private boolean same(String left, String right) {
+        return left != null && right != null && left.trim().equalsIgnoreCase(right.trim());
     }
 
     private long countHealth(List<MatFlowProductionFile> files, ReleaseHealth health) {

@@ -5,9 +5,11 @@ import static com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.*;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.EngineeringDecision;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ProductionFileStage;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ReleaseHealth;
+import com.alsorg.packing.domain.matflow.MatFlowDesignTask;
 import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
 import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
+import com.alsorg.packing.repository.matflow.MatFlowDesignTaskRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProductionFileRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectRepository;
@@ -42,6 +44,7 @@ public class MatFlowProjectService {
     private final MatFlowProjectRepository projectRepository;
     private final MatFlowProjectDrawingRepository productRepository;
     private final MatFlowProductionFileRepository productionFileRepository;
+    private final MatFlowDesignTaskRepository designTaskRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
     private final MatFlowWorkflowTemplateService templateService;
@@ -51,6 +54,7 @@ public class MatFlowProjectService {
             MatFlowProjectRepository projectRepository,
             MatFlowProjectDrawingRepository productRepository,
             MatFlowProductionFileRepository productionFileRepository,
+            MatFlowDesignTaskRepository designTaskRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
             MatFlowWorkflowTemplateService templateService,
@@ -58,6 +62,7 @@ public class MatFlowProjectService {
         this.projectRepository = projectRepository;
         this.productRepository = productRepository;
         this.productionFileRepository = productionFileRepository;
+        this.designTaskRepository = designTaskRepository;
         this.accessService = accessService;
         this.auditService = auditService;
         this.templateService = templateService;
@@ -96,10 +101,16 @@ public class MatFlowProjectService {
             ensureProjectProductionFiles(project, actor);
         }
 
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         return visibleProjects.stream()
                 .filter(p -> active == null || p.isActive() == active)
-                .filter(p -> q.isBlank() || contains(p.getProjectCode(), q) || contains(p.getProjectName(), q)
-                        || contains(p.getClientName(), q) || productsOf(p.getId()).stream().anyMatch(x -> contains(x.getProductName(), q) || contains(x.getDrawingNo(), q)))
+                .filter(p -> !juniorDesignerOnly || !visibleProductsForCurrentUser(p.getId()).isEmpty())
+                .filter(p -> {
+                    List<MatFlowProjectDrawing> visibleProducts = visibleProductsForCurrentUser(p.getId());
+                    return q.isBlank() || contains(p.getProjectCode(), q) || contains(p.getProjectName(), q)
+                            || contains(p.getClientName(), q) || visibleProducts.stream()
+                                    .anyMatch(x -> contains(x.getProductName(), q) || contains(x.getDrawingNo(), q));
+                })
                 .map(this::toProject).toList();
     }
 
@@ -109,6 +120,9 @@ public class MatFlowProjectService {
         MatFlowProject project = requireProject(projectId);
         accessService.requirePlantAccess(project.getPlantCode());
         ensureProjectProductionFiles(project, accessService.actor());
+        if (accessService.isJuniorDesignerOnly() && visibleProductsForCurrentUser(projectId).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This PD / Project has no Product assigned to your Junior Designer task queue");
+        }
         return toProject(project);
     }
 
@@ -506,25 +520,49 @@ public class MatFlowProjectService {
     }
 
     private ProjectResponse toProject(MatFlowProject project) {
-        List<ProductResponse> products = productsOf(project.getId()).stream().map(this::toProduct).toList();
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        List<ProductResponse> products = visibleProductsForCurrentUser(project.getId()).stream().map(this::toProduct).toList();
         return new ProjectResponse(project.getId(), project.getProjectCode(), project.getProjectName(), project.getClientName(), project.getPlantCode(), project.getRequiredDate(),
-                project.getPriority(), project.getProjectManager(), project.getDesigner1(), project.getDesignHead(), project.getRemarks(), project.isActive(), products.size(), project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(), products);
+                project.getPriority(), juniorDesignerOnly ? null : project.getProjectManager(), juniorDesignerOnly ? null : project.getDesigner1(),
+                juniorDesignerOnly ? null : project.getDesignHead(), juniorDesignerOnly ? null : project.getRemarks(), project.isActive(), products.size(),
+                project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(), products);
     }
 
     private ProductResponse toProduct(MatFlowProjectDrawing product) {
         MatFlowProductionFile file = productionFileRepository.findByProduct_Id(product.getId()).orElse(null);
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         return new ProductResponse(product.getId(), product.getProject().getId(), product.getProductName(), product.getProductType(), product.getDrawingNo(), product.getDrawingRevision(),
                 product.getUnitQuantity() == null ? 1 : product.getUnitQuantity(), product.getDimensionLength(), product.getDimensionBreadth(), product.getDimensionHeight(), product.getDimensionUom(), dimensions(product),
                 product.getRequiredDate(), product.getRemarks(), product.isActive(), clean(product.getProductImageStoragePath()) != null,
-                file == null ? null : file.getId(), file == null ? null : file.getProductionFileNo(), file == null ? null : file.getStage().name(), file == null ? null : file.getReleaseHealth().name(),
-                product.getRowVersion(), product.getCreatedAt(), product.getUpdatedAt());
+                file == null ? null : file.getId(), file == null ? null : file.getProductionFileNo(), file == null ? null : file.getStage().name(),
+                file == null || juniorDesignerOnly ? null : file.getReleaseHealth().name(), product.getRowVersion(), product.getCreatedAt(), product.getUpdatedAt());
     }
 
     private List<MatFlowProjectDrawing> productsOf(UUID projectId) { return productRepository.findByProject_IdOrderByCreatedAtAsc(projectId); }
+
+    private List<MatFlowProjectDrawing> visibleProductsForCurrentUser(UUID projectId) {
+        List<MatFlowProjectDrawing> products = productsOf(projectId);
+        if (!accessService.isJuniorDesignerOnly()) return products;
+        return products.stream().filter(product -> juniorDesignerCanAccessProduct(product.getId())).toList();
+    }
+
+    private boolean juniorDesignerCanAccessProduct(UUID productId) {
+        if (!accessService.isJuniorDesignerOnly()) return true;
+        MatFlowProductionFile file = productionFileRepository.findByProduct_Id(productId).orElse(null);
+        if (file == null) return false;
+        String actor = accessService.actor();
+        List<MatFlowDesignTask> tasks = designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(file.getId());
+        return tasks.stream().anyMatch(task -> task.getAssignees() != null
+                && task.getAssignees().stream().anyMatch(name -> name != null && actor.equalsIgnoreCase(name.trim())));
+    }
+
     private MatFlowProject requireProject(UUID id) { return projectRepository.findById(id).orElseThrow(() -> notFound("Project not found")); }
     private MatFlowProjectDrawing requireProduct(UUID projectId, UUID productId) {
         MatFlowProjectDrawing p = productRepository.findById(productId).orElseThrow(() -> notFound("Product not found"));
         if (p.getProject() == null || !projectId.equals(p.getProject().getId())) throw notFound("Product not found in this project");
+        if (accessService.isJuniorDesignerOnly() && !juniorDesignerCanAccessProduct(productId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This Product is not assigned to your Junior Designer task queue");
+        }
         return p;
     }
     private String dimensions(MatFlowProjectDrawing p) {

@@ -247,7 +247,7 @@ const ACCESS_GROUPS = [
 				value: "MATFLOW_DESIGNER_JUNIOR",
 				label: "Junior Designer",
 				description:
-					"Execute delegated Design tasks and checklist work without Design Head or PPC approval authority.",
+					"See and execute only Design tasks assigned to this username, with only the related Product / PD context and directly related Issue Chat. No department-wide checklist, references or unrelated projects.",
 			},
 			{
 				value: "MATFLOW_PPC",

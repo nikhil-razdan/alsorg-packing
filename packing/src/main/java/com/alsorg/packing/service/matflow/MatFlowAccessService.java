@@ -63,7 +63,13 @@ public class MatFlowAccessService {
     }
 
     public void requireDesignerWrite() {
-        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
+        /*
+         * Junior Designers are execution-only users. They work only on explicitly
+         * assigned Design tasks and may participate in a directly related Issue Chat.
+         * Checklist / reference / broader Design-file mutation remains with the
+         * Designer / Design Head layer.
+         */
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER");
     }
 
     public void requireDesignHeadWrite() {
@@ -155,6 +161,16 @@ public class MatFlowAccessService {
     public boolean hasAnyRole(String... roles) {
         User user = currentUser();
         return currentUserService.hasAnyRole(user, roles);
+    }
+
+    /**
+     * True only for a pure Junior Designer session. A user who also carries a
+     * higher MatFlow Design / management authority keeps that higher authority.
+     */
+    public boolean isJuniorDesignerOnly() {
+        return hasAnyRole("MATFLOW_DESIGNER_JUNIOR")
+                && !hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DIRECTOR",
+                        "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER");
     }
 
     private void requireAny(String... roles) {

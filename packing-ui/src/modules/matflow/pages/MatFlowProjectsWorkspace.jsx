@@ -505,6 +505,8 @@ function ProductMasterRow({ project, product, boms, canEdit, showEngineering, on
 export function MatFlowProjectsPage() {
   const { selectedPlantParam, availablePlants, hasRole } = useMatFlow();
   const navigate = useNavigate();
+  const juniorDesignerOnly = hasRole(MATFLOW_ROLES.DESIGNER_JUNIOR)
+    && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER);
   const canProjectWrite = hasRole(
     MATFLOW_ROLES.ADMIN,
     MATFLOW_ROLES.MANAGER,
@@ -618,6 +620,7 @@ export function MatFlowProjectsPage() {
       productionFiles,
       productsWithBom,
       inDesign,
+      clients: new Set(filteredRows.map((project) => project.clientName).filter(Boolean)).size,
     };
   }, [filteredRows, bomsByFile, canSeeEngineeringReference]);
 
@@ -736,8 +739,8 @@ export function MatFlowProjectsPage() {
     <Box sx={pageSx}>
       <PageHero
         badge="MASTER PRODUCTION FILE"
-        title="Projects"
-        subtitle={canSeeEngineeringReference ? "Product Name + PD No. with one Production File per Product / Drawing." : "Product Name + PD No., drawing ownership and file tracking."}
+        title={juniorDesignerOnly ? "My Assigned Products" : "Projects"}
+        subtitle={juniorDesignerOnly ? "Only PDs and Products connected to your assigned Design tasks are visible." : (canSeeEngineeringReference ? "Product Name + PD No. with one Production File per Product / Drawing." : "Product Name + PD No., drawing ownership and file tracking.")}
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
             <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>
@@ -766,10 +769,14 @@ export function MatFlowProjectsPage() {
       </Card>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1 }}>
-        <Summary label="Projects" value={summary.projects} />
-        <Summary label="Products / Drawings" value={summary.products} />
+        <Summary label={juniorDesignerOnly ? "Assigned PDs" : "Projects"} value={summary.projects} />
+        <Summary label={juniorDesignerOnly ? "Assigned Products" : "Products / Drawings"} value={summary.products} />
         <Summary label="Production Files" value={summary.productionFiles} />
-        {canSeeEngineeringReference ? <Summary label="Products with BOM" value={`${summary.productsWithBom}/${summary.products}`} /> : <Summary label="In Design" value={summary.inDesign} />}
+        {juniorDesignerOnly
+          ? <Summary label="Clients" value={summary.clients} />
+          : canSeeEngineeringReference
+            ? <Summary label="Products with BOM" value={`${summary.productsWithBom}/${summary.products}`} />
+            : <Summary label="In Design" value={summary.inDesign} />}
       </Box>
 
       {!filteredRows.length ? (
@@ -843,8 +850,8 @@ export function MatFlowProjectsPage() {
                 <Box sx={ticketMetaGridSx}>
                   <TicketMeta label="Required" value={formatDate(project.requiredDate)} />
                   <TicketMeta label="Priority" value={readable(project.priority || "NORMAL")} />
-                  <TicketMeta label="Manager" value={project.projectManager || "—"} />
-                  <TicketMeta label="Designer" value={project.designer1 || "—"} />
+                  {juniorDesignerOnly ? <TicketMeta label="Assigned Products" value={products.length} /> : <TicketMeta label="Manager" value={project.projectManager || "—"} />}
+                  {juniorDesignerOnly ? <TicketMeta label="Client" value={project.clientName || "—"} /> : <TicketMeta label="Designer" value={project.designer1 || "—"} />}
                 </Box>
 
                 <Box sx={{ px: 1.05, pb: 0.8, display: "flex", flexDirection: "column", flex: 1 }}>
@@ -886,10 +893,16 @@ export function MatFlowProjectsPage() {
                             sx={{ minWidth: 0 }}
                           />
                           <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                            <Typography sx={{ color: ticketHealthColor(product.releaseHealth), fontSize: 8.4, fontWeight: 900 }}>
-                              {healthLabel(product.releaseHealth)}
-                            </Typography>
-                            <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={softChipSx} />
+                            {juniorDesignerOnly ? (
+                              <Typography sx={{ color: "var(--mf-primary-text)", fontSize: 8.6, fontWeight: 900 }}>Assigned to you</Typography>
+                            ) : (
+                              <>
+                                <Typography sx={{ color: ticketHealthColor(product.releaseHealth), fontSize: 8.4, fontWeight: 900 }}>
+                                  {healthLabel(product.releaseHealth)}
+                                </Typography>
+                                <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={softChipSx} />
+                              </>
+                            )}
                           </Box>
                         </Box>
                       ))}
@@ -902,9 +915,11 @@ export function MatFlowProjectsPage() {
                   )}
 
                   <Box sx={{ mt: "auto", pt: 0.65, minHeight: 24, display: "flex", flexWrap: "wrap", gap: 0.35, alignItems: "flex-end" }}>
-                    {Array.from(stageCounts.entries()).slice(0, 2).map(([stageName, count]) => (
-                      <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />
-                    ))}
+                    {juniorDesignerOnly
+                      ? <Typography sx={{ fontSize: 8.6, color: "var(--mf-text-muted)" }}>Only your assigned Product / PD records are shown.</Typography>
+                      : Array.from(stageCounts.entries()).slice(0, 2).map(([stageName, count]) => (
+                          <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />
+                        ))}
                   </Box>
                 </Box>
 
@@ -935,11 +950,11 @@ export function MatFlowProjectsPage() {
                       <Meta label="Plant" value={project.plantCode} />
                       <Meta label="Priority" value={project.priority || "NORMAL"} />
                       <Meta label="Required Date" value={formatDate(project.requiredDate)} />
-                      <Meta label="Project Manager" value={project.projectManager || "—"} />
-                      <Meta label="Designer" value={project.designer1 || "—"} />
-                      <Meta label="Design Head" value={project.designHead || "—"} />
+                      {juniorDesignerOnly ? <Meta label="Client" value={project.clientName || "—"} /> : <Meta label="Project Manager" value={project.projectManager || "—"} />}
+                      {!juniorDesignerOnly && <Meta label="Designer" value={project.designer1 || "—"} />}
+                      {!juniorDesignerOnly && <Meta label="Design Head" value={project.designHead || "—"} />}
                     </Box>
-                    {project.remarks && (
+                    {!juniorDesignerOnly && project.remarks && (
                       <Typography sx={{ mt: 0.8, fontSize: 9.8, color: "var(--mf-text-muted)" }}>
                         Project remarks: {project.remarks}
                       </Typography>
@@ -953,7 +968,7 @@ export function MatFlowProjectsPage() {
                           Product / Production File detail
                         </Typography>
                         <Typography sx={{ mt: 0.15, fontSize: 9.4, color: "var(--mf-text-muted)" }}>
-                          {canSeeEngineeringReference ? "Drawing, image, Production File and Engineering BOM history stay under this Project / PD ticket." : "Drawing, image and Production File tracking stay under this Project / PD ticket."}
+                          {juniorDesignerOnly ? "Only the Product / Drawing information connected to your assignment is shown." : (canSeeEngineeringReference ? "Drawing, image, Production File and Engineering BOM history stay under this Project / PD ticket." : "Drawing, image and Production File tracking stay under this Project / PD ticket.")}
                         </Typography>
                       </Box>
                     </Box>
@@ -962,7 +977,14 @@ export function MatFlowProjectsPage() {
                       <EmptyState>No products added.</EmptyState>
                     ) : (
                       <Box sx={{ display: "grid", gap: 0.9 }}>
-                        {products.map((product) => (
+                        {products.map((product) => juniorDesignerOnly ? (
+                          <Box key={product.id} sx={{ p: 1.1, border: "1px solid var(--mf-border)", borderRadius: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0,1.4fr) .8fr .8fr auto" }, gap: 1, alignItems: "center", background: "var(--mf-panel-solid)" }}>
+                            <MatFlowProductIdentity productName={product.productName} projectCode={project.projectCode} productionFileNo={product.productionFileNo} drawingNo={product.drawingNo} size="sm" />
+                            <Box><Typography sx={{ fontSize: 9, color: "var(--mf-text-muted)" }}>Dimensions</Typography><Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{product.dimensions || "—"}</Typography></Box>
+                            <Box><Typography sx={{ fontSize: 9, color: "var(--mf-text-muted)" }}>Required</Typography><Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{formatDate(product.requiredDate)}</Typography></Box>
+                            <Button size="small" onClick={() => openProductionFile(product)} sx={primaryBtnSx}>Open my task</Button>
+                          </Box>
+                        ) : (
                           <ProductMasterRow
                             key={product.id}
                             project={project}

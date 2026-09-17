@@ -215,17 +215,29 @@ export default function MatFlowLayout() {
         }
     };
 
+    const juniorDesignerOnly = role === MATFLOW_ROLES.DESIGNER_JUNIOR;
     const workLabel = (
-        [MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER, MATFLOW_ROLES.DESIGNER_JUNIOR].includes(role)
-            ? "Design Work"
-            : [MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.ENGINEERING_JUNIOR].includes(role)
-                ? "Engineering Work"
-                : role === MATFLOW_ROLES.PPC ? "PPC Control" : "Work"
+        juniorDesignerOnly
+            ? "My Design Work"
+            : [MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER].includes(role)
+                ? "Design Work"
+                : [MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.ENGINEERING_JUNIOR].includes(role)
+                    ? "Engineering Work"
+                    : role === MATFLOW_ROLES.PPC ? "PPC Control" : "Work"
     );
-    const displayNavLabel = (item) => item.screen === "work" ? workLabel : item.label;
+    const displayNavLabel = (item) => {
+        if (item.screen === "work") return workLabel;
+        if (juniorDesignerOnly && item.screen === "projects") return "My Assigned Products";
+        if (juniorDesignerOnly && item.screen === "reports") return "My Reports";
+        return item.label;
+    };
     const effectiveHeader = location.pathname.startsWith("/matflow/work")
-        ? ["", workLabel, "Department work on the shared Product / PD Production File."]
-        : header;
+        ? ["", workLabel, juniorDesignerOnly ? "Only your assigned task and related Product / PD information." : "Department work on the shared Product / PD Production File."]
+        : juniorDesignerOnly && location.pathname.startsWith("/matflow/projects")
+            ? ["", "My Assigned Products", "Only PDs and Products linked to your assigned Design tasks."]
+            : juniorDesignerOnly && location.pathname.startsWith("/matflow/reports")
+                ? ["", "My Reports", "Your Design-task report only."]
+                : header;
 
     const renderNavItem = (item) => {
         const label = displayNavLabel(item);

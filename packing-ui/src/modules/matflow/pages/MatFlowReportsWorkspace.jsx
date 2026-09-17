@@ -11,6 +11,7 @@ import {
   ErrorBox,
   LoadingBlock,
   PageHero,
+  MATFLOW_ROLES,
   fieldSx,
   getMatFlowDepartmentAccess,
   pageSx,
@@ -28,7 +29,16 @@ const REPORTS = Object.freeze({
   PPC: "PPC_HANDOFF",
 });
 
-const CLOSED = new Set(["DONE", "COMPLETE", "CANCELLED", "CLOSED", "NOT_APPLICABLE", "PRODUCTION_RELEASED"]);
+const CLOSED = new Set(["DONE", "COMPLETE", "COMPLETED", "CANCELLED", "CLOSED", "NOT_APPLICABLE", "PRODUCTION_RELEASED"]);
+const designTaskStatusLabel = (status) => {
+  const value = String(status || "").toUpperCase();
+  if (["COMPLETED", "DONE", "CANCELLED"].includes(value)) return "Completed";
+  if (["WIP", "WORKING", "HOLD", "IN_PROGRESS"].includes(value)) return "WIP";
+  return "Pending / Yet To Start";
+};
+
+const reportStatusLabel = (type, status) => type === REPORTS.DESIGN ? designTaskStatusLabel(status) : readable(status || "—");
+
 const ENGINEERING_STAGES = new Set(["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW", "PPC_GATE_2", "PRODUCTION_RELEASED"]);
 const toDateTime = (value) => (value ? new Date(value).toLocaleString() : "—");
 const safeDate = (value) => {
@@ -72,13 +82,12 @@ function reportColumns(type) {
     { key: "designer1", label: "Designer / Originator", width: 22 },
     { key: "assignedBy", label: "Assigned By", width: 22 },
     { key: "assignee", label: "Assigned User(s)", width: 28 },
-    { key: "status", label: "Status", width: 16 },
+    { key: "status", label: "Status", width: 22, value: (row) => designTaskStatusLabel(row.status) },
     { key: "priority", label: "Priority", width: 13 },
     { key: "receivedAt", label: "Received At", width: 22 },
     { key: "dueAt", label: "Due At", width: 22 },
     { key: "startedAt", label: "Started At", width: 22 },
     { key: "completedAt", label: "Completed At", width: 22 },
-    { key: "holdReason", label: "Hold Reason", width: 30 },
     { key: "remarks", label: "Remarks", width: 34 },
   ];
   if (type === REPORTS.ENGINEERING) return [
@@ -187,9 +196,9 @@ const reportStatusColor = (row) => {
   const status = String(row?.status || row?.stage || "").toUpperCase();
   const due = safeDate(row?.dueAt);
   const overdue = due && due < new Date() && !CLOSED.has(status);
-  if (overdue || ["BLOCKED", "HOLD", "CANCELLED"].includes(status)) return "var(--mf-danger-text)";
-  if (["DONE", "COMPLETE", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
-  if (["IN_PROGRESS", "WORKING", "ASSIGNED", "RESPONDED"].includes(status)) return "var(--mf-primary-text)";
+  if (overdue || ["BLOCKED", "CANCELLED"].includes(status)) return "var(--mf-danger-text)";
+  if (["DONE", "COMPLETE", "COMPLETED", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
+  if (["WIP", "IN_PROGRESS", "WORKING", "ASSIGNED", "RESPONDED"].includes(status)) return "var(--mf-primary-text)";
   return "var(--mf-text-secondary)";
 };
 
@@ -197,8 +206,8 @@ const reportRowAccent = (row) => {
   const due = safeDate(row?.dueAt);
   if (due && due < new Date() && !CLOSED.has(String(row?.status || "").toUpperCase())) return "var(--mf-danger-text)";
   const status = String(row?.status || row?.stage || "").toUpperCase();
-  if (["BLOCKED", "HOLD"].includes(status)) return "var(--mf-warning-text)";
-  if (["DONE", "COMPLETE", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
+  if (["BLOCKED"].includes(status)) return "var(--mf-warning-text)";
+  if (["DONE", "COMPLETE", "COMPLETED", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
   return "transparent";
 };
 
@@ -209,7 +218,7 @@ const pageCellValue = (row, key, type) => {
       <Typography sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.taskNo || row.taskKey || readable(row.taskType || "")}</Typography>
     </Box>
   );
-  if (key === "status") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: reportStatusColor(row) }}>{readable(row.status || "—")}</Typography>;
+  if (key === "status") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: reportStatusColor(row) }}>{reportStatusLabel(type, row.status)}</Typography>;
   if (key === "stage") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: reportStatusColor(row) }}>{readable(row.stage || "—")}</Typography>;
   if (["receivedAt", "dueAt", "startedAt", "completedAt", "updatedAt", "productionReleasedAt"].includes(key)) {
     return <Typography sx={{ fontSize: 9.6, color: "var(--mf-text-secondary)", whiteSpace: "nowrap" }}>{toDateTime(row[key])}</Typography>;
@@ -224,9 +233,12 @@ export function MatFlowReportsPage() {
   const navigate = useNavigate();
   const access = useMemo(() => getMatFlowDepartmentAccess(roles), [roles]);
   const primary = useMemo(() => primaryMatFlowDepartment(roles), [roles]);
+  const juniorDesignerOnly = useMemo(() => roles.includes(MATFLOW_ROLES.DESIGNER_JUNIOR)
+    && !roles.some((role) => [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER].includes(role)), [roles]);
   // PPC receives read-only Issue Chat visibility because unresolved cross-department
-  // issues are gate context, not PPC-owned work.
-  const canSeeQueries = access.design || access.engineering || access.ppc || access.management;
+  // issues are gate context, not PPC-owned work. Junior Designers see only their own
+  // assignment report; related Issue Chat stays inside the assigned Product workspace.
+  const canSeeQueries = !juniorDesignerOnly && (access.design || access.engineering || access.ppc || access.management);
 
   const availableReports = useMemo(() => {
     const rows = [];
@@ -297,7 +309,6 @@ export function MatFlowReportsPage() {
             dueAt: task.dueAt,
             startedAt: task.startedAt,
             completedAt: task.completedAt,
-            holdReason: task.holdReason,
             remarks: task.remarks,
             activityAt: task.receivedAt || task.createdAt || task.updatedAt,
           };
@@ -427,10 +438,10 @@ export function MatFlowReportsPage() {
       columns: reportColumns(reportType),
       metadata: [
         selectedPlantParam ? `Plant ${selectedPlantParam}` : "All permitted plants",
-        assignee ? `User ${assignee}` : "All users",
+        juniorDesignerOnly ? "Assigned user: current Junior Designer" : (assignee ? `User ${assignee}` : "All users"),
         client ? `Client ${client}` : "All clients",
         project ? `Project ${project}` : "All projects",
-        status ? `Status ${readable(status)}` : "All statuses",
+        status ? `Status ${reportStatusLabel(reportType, status)}` : "All statuses",
         fromDate ? `From ${fromDate}` : "",
         toDate ? `To ${toDate}` : "",
         `${filtered.length} row(s)`,
@@ -448,8 +459,8 @@ export function MatFlowReportsPage() {
     <Box sx={{ ...pageSx, display: "grid", gap: 1 }}>
       <PageHero
         badge="DEPARTMENT REPORTS"
-        title="Reports"
-        subtitle="Department task and handoff reports with Product Name + PD No. as the common reference."
+        title={juniorDesignerOnly ? "My Reports" : "Reports"}
+        subtitle={juniorDesignerOnly ? "Only your assigned Design tasks and their related Product / PD information." : "Department task and handoff reports with Product Name + PD No. as the common reference."}
         actions={(
           <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap" }}>
             <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>Refresh</Button>
@@ -468,10 +479,10 @@ export function MatFlowReportsPage() {
             </TextField>
           ) : <Box sx={{ px: 1, py: 1, border: "1px solid var(--mf-border)", borderRadius: 1.2, color: "var(--mf-text-secondary)", fontSize: 10.5, fontWeight: 850 }}>{reportLabel}</Box>}
           <TextField size="small" label="Search Product / PD / client / project / task" value={search} onChange={(event) => setSearch(event.target.value)} sx={fieldSx} />
-          <TextField select size="small" label="Assigned User" value={assignee} onChange={(event) => setAssignee(event.target.value)} sx={fieldSx}>
+          {!juniorDesignerOnly && <TextField select size="small" label="Assigned User" value={assignee} onChange={(event) => setAssignee(event.target.value)} sx={fieldSx}>
             <MenuItem value="">All users</MenuItem>
             {assigneeOptions.map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}
-          </TextField>
+          </TextField>}
           <TextField select size="small" label="Client" value={client} onChange={(event) => setClient(event.target.value)} sx={fieldSx}>
             <MenuItem value="">All clients</MenuItem>
             {clientOptions.map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}
@@ -482,7 +493,7 @@ export function MatFlowReportsPage() {
           </TextField>
           <TextField select size="small" label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={fieldSx}>
             <MenuItem value="">All statuses</MenuItem>
-            {statusOptions.map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
+            {statusOptions.map((value) => <MenuItem key={value} value={value}>{reportStatusLabel(reportType, value)}</MenuItem>)}
           </TextField>
           <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={fromDate} onChange={(event) => setFromDate(event.target.value)} sx={fieldSx} />
           <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }} value={toDate} onChange={(event) => setToDate(event.target.value)} sx={fieldSx} />
