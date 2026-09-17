@@ -557,7 +557,7 @@ export function MatFlowProjectsPage() {
           <EmptyState>No projects found.</EmptyState>
         </Card>
       ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "repeat(2,minmax(0,1fr))" }, gap: 1.2, alignItems: "start" }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" }, gap: 1, alignItems: "stretch" }}>
           {filteredRows.map((project) => {
             const products = project.products || [];
             const bomCount = products.reduce(
@@ -577,7 +577,7 @@ export function MatFlowProjectsPage() {
                   ? "GREEN"
                   : "PENDING";
             const isOpen = expanded[project.id] === true;
-            const visibleFiles = productionFiles.slice(0, 3);
+            const visibleFiles = productionFiles.slice(0, 2);
             const stageCounts = productionFiles.reduce((map, product) => {
               const key = product.stage || "NOT_STARTED";
               map.set(key, (map.get(key) || 0) + 1);
@@ -589,7 +589,7 @@ export function MatFlowProjectsPage() {
                 key={project.id}
                 sx={{
                   ...ticketCardSx(projectHealth),
-                  gridColumn: { xl: isOpen ? "1 / -1" : "auto" },
+                  gridColumn: isOpen ? "1 / -1" : "auto",
                 }}
               >
                 <Box sx={ticketTopSx}>
@@ -597,20 +597,20 @@ export function MatFlowProjectsPage() {
                     <Typography sx={ticketEyebrowSx}>
                       PROJECT TICKET · {project.plantCode || "NO PLANT"}
                     </Typography>
-                    <Typography sx={{ mt: 0.35, fontSize: 19, lineHeight: 1.08, fontWeight: 950, color: "var(--mf-text)" }}>
+                    <Typography sx={{ mt: 0.25, fontSize: 16.5, lineHeight: 1.08, fontWeight: 950, color: "var(--mf-text)" }}>
                       {project.projectCode}
                     </Typography>
-                    <Typography noWrap sx={{ mt: 0.28, fontSize: 11.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
+                    <Typography noWrap sx={{ mt: 0.2, fontSize: 10.3, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
                       {project.projectName || "Unnamed Project"}
                     </Typography>
-                    <Typography noWrap sx={{ mt: 0.15, fontSize: 9.7, color: "var(--mf-text-muted)" }}>
+                    <Typography noWrap sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
                       {project.clientName || "Client not assigned"}
                     </Typography>
                   </Box>
 
-                  <Box sx={{ display: "grid", justifyItems: "end", gap: 0.55 }}>
+                  <Box sx={{ display: "grid", justifyItems: "end", gap: 0.4, flex: "0 0 auto" }}>
                     <MatFlowStatusChip status={projectHealth} />
-                    <Chip label={`${productionFiles.length} Production File${productionFiles.length === 1 ? "" : "s"}`} size="small" sx={softChipSx} />
+                    <Chip label={`${productionFiles.length} File${productionFiles.length === 1 ? "" : "s"}`} size="small" sx={softChipSx} />
                   </Box>
                 </Box>
 
@@ -623,15 +623,15 @@ export function MatFlowProjectsPage() {
                   <TicketMeta label="Designer" value={project.designer1 || "—"} />
                 </Box>
 
-                <Box sx={{ px: 1.35, pb: 1.05 }}>
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, mb: 0.7 }}>
+                <Box sx={{ px: 1.05, pb: 0.8, display: "flex", flexDirection: "column", flex: 1 }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 0.7, mb: 0.55 }}>
                     <Box>
-                      <Typography sx={{ fontSize: 10, fontWeight: 950, color: "var(--mf-text)" }}>PRODUCTION FILES</Typography>
-                      <Typography sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
+                      <Typography sx={{ fontSize: 9.3, fontWeight: 950, color: "var(--mf-text)" }}>PRODUCTION FILES</Typography>
+                      <Typography sx={{ mt: 0.08, fontSize: 8.2, color: "var(--mf-text-muted)" }}>
                         One Product / Drawing = one controlled Production File
                       </Typography>
                     </Box>
-                    <Typography sx={{ fontSize: 9.2, fontWeight: 850, color: "var(--mf-text-muted)" }}>
+                    <Typography sx={{ fontSize: 8.5, fontWeight: 850, color: "var(--mf-text-muted)", whiteSpace: "nowrap" }}>
                       {productsWithBom}/{products.length || 0} with BOM · {bomCount} revisions
                     </Typography>
                   </Box>
@@ -639,7 +639,7 @@ export function MatFlowProjectsPage() {
                   {!visibleFiles.length ? (
                     <Box sx={ticketEmptyFileSx}>No Production File yet. Add a Product / Drawing to create one automatically.</Box>
                   ) : (
-                    <Box sx={{ display: "grid", gap: 0.55 }}>
+                    <Box sx={{ display: "grid", gap: 0.45 }}>
                       {visibleFiles.map((product) => (
                         <Box
                           key={product.id}
@@ -652,10 +652,10 @@ export function MatFlowProjectsPage() {
                           sx={ticketFileRowSx}
                         >
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 950, color: "var(--mf-text)" }}>
+                            <Typography noWrap sx={{ fontSize: 9.8, fontWeight: 950, color: "var(--mf-text)" }}>
                               {product.productionFileNo}
                             </Typography>
-                            <Typography noWrap sx={{ mt: 0.12, fontSize: 9, color: "var(--mf-text-muted)" }}>
+                            <Typography noWrap sx={{ mt: 0.08, fontSize: 8.4, color: "var(--mf-text-muted)" }}>
                               {product.productName} · Drawing {product.drawingNo || "—"}
                             </Typography>
                           </Box>
@@ -666,15 +666,15 @@ export function MatFlowProjectsPage() {
                         </Box>
                       ))}
                       {productionFiles.length > visibleFiles.length && (
-                        <Typography sx={{ px: 0.25, fontSize: 9, fontWeight: 850, color: "var(--mf-primary-text)" }}>
+                        <Typography sx={{ px: 0.2, fontSize: 8.4, fontWeight: 850, color: "var(--mf-primary-text)" }}>
                           + {productionFiles.length - visibleFiles.length} more Production File{productionFiles.length - visibleFiles.length === 1 ? "" : "s"} inside this Project ticket
                         </Typography>
                       )}
                     </Box>
                   )}
 
-                  <Box sx={{ mt: 0.9, display: "flex", flexWrap: "wrap", gap: 0.45 }}>
-                    {Array.from(stageCounts.entries()).slice(0, 4).map(([stageName, count]) => (
+                  <Box sx={{ mt: "auto", pt: 0.65, minHeight: 24, display: "flex", flexWrap: "wrap", gap: 0.35, alignItems: "flex-end" }}>
+                    {Array.from(stageCounts.entries()).slice(0, 2).map(([stageName, count]) => (
                       <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />
                     ))}
                   </Box>
@@ -687,7 +687,7 @@ export function MatFlowProjectsPage() {
                         Edit
                       </Button>
                       <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={primaryBtnSx}>
-                        Add Product
+                        Add
                       </Button>
                     </>
                   )}
@@ -697,7 +697,7 @@ export function MatFlowProjectsPage() {
                     onClick={() => setExpanded((current) => ({ ...current, [project.id]: !isOpen }))}
                     sx={{ ...secondaryBtnSx, ml: { sm: "auto" } }}
                   >
-                    {isOpen ? "Close Production File details" : "Open full ticket"}
+                    {isOpen ? "Close details" : "Open ticket"}
                   </Button>
                 </Box>
 
@@ -870,10 +870,10 @@ function Summary({ label, value }) {
 function TicketMeta({ label, value }) {
   return (
     <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ fontSize: 7.8, fontWeight: 950, letterSpacing: ".06em", color: "var(--mf-text-muted)" }}>
+      <Typography sx={{ fontSize: 7.2, fontWeight: 950, letterSpacing: ".055em", color: "var(--mf-text-muted)" }}>
         {label.toUpperCase()}
       </Typography>
-      <Typography noWrap sx={{ mt: 0.18, fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
+      <Typography noWrap sx={{ mt: 0.1, fontSize: 9.1, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
         {value || "—"}
       </Typography>
     </Box>
@@ -891,16 +891,20 @@ const ticketCardSx = (health) => ({
   position: "relative",
   p: 0,
   overflow: "hidden",
-  borderRadius: 1.6,
-  borderTop: `3px solid ${ticketHealthColor(health)}`,
+  height: "100%",
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  borderRadius: 1.35,
+  borderTop: `2px solid ${ticketHealthColor(health)}`,
   boxShadow: "var(--mf-card-shadow)",
   "&::before": {
     content: '""',
     position: "absolute",
-    top: 88,
-    left: -8,
-    width: 16,
-    height: 16,
+    top: 72,
+    left: -6,
+    width: 12,
+    height: 12,
     borderRadius: "50%",
     background: "var(--mf-page-bg)",
     border: "1px solid var(--mf-border)",
@@ -909,10 +913,10 @@ const ticketCardSx = (health) => ({
   "&::after": {
     content: '""',
     position: "absolute",
-    top: 88,
-    right: -8,
-    width: 16,
-    height: 16,
+    top: 72,
+    right: -6,
+    width: 12,
+    height: 12,
     borderRadius: "50%",
     background: "var(--mf-page-bg)",
     border: "1px solid var(--mf-border)",
@@ -921,44 +925,49 @@ const ticketCardSx = (health) => ({
 });
 
 const ticketTopSx = {
-  px: 1.45,
-  py: 1.25,
+  px: 1.1,
+  py: 0.9,
+  minHeight: 72,
   display: "flex",
   justifyContent: "space-between",
-  gap: 1.2,
+  gap: 0.75,
   alignItems: "flex-start",
   background: "var(--mf-panel-solid)",
 };
 
 const ticketEyebrowSx = {
-  fontSize: 8.1,
+  fontSize: 7.5,
   fontWeight: 950,
-  letterSpacing: ".09em",
+  letterSpacing: ".08em",
   color: "var(--mf-primary-text)",
 };
 
 const ticketPerforationSx = {
-  mx: 1.2,
+  mx: 0.95,
   borderTop: "1px dashed var(--mf-border-strong)",
 };
 
 const ticketMetaGridSx = {
-  px: 1.4,
-  py: 0.95,
+  px: 1.05,
+  py: 0.7,
+  minHeight: 70,
   display: "grid",
-  gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,minmax(0,1fr))" },
-  gap: 0.8,
+  gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+  gap: 0.55,
+  columnGap: 0.8,
+  alignContent: "center",
 };
 
 const ticketFileRowSx = {
-  px: 0.85,
-  py: 0.72,
+  px: 0.7,
+  py: 0.55,
   display: "grid",
   gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto" },
-  gap: 0.7,
+  gap: 0.55,
+  minHeight: 45,
   alignItems: "center",
   border: "1px solid var(--mf-border)",
-  borderRadius: 1.15,
+  borderRadius: 1,
   background: "var(--mf-surface)",
   cursor: "pointer",
   transition: "border-color .15s ease, background .15s ease",
@@ -967,20 +976,23 @@ const ticketFileRowSx = {
 };
 
 const ticketEmptyFileSx = {
-  p: 1,
+  p: 0.75,
+  minHeight: 45,
   border: "1px dashed var(--mf-border-strong)",
   borderRadius: 1.2,
-  fontSize: 9.5,
+  fontSize: 8.8,
   color: "var(--mf-text-muted)",
   background: "var(--mf-surface)",
 };
 
 const ticketActionsSx = {
-  px: 1.35,
-  py: 0.9,
+  px: 1.05,
+  py: 0.65,
+  mt: "auto",
+  minHeight: 45,
   display: "flex",
   flexWrap: "wrap",
-  gap: 0.6,
+  gap: 0.45,
   alignItems: "center",
   borderTop: "1px solid var(--mf-border)",
   background: "var(--mf-panel-solid)",
