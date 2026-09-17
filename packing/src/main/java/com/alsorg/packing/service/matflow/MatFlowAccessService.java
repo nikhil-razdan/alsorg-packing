@@ -33,16 +33,57 @@ public class MatFlowAccessService {
         throw new AccessDeniedException("MatFlow access required");
     }
 
-    /** Current role model: MATFLOW_ENGINEERING covers Designer-1 / Designer-2 / Engineer. */
-    public void requireDesignerWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
-    /** Design Head control is intentionally restricted to manager/admin until dedicated roles are introduced. */
-    public void requireDesignHeadWrite() { requireAny("ADMIN", "MATFLOW_MANAGER"); }
-    public void requireDesignTaskWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
-    public void requireEngineeringWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
-    /** Current role model: MATFLOW_MANAGER is the PPC / Engineering Head control role. */
-    public void requirePpcWrite() { requireAny("ADMIN", "MATFLOW_MANAGER"); }
-    public void requireProjectWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
-    public void requireMasterWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
+    /*
+     * MatFlow responsibility model.
+     *
+     * The workflow remains Designer -> PPC Gate 1 -> Engineering -> PPC Gate 2
+     * -> PRODUCTION_RELEASED.  These authorities intentionally describe who may
+     * mutate each control surface; screen visibility in React is only a UX gate.
+     */
+    public void requireSetupWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_PPC", "MATFLOW_ENGINEERING_HEAD");
+    }
+
+    public void requireDesignerWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
+    }
+
+    public void requireDesignHeadWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD");
+    }
+
+    public void requireDesignTaskWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
+    }
+
+    public void requireEngineeringReviewWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+    }
+
+    public void requireEngineeringDecisionWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD");
+    }
+
+    public void requireEngineeringTaskWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
+    }
+
+    /** Compatibility alias used by BOM/master services: authoring is Engineer-level, not Junior-level. */
+    public void requireEngineeringWrite() {
+        requireEngineeringReviewWrite();
+    }
+
+    public void requirePpcWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_PPC");
+    }
+
+    public void requireProjectWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+    }
+
+    public void requireMasterWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+    }
 
     public Set<String> allowedPlants() {
         User user = currentUser();

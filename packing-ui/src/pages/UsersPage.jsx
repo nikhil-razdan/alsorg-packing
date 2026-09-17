@@ -220,58 +220,94 @@ const ACCESS_GROUPS = [
 		label: "MatFlow",
 		shortLabel: "MatFlow",
 		description:
-			"Operational BOM, stock reservation, purchase, QC, issue and consumption.",
+			"Production File control from Design through PPC and Engineering to Production Release.",
 		accent: "#14b8a6",
 		icon: <LayersOutlinedIcon />,
-		defaultRole: "MATFLOW_ENGINEERING",
+		defaultRole: "MATFLOW_DESIGNER",
 		roles: [
 			{
 				value: "MATFLOW_MANAGER",
 				label: "MatFlow Manager",
 				description:
-					"Monitor and manage the complete material workflow.",
+					"Cross-functional MatFlow control across Design, PPC, Engineering and Production Release.",
+			},
+			{
+				value: "MATFLOW_DESIGN_HEAD",
+				label: "Design Head",
+				description:
+					"Own Design review, checklist sign-off, Design task delegation and handoff to PPC Gate 1.",
+			},
+			{
+				value: "MATFLOW_DESIGNER",
+				label: "Designer",
+				description:
+					"Prepare Design submissions, work the Designer checklist, drawings, clarifications and Engineering Query responses.",
+			},
+			{
+				value: "MATFLOW_DESIGNER_JUNIOR",
+				label: "Junior Designer",
+				description:
+					"Execute delegated Design tasks and checklist work without Design Head or PPC approval authority.",
+			},
+			{
+				value: "MATFLOW_PPC",
+				label: "PPC",
+				description:
+					"Control PPC Gate 1 and PPC Gate 2, including the validated Production Release handoff.",
+			},
+			{
+				value: "MATFLOW_ENGINEERING_HEAD",
+				label: "Engineering Head",
+				description:
+					"Own Engineering approval, revision-impact decisions, queries and engineering work allocation.",
 			},
 			{
 				value: "MATFLOW_ENGINEERING",
-				label: "Engineering",
+				label: "Engineer",
 				description:
-					"Create, revise and submit operational material BOMs.",
+					"Perform Engineering technical checks, queries, BOM authoring and production-documentation work.",
 			},
 			{
-				value: "MATFLOW_STORE",
-				label: "Stores",
+				value: "MATFLOW_ENGINEERING_JUNIOR",
+				label: "Junior Engineer",
 				description:
-					"Forward remote-plant MRs, control AL-P1 Main Store stock, and receive/hand off routed material.",
-			},
-			{
-				value: "MATFLOW_PURCHASE",
-				label: "Purchase",
-				description:
-					"Process Main Store shortage indents and purchase tracking across all plants.",
-			},
-			{
-				value: "MATFLOW_PROCESSING",
-				label: "Material Processing",
-				description:
-					"Receive, process and dispatch material through internal or external processing units.",
+					"Execute assigned Engineering documentation tasks without Engineering approval or revision-impact authority.",
 			},
 			{
 				value: "MATFLOW_PRODUCTION",
 				label: "Production",
 				description:
-					"Raise requisitions, record consumption and complete production.",
-			},
-			{
-				value: "MATFLOW_QC",
-				label: "Quality Control",
-				description:
-					"Complete MR-linked QC checks at AL-P1 Main Store; QC has no routing authority.",
+					"Read the validated Production Release package. Downstream execution remains intentionally outside this MatFlow phase.",
 			},
 			{
 				value: "MATFLOW_DIRECTOR",
 				label: "Director",
 				description:
-					"Approve controlled MatFlow decisions and review reports.",
+					"Read-only management oversight of Production Files, risks, gates, Engineering and release status.",
+			},
+			{
+				value: "MATFLOW_STORE",
+				label: "Legacy · Stores",
+				description:
+					"Compatibility role retained for existing accounts; the retired Store execution workflow is not recreated in this rebuild.",
+			},
+			{
+				value: "MATFLOW_PURCHASE",
+				label: "Legacy · Purchase",
+				description:
+					"Compatibility role retained for existing accounts; Purchase execution is outside the current stable MatFlow boundary.",
+			},
+			{
+				value: "MATFLOW_PROCESSING",
+				label: "Legacy · Processing",
+				description:
+					"Compatibility role retained for existing accounts; processing execution is not part of the current rebuild.",
+			},
+			{
+				value: "MATFLOW_QC",
+				label: "Legacy · QC",
+				description:
+					"Compatibility role retained for existing accounts; downstream QC execution is not configured in this phase.",
 			},
 		],
 	},
@@ -5764,10 +5800,17 @@ function roleIcon(role) {
 		)
 	) {
 		if (
-			cleanRole ===
-			"MATFLOW_ENGINEERING"
+			["MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR"].includes(cleanRole)
 		) {
 			return <EngineeringOutlinedIcon />;
+		}
+
+		if (cleanRole === "MATFLOW_DESIGN_HEAD") {
+			return <SupervisorAccountOutlinedIcon />;
+		}
+
+		if (cleanRole === "MATFLOW_PPC") {
+			return <AssessmentOutlinedIcon />;
 		}
 
 		if (

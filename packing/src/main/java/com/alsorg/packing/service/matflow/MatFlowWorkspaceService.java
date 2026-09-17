@@ -147,7 +147,7 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse updateSetup(UUID fileId, ProductionFileSetupRequest request) {
-        accessService.requireDesignerWrite();
+        accessService.requireSetupWrite();
         MatFlowProductionFile file = requireFile(fileId);
         requireVersion(file.getRowVersion(), request.rowVersion());
 
@@ -193,30 +193,77 @@ public class MatFlowWorkspaceService {
             accessService.requireDesignerWrite();
             requireStage(file, ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION);
         } else {
-            accessService.requireEngineeringWrite();
+            accessService.requireEngineeringReviewWrite();
             requireStage(file, ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY);
         }
-        MatFlowWorkItem item = workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(fileId, type, itemKey)
+
+        MatFlowWorkItem item = workRepository
+                .findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(fileId, type, itemKey)
                 .orElseThrow(() -> notFound("Checklist item not found"));
-        requireVersion(item.getRowVersion(), request.rowVersion());
         WorkItemStatus next = enumValue(WorkItemStatus.class, request.status(), "Invalid checklist status");
         if (!Set.of(WorkItemStatus.PENDING, WorkItemStatus.COMPLETE, WorkItemStatus.NOT_APPLICABLE).contains(next)) {
             throw badRequest("Checklist status must be PENDING, COMPLETE or NOT_APPLICABLE");
         }
+
+        String requestedRemarks = clean(request.remarks());
+        String existingRemarks = clean(item.getRemarks());
+        boolean sameStatus = item.getStatus() == next;
+        boolean sameRemarks = Objects.equals(existingRemarks, requestedRemarks);
+        boolean terminal = Set.of(WorkItemStatus.COMPLETE, WorkItemStatus.NOT_APPLICABLE).contains(item.getStatus());
+
+        /*
+         * A completed checklist point is an immutable sign-off.  The duplicate
+         * request check intentionally happens before optimistic-version validation:
+         * a double-click/retry of the exact request is therefore idempotent instead
+         * of becoming a false "record changed" conflict or another Timeline event.
+         */
+        if (terminal) {
+            if (sameStatus && sameRemarks) return toDetail(file);
+            throw conflict("Checklist point is locked after completion. A manager-controlled correction flow is required to reopen it.");
+        }
+
+        requireVersion(item.getRowVersion(), request.rowVersion());
+
+        // A no-op save must not touch timestamps, row versions, file health or audit history.
+        if (sameStatus && sameRemarks) return toDetail(file);
+
         if (next == WorkItemStatus.NOT_APPLICABLE && item.getCriticality() == Criticality.CRITICAL) {
             throw conflict("Critical checklist item cannot be marked Not Applicable");
         }
-        if (type == WorkItemType.DESIGN_CHECK && next == WorkItemStatus.NOT_APPLICABLE && clean(request.remarks()) == null) {
+        if (type == WorkItemType.DESIGN_CHECK && next == WorkItemStatus.NOT_APPLICABLE && requestedRemarks == null) {
             throw badRequest("Reason is required when a Design checklist item is Not Applicable");
         }
+
+        WorkItemStatus previous = item.getStatus();
         if (type == WorkItemType.DESIGN_CHECK) invalidateDesignHeadApproval(file);
-        item.setStatus(next); item.setRemarks(request.remarks()); item.setUpdatedBy(accessService.actor());
+        item.setStatus(next);
+        item.setRemarks(requestedRemarks);
+        item.setUpdatedBy(accessService.actor());
         if (next == WorkItemStatus.COMPLETE || next == WorkItemStatus.NOT_APPLICABLE) {
-            item.setCompletedBy(accessService.actor()); item.setCompletedAt(now());
-        } else { item.setCompletedBy(null); item.setCompletedAt(null); }
-        workRepository.save(item); refreshHealth(file); file.setUpdatedBy(accessService.actor()); fileRepository.save(file);
-        auditService.log("WORK_ITEM", item.getId(), "CHECKLIST_UPDATED", file,
-                auditService.details("area", area, "key", item.getItemKey(), "status", item.getStatus().name(), "remarks", item.getRemarks()));
+            item.setCompletedBy(accessService.actor());
+            item.setCompletedAt(now());
+        } else {
+            item.setCompletedBy(null);
+            item.setCompletedAt(null);
+        }
+
+        workRepository.save(item);
+        refreshHealth(file);
+        file.setUpdatedBy(accessService.actor());
+        fileRepository.save(file);
+
+        String auditAction = next == WorkItemStatus.COMPLETE
+                ? "CHECKLIST_COMPLETED"
+                : next == WorkItemStatus.NOT_APPLICABLE
+                        ? "CHECKLIST_NOT_APPLICABLE"
+                        : "CHECKLIST_UPDATED";
+        auditService.log("WORK_ITEM", item.getId(), auditAction, file,
+                auditService.details(
+                        "area", area,
+                        "key", item.getItemKey(),
+                        "previousStatus", previous == null ? null : previous.name(),
+                        "status", item.getStatus().name(),
+                        "remarks", item.getRemarks()));
         return toDetail(file);
     }
 
@@ -312,6 +359,11 @@ public class MatFlowWorkspaceService {
         requireDesignStage(file);
         MatFlowDesignTask row = requireDesignTask(fileId, taskId);
         requireVersion(row.getRowVersion(), request.rowVersion());
+        boolean juniorDesignerOnly = accessService.hasAnyRole("MATFLOW_DESIGNER_JUNIOR")
+                && !accessService.hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER");
+        if (juniorDesignerOnly && row.getAssignees().stream().noneMatch(name -> accessService.actor().equalsIgnoreCase(name))) {
+            throw conflict("Junior Designer can update only a Design task assigned to their username");
+        }
         DesignTaskStatus next = enumValue(DesignTaskStatus.class, request.status(), "Invalid Design task status");
         requireDesignTaskTransition(row.getStatus(), next);
         if (next == DesignTaskStatus.CANCELLED) accessService.requireDesignHeadWrite();
@@ -320,7 +372,7 @@ public class MatFlowWorkspaceService {
             throw badRequest("Reason is required for Hold or Cancelled Design tasks");
         }
         if (next != DesignTaskStatus.NEED_TO_START && next != DesignTaskStatus.CANCELLED && row.getAssignees().isEmpty()) {
-            throw conflict("Assign at least one Designer-2 before starting this task");
+            throw conflict("Assign at least one Junior Designer / Design team member before starting this task");
         }
 
         if ((next == DesignTaskStatus.WORKING || next == DesignTaskStatus.DONE) && row.getStartedAt() == null) row.setStartedAt(now());
@@ -444,7 +496,7 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse engineeringDecision(UUID fileId, EngineeringDecisionRequest request) {
-        accessService.requireEngineeringWrite();
+        accessService.requireEngineeringDecisionWrite();
         MatFlowProductionFile file = requireFile(fileId); requireVersion(file.getRowVersion(), request.rowVersion());
         requireStage(file, ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY);
         String decision = upper(request.decision());
@@ -468,7 +520,7 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse createQuery(UUID fileId, QueryCreateRequest request) {
-        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId);
+        accessService.requireEngineeringReviewWrite(); MatFlowProductionFile file=requireFile(fileId);
         if (!Set.of(ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY, ProductionFileStage.ENGINEERING_WORK).contains(file.getStage())) {
             throw conflict("Engineering Query can only be raised while the file is with Engineering");
         }
@@ -493,7 +545,7 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse closeQuery(UUID fileId, UUID queryId, QueryCloseRequest request) {
-        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, queryId, WorkItemType.ENGINEERING_QUERY); requireVersion(item.getRowVersion(), request.rowVersion());
+        accessService.requireEngineeringReviewWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, queryId, WorkItemType.ENGINEERING_QUERY); requireVersion(item.getRowVersion(), request.rowVersion());
         if (item.getStatus() != WorkItemStatus.RESPONDED && item.getStatus() != WorkItemStatus.OPEN) throw conflict("Query is already closed");
         item.setStatus(WorkItemStatus.CLOSED); item.setCompletionNote(request.note()); item.setClosedBy(accessService.actor()); item.setClosedAt(now()); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
         if (openQueryCount(fileId) == 0) {
@@ -506,7 +558,7 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse createTask(UUID fileId, TaskCreateRequest request) {
-        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId);
+        accessService.requireEngineeringReviewWrite(); MatFlowProductionFile file=requireFile(fileId);
         if (file.getEngineeringDecision() != EngineeringDecision.APPROVED) throw conflict("Engineering must be approved before documentation tasks are added");
         String key=upper(request.taskKey());
         if (workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(fileId, WorkItemType.ENGINEERING_TASK, key).isPresent()) throw conflict("Engineering task key already exists: " + key);
@@ -521,14 +573,22 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse updateTask(UUID fileId, UUID taskId, TaskUpdateRequest request) {
-        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, taskId, WorkItemType.ENGINEERING_TASK); requireVersion(item.getRowVersion(),request.rowVersion());
+        accessService.requireEngineeringReviewWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, taskId, WorkItemType.ENGINEERING_TASK); requireVersion(item.getRowVersion(),request.rowVersion());
         if (request.assignedTo()!=null) item.setAssignedTo(request.assignedTo()); if (request.dueAt()!=null) item.setDueAt(request.dueAt()); if (request.priority()!=null) item.setPriority(request.priority()); if (request.remarks()!=null) item.setRemarks(request.remarks());
         if (item.getStatus()==WorkItemStatus.TODO && clean(item.getAssignedTo())!=null) item.setStatus(WorkItemStatus.ASSIGNED); item.setUpdatedBy(accessService.actor()); workRepository.save(item); auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_UPDATED",file,auditService.details("assignedTo",item.getAssignedTo(),"dueAt",item.getDueAt())); return toDetail(file);
     }
 
     @Transactional
     public ProductionFileDetailResponse setTaskStatus(UUID fileId, UUID taskId, TaskStatusRequest request) {
-        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId,taskId,WorkItemType.ENGINEERING_TASK); requireVersion(item.getRowVersion(),request.rowVersion());
+        accessService.requireEngineeringTaskWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId,taskId,WorkItemType.ENGINEERING_TASK); requireVersion(item.getRowVersion(),request.rowVersion());
+        boolean juniorEngineerOnly = accessService.hasAnyRole("MATFLOW_ENGINEERING_JUNIOR")
+                && !accessService.hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+        if (juniorEngineerOnly) {
+            String owner = clean(item.getAssignedTo());
+            if (owner == null || !accessService.actor().equalsIgnoreCase(owner)) {
+                throw conflict("Junior Engineer can update only an Engineering task assigned to their username");
+            }
+        }
         WorkItemStatus next=enumValue(WorkItemStatus.class,request.status(),"Invalid task status");
         if (!Set.of(WorkItemStatus.TODO,WorkItemStatus.ASSIGNED,WorkItemStatus.IN_PROGRESS,WorkItemStatus.BLOCKED,WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE,WorkItemStatus.CANCELLED).contains(next)) throw badRequest("Unsupported Engineering task status");
         if (next==WorkItemStatus.NOT_APPLICABLE && clean(request.note())==null) throw badRequest("Reason is required when a task is Not Applicable");
@@ -552,8 +612,9 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse uploadRevision(UUID fileId, String typeValue, String revisionNo, String changeSummary, MultipartFile upload) {
-        accessService.requireDesignerWrite(); MatFlowProductionFile file=requireFile(fileId); RevisionType type=enumValue(RevisionType.class,typeValue,"Invalid revision type");
-        if (type==RevisionType.ENGINEERING_DRAWING) accessService.requireEngineeringWrite();
+        MatFlowProductionFile file=requireFile(fileId); RevisionType type=enumValue(RevisionType.class,typeValue,"Invalid revision type");
+        if (type==RevisionType.ENGINEERING_DRAWING) accessService.requireEngineeringReviewWrite();
+        else accessService.requireDesignerWrite();
         if (upload==null || upload.isEmpty()) throw badRequest("Revision file is required"); if (upload.getSize()>REVISION_MAX_BYTES) throw badRequest("Revision file cannot exceed 30 MB");
         String rev=upper(revisionNo); if (rev.isBlank()) throw badRequest("Revision number is required"); if (revisionRepository.existsByProductionFile_IdAndRevisionTypeAndRevisionNoIgnoreCase(fileId,type,rev)) throw conflict("Revision already exists: "+rev);
         String original=safeFileName(upload.getOriginalFilename(), type.name()+"-"+rev); String content=clean(upload.getContentType()); if(content==null)content="application/octet-stream";
@@ -577,7 +638,7 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse reviewRevisionImpact(UUID fileId, UUID revisionId, RevisionImpactRequest request) {
-        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowRevision row=revisionRepository.findById(revisionId).orElseThrow(()->notFound("Revision not found")); if(!fileId.equals(row.getProductionFile().getId()))throw notFound("Revision not found"); requireVersion(row.getRowVersion(),request.rowVersion());
+        accessService.requireEngineeringDecisionWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowRevision row=revisionRepository.findById(revisionId).orElseThrow(()->notFound("Revision not found")); if(!fileId.equals(row.getProductionFile().getId()))throw notFound("Revision not found"); requireVersion(row.getRowVersion(),request.rowVersion());
         if(row.getRevisionStatus()!=RevisionStatus.PENDING_IMPACT_REVIEW)throw conflict("Revision does not require impact review"); String decision=upper(request.decision()); row.setImpactNote(request.impactNote()); row.setImpactReviewedBy(accessService.actor()); row.setImpactReviewedAt(now()); row.setUpdatedBy(accessService.actor());
         if("ACCEPT".equals(decision)){
             activateRevision(file,row,true); row.setRevisionStatus(RevisionStatus.ACTIVE); row.setActivatedAt(now());

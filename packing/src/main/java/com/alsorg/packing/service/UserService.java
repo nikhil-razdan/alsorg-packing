@@ -76,13 +76,21 @@ public class UserService {
                         "BOMFLOW_MANAGER",
 
                         "MATFLOW_MANAGER",
+                        "MATFLOW_DESIGN_HEAD",
+                        "MATFLOW_DESIGNER",
+                        "MATFLOW_DESIGNER_JUNIOR",
+                        "MATFLOW_PPC",
+                        "MATFLOW_ENGINEERING_HEAD",
                         "MATFLOW_ENGINEERING",
+                        "MATFLOW_ENGINEERING_JUNIOR",
+                        "MATFLOW_PRODUCTION",
+                        "MATFLOW_DIRECTOR",
+
+                        /* Legacy MatFlow authorities kept for existing accounts during migration. */
                         "MATFLOW_STORE",
                         "MATFLOW_PURCHASE",
                         "MATFLOW_PROCESSING",
-                        "MATFLOW_PRODUCTION",
                         "MATFLOW_QC",
-                        "MATFLOW_DIRECTOR",
 
                         /*
                          * Current AssetFlow roles.

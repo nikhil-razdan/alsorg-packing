@@ -62,7 +62,13 @@ const NAV = [
 const PRIMARY_SCREENS = Object.freeze({
     [MATFLOW_ROLES.ADMIN]: new Set(["work", "projects", "boms", "materials", "release"]),
     [MATFLOW_ROLES.MANAGER]: new Set(["work", "projects", "boms", "materials", "release"]),
+    [MATFLOW_ROLES.DESIGN_HEAD]: new Set(["work", "projects"]),
+    [MATFLOW_ROLES.DESIGNER]: new Set(["work", "projects"]),
+    [MATFLOW_ROLES.DESIGNER_JUNIOR]: new Set(["work", "projects"]),
+    [MATFLOW_ROLES.PPC]: new Set(["work", "projects", "release"]),
+    [MATFLOW_ROLES.ENGINEERING_HEAD]: new Set(["work", "projects", "boms", "materials", "release"]),
     [MATFLOW_ROLES.ENGINEERING]: new Set(["work", "projects", "boms", "materials", "release"]),
+    [MATFLOW_ROLES.ENGINEERING_JUNIOR]: new Set(["work", "projects"]),
     [MATFLOW_ROLES.PRODUCTION]: new Set(["release"]),
     [MATFLOW_ROLES.DIRECTOR]: new Set([]),
 });

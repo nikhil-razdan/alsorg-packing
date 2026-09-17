@@ -28,6 +28,7 @@ import { matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
   ErrorBox,
   LoadingBlock,
+  MATFLOW_ROLES,
   PageHero,
   EmptyState,
   MatFlowStatusChip,
@@ -178,7 +179,7 @@ function BomRevisionRow({ bom, onOpen }) {
   );
 }
 
-function ProductMasterRow({ project, product, boms, onEdit, onImage, onOpenFile, onOpenBom }) {
+function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, onOpenFile, onOpenBom }) {
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
 
   return (
@@ -196,15 +197,17 @@ function ProductMasterRow({ project, product, boms, onEdit, onImage, onOpenFile,
           </Typography>
         </Box>
 
-        <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", justifyContent: { md: "flex-end" } }}>
-          <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(project, product)} sx={secondaryBtnSx}>
-            Edit
-          </Button>
-          <Button size="small" component="label" startIcon={<ImageOutlinedIcon />} sx={secondaryBtnSx}>
-            {product.productImageAvailable ? "Replace Image" : "Attach Image"}
-            <input hidden type="file" accept="image/*" onChange={(event) => onImage(project, product, event.target.files?.[0])} />
-          </Button>
-        </Box>
+        {canEdit && (
+          <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", justifyContent: { md: "flex-end" } }}>
+            <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(project, product)} sx={secondaryBtnSx}>
+              Edit
+            </Button>
+            <Button size="small" component="label" startIcon={<ImageOutlinedIcon />} sx={secondaryBtnSx}>
+              {product.productImageAvailable ? "Replace Image" : "Attach Image"}
+              <input hidden type="file" accept="image/*" onChange={(event) => onImage(project, product, event.target.files?.[0])} />
+            </Button>
+          </Box>
+        )}
       </Box>
 
       <Box sx={productInfoGridSx}>
@@ -290,8 +293,16 @@ function ProductMasterRow({ project, product, boms, onEdit, onImage, onOpenFile,
 }
 
 export function MatFlowProjectsPage() {
-  const { selectedPlantParam, availablePlants } = useMatFlow();
+  const { selectedPlantParam, availablePlants, hasRole } = useMatFlow();
   const navigate = useNavigate();
+  const canProjectWrite = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DESIGN_HEAD,
+    MATFLOW_ROLES.DESIGNER,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING
+  );
 
   const [rows, setRows] = useState([]);
   const [boms, setBoms] = useState([]);
@@ -512,9 +523,11 @@ export function MatFlowProjectsPage() {
             <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>
               Refresh
             </Button>
-            <Button startIcon={<AddOutlinedIcon />} onClick={openNewProject} sx={primaryBtnSx}>
-              New Project
-            </Button>
+            {canProjectWrite && (
+              <Button startIcon={<AddOutlinedIcon />} onClick={openNewProject} sx={primaryBtnSx}>
+                New Project
+              </Button>
+            )}
           </Box>
         }
       />
@@ -544,7 +557,7 @@ export function MatFlowProjectsPage() {
           <EmptyState>No projects found.</EmptyState>
         </Card>
       ) : (
-        <Box sx={{ display: "grid", gap: 1.2 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "repeat(2,minmax(0,1fr))" }, gap: 1.2, alignItems: "start" }}>
           {filteredRows.map((project) => {
             const products = project.products || [];
             const bomCount = products.reduce(
@@ -554,50 +567,148 @@ export function MatFlowProjectsPage() {
             const productsWithBom = products.filter(
               (product) => (bomsByFile.get(product.productionFileId) || []).length > 0
             ).length;
+            const productionFiles = products.filter((product) => product.productionFileId);
+            const healthValues = productionFiles.map((product) => String(product.releaseHealth || "").toUpperCase());
+            const projectHealth = healthValues.includes("RED")
+              ? "RED"
+              : healthValues.includes("AMBER")
+                ? "AMBER"
+                : healthValues.includes("GREEN") && healthValues.length
+                  ? "GREEN"
+                  : "PENDING";
             const isOpen = expanded[project.id] === true;
+            const visibleFiles = productionFiles.slice(0, 3);
+            const stageCounts = productionFiles.reduce((map, product) => {
+              const key = product.stage || "NOT_STARTED";
+              map.set(key, (map.get(key) || 0) + 1);
+              return map;
+            }, new Map());
 
             return (
-              <Card key={project.id} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                <Box sx={projectHeaderSx}>
-                  <Box sx={{ display: "flex", gap: 1, minWidth: 0, flex: 1 }}>
-                    <IconButton
-                      size="small"
-                      onClick={() => setExpanded((current) => ({ ...current, [project.id]: !isOpen }))}
-                      sx={toggleSx}
-                    >
-                      {isOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
-                    </IconButton>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 18, fontWeight: 950, color: "var(--mf-text)" }}>
-                        {project.projectCode} · {project.projectName}
-                      </Typography>
-                      <Typography sx={{ mt: 0.2, fontSize: 10.2, color: "var(--mf-text-muted)" }}>
-                        {project.clientName || "No client"} · {project.plantCode || "No plant"}
-                      </Typography>
-                    </Box>
+              <Card
+                key={project.id}
+                sx={{
+                  ...ticketCardSx(projectHealth),
+                  gridColumn: { xl: isOpen ? "1 / -1" : "auto" },
+                }}
+              >
+                <Box sx={ticketTopSx}>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography sx={ticketEyebrowSx}>
+                      PROJECT TICKET · {project.plantCode || "NO PLANT"}
+                    </Typography>
+                    <Typography sx={{ mt: 0.35, fontSize: 19, lineHeight: 1.08, fontWeight: 950, color: "var(--mf-text)" }}>
+                      {project.projectCode}
+                    </Typography>
+                    <Typography noWrap sx={{ mt: 0.28, fontSize: 11.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
+                      {project.projectName || "Unnamed Project"}
+                    </Typography>
+                    <Typography noWrap sx={{ mt: 0.15, fontSize: 9.7, color: "var(--mf-text-muted)" }}>
+                      {project.clientName || "Client not assigned"}
+                    </Typography>
                   </Box>
 
-                  <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", justifyContent: { md: "flex-end" } }}>
-                    <Chip label={`${products.length} product${products.length === 1 ? "" : "s"}`} size="small" sx={softChipSx} />
-                    <Chip label={`${productsWithBom}/${products.length || 0} with BOM`} size="small" sx={softChipSx} />
-                    <Chip label={`${bomCount} BOM revision${bomCount === 1 ? "" : "s"}`} size="small" sx={softChipSx} />
-                    <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(project)} sx={secondaryBtnSx}>
-                      Edit Project
-                    </Button>
-                    <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={primaryBtnSx}>
-                      Add Products
-                    </Button>
+                  <Box sx={{ display: "grid", justifyItems: "end", gap: 0.55 }}>
+                    <MatFlowStatusChip status={projectHealth} />
+                    <Chip label={`${productionFiles.length} Production File${productionFiles.length === 1 ? "" : "s"}`} size="small" sx={softChipSx} />
                   </Box>
                 </Box>
 
+                <Box sx={ticketPerforationSx} />
+
+                <Box sx={ticketMetaGridSx}>
+                  <TicketMeta label="Required" value={formatDate(project.requiredDate)} />
+                  <TicketMeta label="Priority" value={readable(project.priority || "NORMAL")} />
+                  <TicketMeta label="Manager" value={project.projectManager || "—"} />
+                  <TicketMeta label="Designer" value={project.designer1 || "—"} />
+                </Box>
+
+                <Box sx={{ px: 1.35, pb: 1.05 }}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, mb: 0.7 }}>
+                    <Box>
+                      <Typography sx={{ fontSize: 10, fontWeight: 950, color: "var(--mf-text)" }}>PRODUCTION FILES</Typography>
+                      <Typography sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
+                        One Product / Drawing = one controlled Production File
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: 9.2, fontWeight: 850, color: "var(--mf-text-muted)" }}>
+                      {productsWithBom}/{products.length || 0} with BOM · {bomCount} revisions
+                    </Typography>
+                  </Box>
+
+                  {!visibleFiles.length ? (
+                    <Box sx={ticketEmptyFileSx}>No Production File yet. Add a Product / Drawing to create one automatically.</Box>
+                  ) : (
+                    <Box sx={{ display: "grid", gap: 0.55 }}>
+                      {visibleFiles.map((product) => (
+                        <Box
+                          key={product.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openProductionFile(product)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") openProductionFile(product);
+                          }}
+                          sx={ticketFileRowSx}
+                        >
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 950, color: "var(--mf-text)" }}>
+                              {product.productionFileNo}
+                            </Typography>
+                            <Typography noWrap sx={{ mt: 0.12, fontSize: 9, color: "var(--mf-text-muted)" }}>
+                              {product.productName} · Drawing {product.drawingNo || "—"}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                            <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={softChipSx} />
+                            <MatFlowStatusChip status={product.releaseHealth || "PENDING"} />
+                          </Box>
+                        </Box>
+                      ))}
+                      {productionFiles.length > visibleFiles.length && (
+                        <Typography sx={{ px: 0.25, fontSize: 9, fontWeight: 850, color: "var(--mf-primary-text)" }}>
+                          + {productionFiles.length - visibleFiles.length} more Production File{productionFiles.length - visibleFiles.length === 1 ? "" : "s"} inside this Project ticket
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+
+                  <Box sx={{ mt: 0.9, display: "flex", flexWrap: "wrap", gap: 0.45 }}>
+                    {Array.from(stageCounts.entries()).slice(0, 4).map(([stageName, count]) => (
+                      <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />
+                    ))}
+                  </Box>
+                </Box>
+
+                <Box sx={ticketActionsSx}>
+                  {canProjectWrite && (
+                    <>
+                      <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(project)} sx={secondaryBtnSx}>
+                        Edit
+                      </Button>
+                      <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={primaryBtnSx}>
+                        Add Product
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    size="small"
+                    endIcon={isOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+                    onClick={() => setExpanded((current) => ({ ...current, [project.id]: !isOpen }))}
+                    sx={{ ...secondaryBtnSx, ml: { sm: "auto" } }}
+                  >
+                    {isOpen ? "Close Production File details" : "Open full ticket"}
+                  </Button>
+                </Box>
+
                 <Collapse in={isOpen}>
-                  <Box sx={{ px: 1.4, py: 1.25, borderTop: "1px solid var(--mf-border)" }}>
+                  <Box sx={{ px: 1.4, py: 1.25, borderTop: "1px dashed var(--mf-border-strong)", background: "var(--mf-surface)" }}>
                     <Box sx={projectMetaGridSx}>
                       <Meta label="Plant" value={project.plantCode} />
                       <Meta label="Priority" value={project.priority || "NORMAL"} />
                       <Meta label="Required Date" value={formatDate(project.requiredDate)} />
                       <Meta label="Project Manager" value={project.projectManager || "—"} />
-                      <Meta label="Designer-1" value={project.designer1 || "—"} />
+                      <Meta label="Designer" value={project.designer1 || "—"} />
                       <Meta label="Design Head" value={project.designHead || "—"} />
                     </Box>
                     {project.remarks && (
@@ -607,14 +718,14 @@ export function MatFlowProjectsPage() {
                     )}
                   </Box>
 
-                  <Box sx={{ px: 1.4, pb: 1.4 }}>
+                  <Box sx={{ px: 1.4, py: 1.35 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", mb: 0.85 }}>
                       <Box>
                         <Typography sx={{ fontSize: 12, fontWeight: 950, color: "var(--mf-text)" }}>
-                          Products / Production Files / BOMs
+                          Product / Production File detail
                         </Typography>
                         <Typography sx={{ mt: 0.15, fontSize: 9.4, color: "var(--mf-text-muted)" }}>
-                          Everything remains attached to this Project / PD identity.
+                          Drawing, image, Production File and BOM history stay under this Project / PD ticket.
                         </Typography>
                       </Box>
                     </Box>
@@ -629,6 +740,7 @@ export function MatFlowProjectsPage() {
                             project={project}
                             product={product}
                             boms={bomsByFile.get(product.productionFileId) || []}
+                            canEdit={canProjectWrite}
                             onEdit={openProductEdit}
                             onImage={uploadImage}
                             onOpenFile={openProductionFile}
@@ -754,6 +866,125 @@ function Summary({ label, value }) {
     </Card>
   );
 }
+
+function TicketMeta({ label, value }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ fontSize: 7.8, fontWeight: 950, letterSpacing: ".06em", color: "var(--mf-text-muted)" }}>
+        {label.toUpperCase()}
+      </Typography>
+      <Typography noWrap sx={{ mt: 0.18, fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
+        {value || "—"}
+      </Typography>
+    </Box>
+  );
+}
+
+const ticketHealthColor = (health) => ({
+  RED: "var(--mf-danger-text)",
+  AMBER: "var(--mf-warning-text)",
+  GREEN: "var(--mf-success-text)",
+}[health] || "var(--mf-border-strong)");
+
+const ticketCardSx = (health) => ({
+  ...panelSx,
+  position: "relative",
+  p: 0,
+  overflow: "hidden",
+  borderRadius: 1.6,
+  borderTop: `3px solid ${ticketHealthColor(health)}`,
+  boxShadow: "var(--mf-card-shadow)",
+  "&::before": {
+    content: '""',
+    position: "absolute",
+    top: 88,
+    left: -8,
+    width: 16,
+    height: 16,
+    borderRadius: "50%",
+    background: "var(--mf-page-bg)",
+    border: "1px solid var(--mf-border)",
+    zIndex: 2,
+  },
+  "&::after": {
+    content: '""',
+    position: "absolute",
+    top: 88,
+    right: -8,
+    width: 16,
+    height: 16,
+    borderRadius: "50%",
+    background: "var(--mf-page-bg)",
+    border: "1px solid var(--mf-border)",
+    zIndex: 2,
+  },
+});
+
+const ticketTopSx = {
+  px: 1.45,
+  py: 1.25,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 1.2,
+  alignItems: "flex-start",
+  background: "var(--mf-panel-solid)",
+};
+
+const ticketEyebrowSx = {
+  fontSize: 8.1,
+  fontWeight: 950,
+  letterSpacing: ".09em",
+  color: "var(--mf-primary-text)",
+};
+
+const ticketPerforationSx = {
+  mx: 1.2,
+  borderTop: "1px dashed var(--mf-border-strong)",
+};
+
+const ticketMetaGridSx = {
+  px: 1.4,
+  py: 0.95,
+  display: "grid",
+  gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,minmax(0,1fr))" },
+  gap: 0.8,
+};
+
+const ticketFileRowSx = {
+  px: 0.85,
+  py: 0.72,
+  display: "grid",
+  gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto" },
+  gap: 0.7,
+  alignItems: "center",
+  border: "1px solid var(--mf-border)",
+  borderRadius: 1.15,
+  background: "var(--mf-surface)",
+  cursor: "pointer",
+  transition: "border-color .15s ease, background .15s ease",
+  "&:hover": { borderColor: "var(--mf-primary-border)", background: "var(--mf-hover)" },
+  "&:focus-visible": { outline: "2px solid var(--mf-primary)", outlineOffset: 1 },
+};
+
+const ticketEmptyFileSx = {
+  p: 1,
+  border: "1px dashed var(--mf-border-strong)",
+  borderRadius: 1.2,
+  fontSize: 9.5,
+  color: "var(--mf-text-muted)",
+  background: "var(--mf-surface)",
+};
+
+const ticketActionsSx = {
+  px: 1.35,
+  py: 0.9,
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 0.6,
+  alignItems: "center",
+  borderTop: "1px solid var(--mf-border)",
+  background: "var(--mf-panel-solid)",
+};
 
 const projectHeaderSx = {
   p: 1.35,

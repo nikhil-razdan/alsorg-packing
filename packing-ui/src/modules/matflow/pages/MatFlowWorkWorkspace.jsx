@@ -19,6 +19,7 @@ import {
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import { useSearchParams } from "react-router-dom";
@@ -152,10 +153,40 @@ const EMPTY_DESIGN_TASK = {
 export function MatFlowWorkWorkspacePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedPlantParam, hasRole } = useMatFlow();
-  const canDesignTeam = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING);
-  const canDesignHead = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER);
-  const canPpc = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER);
-  const canEngineering = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING);
+  const canSetup = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DESIGN_HEAD,
+    MATFLOW_ROLES.PPC,
+    MATFLOW_ROLES.ENGINEERING_HEAD
+  );
+  const canDesignTeam = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DESIGN_HEAD,
+    MATFLOW_ROLES.DESIGNER,
+    MATFLOW_ROLES.DESIGNER_JUNIOR
+  );
+  const canDesignHead = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DESIGN_HEAD);
+  const canPpc = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PPC);
+  const canEngineeringReview = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING
+  );
+  const canEngineeringDecision = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.ENGINEERING_HEAD
+  );
+  const canEngineeringTask = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING,
+    MATFLOW_ROLES.ENGINEERING_JUNIOR
+  );
 
   const [files, setFiles] = useState([]);
   const [detail, setDetail] = useState(null);
@@ -177,6 +208,14 @@ export function MatFlowWorkWorkspacePage() {
   const [revisionNo, setRevisionNo] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
   const [revisionFile, setRevisionFile] = useState(null);
+
+  useEffect(() => {
+    if (!canDesignTeam && canEngineeringReview && revisionType !== "ENGINEERING_DRAWING") {
+      setRevisionType("ENGINEERING_DRAWING");
+    } else if (canDesignTeam && !canEngineeringReview && revisionType !== "DESIGN_DRAWING") {
+      setRevisionType("DESIGN_DRAWING");
+    }
+  }, [canDesignTeam, canEngineeringReview, revisionType]);
 
   const loadList = useCallback(
     async ({ quiet = false } = {}) => {
@@ -274,16 +313,20 @@ export function MatFlowWorkWorkspacePage() {
     if (ok) setSetupOpen(false);
   };
 
-  const saveChecklist = (area, item, nextStatus, remarks = item.remarks || "") =>
-    execute(
+  const saveChecklist = (area, item, nextStatus, remarks = item.remarks || "") => {
+    const normalizedRemarks = clean(remarks) || "";
+    const currentRemarks = clean(item.remarks) || "";
+    if (nextStatus === item.status && normalizedRemarks === currentRemarks) return Promise.resolve(true);
+    return execute(
       () =>
         matflowApi.updateChecklist(file.id, area, item.key, {
           status: nextStatus,
-          remarks,
+          remarks: normalizedRemarks || null,
           rowVersion: item.rowVersion,
         }),
       "Unable to update checklist."
     );
+  };
 
   const openNewDesignTask = () => {
     setDesignTaskDialog({
@@ -511,7 +554,7 @@ export function MatFlowWorkWorkspacePage() {
                 <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
                   <Chip label={file.releaseHealth} sx={healthSx(file.releaseHealth)} />
                   <Chip label={readable(file.stage)} sx={statusSx} />
-                  {canDesignTeam && <Button onClick={openSetup} sx={secondaryBtnSx}>Setup</Button>}
+                  {canSetup && <Button onClick={openSetup} sx={secondaryBtnSx}>Setup</Button>}
                 </Box>
               </Box>
 
@@ -529,13 +572,13 @@ export function MatFlowWorkWorkspacePage() {
                 {["Overview", "Designer Checklist", "Design Tasks", "Drawings / Revisions", "Engineering", "Queries", "Engineering Tasks", "Timeline"].map((label) => <Tab key={label} label={label} />)}
               </Tabs>
               <Box sx={{ p: 1.7 }}>
-                {tab === 0 && <Overview file={file} detail={detail} canDesignHead={canDesignHead} canPpc={canPpc} canEngineering={canEngineering} setAction={setAction} />}
-                {tab === 1 && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={canDesignTeam && DESIGN_STAGES.includes(file.stage)} onSave={saveChecklist} />}
+                {tab === 0 && <Overview file={file} detail={detail} canDesignHead={canDesignHead} canPpc={canPpc} canEngineeringReview={canEngineeringReview} canEngineeringDecision={canEngineeringDecision} setAction={setAction} />}
+                {tab === 1 && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={canDesignTeam && DESIGN_STAGES.includes(file.stage)} working={working} onSave={saveChecklist} />}
                 {tab === 2 && <DesignTasks items={detail.designTasks || []} progress={file.designTaskProgress} canHead={canDesignHead && DESIGN_STAGES.includes(file.stage)} canWork={canDesignTeam && DESIGN_STAGES.includes(file.stage)} onCreate={openNewDesignTask} onEdit={openEditDesignTask} onStatus={requestDesignTaskStatus} />}
-                {tab === 3 && <Revisions file={file} rows={detail.revisions || []} canUpload={canDesignTeam} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={canEngineering} setAction={setAction} working={working} />}
-                {tab === 4 && <Checklist title="Engineering Technical Checklist" area="ENGINEERING" items={detail.engineeringChecklist || []} progress={file.engineeringChecklistProgress} canEdit={canEngineering && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage)} onSave={saveChecklist} />}
-                {tab === 5 && <Queries items={detail.queries || []} canCreate={canEngineering} canRespond={canDesignTeam} canClose={canEngineering} setAction={setAction} />}
-                {tab === 6 && <Tasks items={detail.engineeringTasks || []} canEdit={canEngineering} setAction={setAction} />}
+                {tab === 3 && <Revisions file={file} rows={detail.revisions || []} canUploadDesign={canDesignTeam} canUploadEngineering={canEngineeringReview} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={canEngineeringDecision} setAction={setAction} working={working} />}
+                {tab === 4 && <Checklist title="Engineering Technical Checklist" area="ENGINEERING" items={detail.engineeringChecklist || []} progress={file.engineeringChecklistProgress} canEdit={canEngineeringReview && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage)} working={working} onSave={saveChecklist} />}
+                {tab === 5 && <Queries items={detail.queries || []} canCreate={canEngineeringReview} canRespond={canDesignTeam} canClose={canEngineeringReview} setAction={setAction} />}
+                {tab === 6 && <Tasks items={detail.engineeringTasks || []} canManage={canEngineeringReview} canWork={canEngineeringTask} setAction={setAction} />}
                 {tab === 7 && <Timeline rows={detail.timeline || []} />}
               </Box>
             </Card>
@@ -655,7 +698,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
   );
 }
 
-function Overview({ file, detail, canDesignHead, canPpc, canEngineering, setAction }) {
+function Overview({ file, detail, canDesignHead, canPpc, canEngineeringReview, canEngineeringDecision, setAction }) {
   const designStage = DESIGN_STAGES.includes(file.stage);
   return (
     <Box>
@@ -699,10 +742,10 @@ function Overview({ file, detail, canDesignHead, canPpc, canEngineering, setActi
             <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "PPC1", title: "PPC Gate 1 — Return", decision: "RETURN" })}>Return to Design</Button>
           </>
         )}
-        {canEngineering && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage) && (
+        {["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage) && (
           <>
-            <Button sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "ENG_DECISION", title: "Engineering Decision — Approve", decision: "APPROVED" })}>Engineering Approved</Button>
-            <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Engineering Query" })}>Raise Query</Button>
+            {canEngineeringDecision && <Button sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "ENG_DECISION", title: "Engineering Decision — Approve", decision: "APPROVED" })}>Engineering Approved</Button>}
+            {canEngineeringReview && <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Engineering Query" })}>Raise Query</Button>}
           </>
         )}
         {canPpc && ["ENGINEERING_WORK", "PPC_GATE_2"].includes(file.stage) && (
@@ -717,24 +760,40 @@ function Overview({ file, detail, canDesignHead, canPpc, canEngineering, setActi
   );
 }
 
-function Checklist({ title, area, items, progress, canEdit, onSave }) {
+function Checklist({ title, area, items, progress, canEdit, working, onSave }) {
   return (
     <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 1.1 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 1.1, alignItems: "flex-start" }}>
         <Box>
           <Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>{title}</Typography>
-          <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>{progress?.complete || 0} complete · {progress?.notApplicable || 0} N/A · {progress?.pending || 0} pending</Typography>
+          <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>
+            {progress?.complete || 0} complete · {progress?.notApplicable || 0} N/A · {progress?.pending || 0} pending
+          </Typography>
+          <Typography sx={{ mt: 0.25, fontSize: 9.3, color: "var(--mf-text-muted)" }}>
+            Complete / Not Applicable is a sign-off state. After saving, that point is locked and duplicate saves do not create Timeline history.
+          </Typography>
         </Box>
         <Chip label={`${progress?.percent || 0}%`} sx={statusSx} />
       </Box>
       <Box sx={{ border: "1px solid var(--mf-border)", borderRadius: 1.8, overflow: "hidden" }}>
-        {items.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No checklist items.</Box> : items.map((item) => <ChecklistRow key={item.id} item={item} area={area} canEdit={canEdit} onSave={onSave} />)}
+        {items.length === 0 ? (
+          <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No checklist items.</Box>
+        ) : items.map((item) => (
+          <ChecklistRow
+            key={item.id}
+            item={item}
+            area={area}
+            canEdit={canEdit}
+            working={working}
+            onSave={onSave}
+          />
+        ))}
       </Box>
     </Box>
   );
 }
 
-function ChecklistRow({ item, area, canEdit, onSave }) {
+function ChecklistRow({ item, area, canEdit, working, onSave }) {
   const [status, setStatus] = useState(item.status);
   const [remarks, setRemarks] = useState(item.remarks || "");
   useEffect(() => {
@@ -742,20 +801,46 @@ function ChecklistRow({ item, area, canEdit, onSave }) {
     setRemarks(item.remarks || "");
   }, [item.status, item.remarks]);
 
+  const locked = item.status === "COMPLETE" || item.status === "NOT_APPLICABLE";
+  const editable = canEdit && !locked;
+  const dirty = status !== item.status || (clean(remarks) || "") !== (clean(item.remarks) || "");
+
   return (
-    <Box sx={{ p: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "110px minmax(260px,1fr) 170px minmax(180px,.8fr) auto" }, gap: 0.8, alignItems: "center", borderBottom: "1px solid var(--mf-border)", "&:last-child": { borderBottom: 0 } }}>
+    <Box sx={{
+      p: 1.1,
+      display: "grid",
+      gridTemplateColumns: { xs: "1fr", md: "110px minmax(260px,1fr) 170px minmax(180px,.8fr) auto" },
+      gap: 0.8,
+      alignItems: "center",
+      borderBottom: "1px solid var(--mf-border)",
+      background: locked ? "var(--mf-surface)" : "transparent",
+      "&:last-child": { borderBottom: 0 },
+    }}>
       <Chip label={readable(item.section || item.criticality)} sx={statusSx} />
       <Box>
         <Typography sx={{ fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>{item.title}</Typography>
-        <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>{readable(item.criticality)}</Typography>
+        <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>
+          {readable(item.criticality)}{locked && item.completedBy ? ` · signed by ${item.completedBy}` : ""}
+        </Typography>
       </Box>
-      <TextField select size="small" value={status} disabled={!canEdit} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
+      <TextField select size="small" value={status} disabled={!editable} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
         <MenuItem value="PENDING">Pending</MenuItem>
         <MenuItem value="COMPLETE">Complete</MenuItem>
         {item.criticality !== "CRITICAL" && <MenuItem value="NOT_APPLICABLE">Not Applicable</MenuItem>}
       </TextField>
-      <TextField size="small" value={remarks} disabled={!canEdit} placeholder={status === "NOT_APPLICABLE" ? "N/A reason required" : "Remarks"} onChange={(e) => setRemarks(e.target.value)} sx={fieldSx} />
-      {canEdit && <Button size="small" onClick={() => onSave(area, item, status, remarks)} sx={secondaryBtnSx}>Save</Button>}
+      <TextField
+        size="small"
+        value={remarks}
+        disabled={!editable}
+        placeholder={status === "NOT_APPLICABLE" ? "N/A reason required" : "Remarks"}
+        onChange={(e) => setRemarks(e.target.value)}
+        sx={fieldSx}
+      />
+      {locked ? (
+        <Chip icon={<LockOutlinedIcon sx={{ fontSize: "14px !important" }} />} label="Locked" size="small" sx={{ ...statusSx, color: "var(--mf-success-text)", borderColor: "var(--mf-success-border)", background: "var(--mf-success-soft)" }} />
+      ) : canEdit ? (
+        <Button size="small" disabled={working || !dirty} onClick={() => onSave(area, item, status, remarks)} sx={secondaryBtnSx}>Save</Button>
+      ) : null}
     </Box>
   );
 }
@@ -766,7 +851,7 @@ function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onSt
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", mb: 1 }}>
         <Box>
           <Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Design Department Tasks</Typography>
-          <Typography sx={{ mt: 0.2, fontSize: 10.2, color: "var(--mf-text-muted)" }}>Designer-1 supplies the requirement; Design Head delegates one task to one or many Designer-2 team members.</Typography>
+          <Typography sx={{ mt: 0.2, fontSize: 10.2, color: "var(--mf-text-muted)" }}>Designer supplies the requirement; Design Head delegates work to one or many Junior Designer / Design team members.</Typography>
         </Box>
         {canHead && <Button startIcon={<AddOutlinedIcon />} onClick={onCreate} sx={primaryBtnSx}>Delegate Task</Button>}
       </Box>
@@ -842,12 +927,13 @@ function Queries({ items, canCreate, canRespond, canClose, setAction }) {
   return <Box><Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Engineering Queries</Typography>{canCreate && <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Engineering Query" })}>New Query</Button>}</Box>{items.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Engineering Queries.</Box> : items.map((item) => <Card key={item.id} sx={{ ...panelSx, p: 1.3, mb: 0.8 }}><Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontSize: 12, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography><Typography sx={{ mt: 0.25, fontSize: 10, color: "var(--mf-text-muted)" }}>{item.description}</Typography></Box><Chip label={item.status} sx={statusSx} /></Box><Box sx={{ mt: 0.8, display: "flex", flexWrap: "wrap", gap: 1, fontSize: 10, color: "var(--mf-text-muted)" }}><span>Assigned: {item.assignedTo || "—"}</span><span>Due: {toDateTime(item.dueAt)}</span><span>Priority: {item.priority}</span></Box>{item.responseText && <Alert severity="info" sx={{ mt: 0.8 }}>Response: {item.responseText}</Alert>}<Box sx={{ mt: 0.8, display: "flex", gap: 0.6 }}>{canRespond && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_RESPOND", title: "Respond to Query", item })}>Respond</Button>}{canClose && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CLOSE", title: "Close Query", item })}>Close</Button>}</Box></Card>)}</Box>;
 }
 
-function Tasks({ items, canEdit, setAction }) {
-  return <Box><Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Engineering Documentation Tasks</Typography>{canEdit && <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_CREATE", title: "Add Engineering Task" })}>Add Task</Button>}</Box><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 0.8 }}>{items.map((item) => <Card key={item.id} sx={{ ...panelSx, p: 1.2 }}><Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography><Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>{item.key} · {item.blocking ? "Release blocking" : "Non-blocking"}</Typography></Box><Chip label={readable(item.status)} sx={statusSx} /></Box><Typography sx={{ mt: 0.7, fontSize: 10, color: "var(--mf-text-muted)" }}>Owner: {item.assignedTo || "Unassigned"} · Due: {toDateTime(item.dueAt)}</Typography><Typography sx={{ mt: 0.25, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Started: {toDateTime(item.startedAt)} · Revision: {item.revisionContext || "—"} · Completed: {toDateTime(item.completedAt)}</Typography>{canEdit && <Box sx={{ mt: 0.8, display: "flex", gap: 0.5, flexWrap: "wrap" }}>{["IN_PROGRESS", "BLOCKED", "COMPLETE", "NOT_APPLICABLE"].map((status) => <Button key={status} size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: ${readable(status)}`, decision: status, item })}>{readable(status)}</Button>)}</Box>}</Card>)}</Box></Box>;
+function Tasks({ items, canManage, canWork, setAction }) {
+  return <Box><Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Engineering Documentation Tasks</Typography>{canManage && <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_CREATE", title: "Add Engineering Task" })}>Add Task</Button>}</Box><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 0.8 }}>{items.map((item) => <Card key={item.id} sx={{ ...panelSx, p: 1.2 }}><Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography><Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>{item.key} · {item.blocking ? "Release blocking" : "Non-blocking"}</Typography></Box><Chip label={readable(item.status)} sx={statusSx} /></Box><Typography sx={{ mt: 0.7, fontSize: 10, color: "var(--mf-text-muted)" }}>Owner: {item.assignedTo || "Unassigned"} · Due: {toDateTime(item.dueAt)}</Typography><Typography sx={{ mt: 0.25, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Started: {toDateTime(item.startedAt)} · Revision: {item.revisionContext || "—"} · Completed: {toDateTime(item.completedAt)}</Typography>{canWork && !["COMPLETE", "NOT_APPLICABLE", "CANCELLED"].includes(item.status) && <Box sx={{ mt: 0.8, display: "flex", gap: 0.5, flexWrap: "wrap" }}>{["IN_PROGRESS", "BLOCKED", "COMPLETE", "NOT_APPLICABLE"].map((status) => <Button key={status} size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: ${readable(status)}`, decision: status, item })}>{readable(status)}</Button>)}</Box>}</Card>)}</Box></Box>;
 }
 
-function Revisions({ file, rows, canUpload, revisionType, setRevisionType, revisionNo, setRevisionNo, summary, setSummary, setFile, upload, openRevision, canReview, setAction, working }) {
-  return <Box><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Immutable Drawing Revisions</Typography><Typography sx={{ mt: 0.2, fontSize: 10.5, color: "var(--mf-text-muted)" }}>The Design drawing produced by the Design Department is attached to this same Production File. Old drawings are never deleted.</Typography>{canUpload && <Card sx={{ ...panelSx, p: 1.2, mt: 1.1 }}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "180px 130px 1fr auto auto" }, gap: 0.8, alignItems: "center" }}><TextField select size="small" label="Type" value={revisionType} onChange={(e) => setRevisionType(e.target.value)} sx={fieldSx}><MenuItem value="DESIGN_DRAWING">Design Drawing</MenuItem><MenuItem value="ENGINEERING_DRAWING">Production / Engineering Drawing</MenuItem></TextField><TextField size="small" label="Revision" value={revisionNo} onChange={(e) => setRevisionNo(e.target.value)} sx={fieldSx} /><TextField size="small" label="Change summary" value={summary} onChange={(e) => setSummary(e.target.value)} sx={fieldSx} /><Button component="label" startIcon={<UploadFileOutlinedIcon />} sx={secondaryBtnSx}>Choose<input hidden type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></Button><Button disabled={working} onClick={upload} sx={primaryBtnSx}>Upload</Button></Box></Card>}<Box sx={{ mt: 1 }}>{rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No revisions uploaded.</Box> : rows.map((row) => <Box key={row.id} sx={{ p: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "120px 100px 1fr 160px auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}><Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{readable(row.type)}</Typography><Typography sx={{ fontSize: 11, fontWeight: 950, color: "var(--mf-text)" }}>Rev {row.revisionNo}</Typography><Typography sx={{ fontSize: 10, color: "var(--mf-text-muted)" }}>{row.changeSummary || row.originalFileName}</Typography><Chip label={readable(row.status)} sx={statusSx} /><Box sx={{ display: "flex", gap: 0.5 }}><Button size="small" startIcon={<LaunchOutlinedIcon />} onClick={() => openRevision(row)} sx={secondaryBtnSx}>Open</Button>{canReview && row.status === "PENDING_IMPACT_REVIEW" && <Button size="small" onClick={() => setAction({ ...EMPTY_ACTION, kind: "REVISION_IMPACT", title: `Revision Impact — ${row.revisionNo}`, revision: row, decision: "ACCEPT" })} sx={primaryBtnSx}>Review</Button>}</Box></Box>)}</Box>{file.downstreamWorkflowStatus === "RELEASE_INVALIDATED_BY_REVISION" && <Alert severity="error" sx={{ mt: 1 }}>The previous Production Release is invalidated by an accepted revision. Engineering and PPC Gate 2 must run again.</Alert>}</Box>;
+function Revisions({ file, rows, canUploadDesign, canUploadEngineering, revisionType, setRevisionType, revisionNo, setRevisionNo, summary, setSummary, setFile, upload, openRevision, canReview, setAction, working }) {
+  const canUpload = canUploadDesign || canUploadEngineering;
+  return <Box><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Immutable Drawing Revisions</Typography><Typography sx={{ mt: 0.2, fontSize: 10.5, color: "var(--mf-text-muted)" }}>The Design drawing produced by the Design Department is attached to this same Production File. Old drawings are never deleted.</Typography>{canUpload && <Card sx={{ ...panelSx, p: 1.2, mt: 1.1 }}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "180px 130px 1fr auto auto" }, gap: 0.8, alignItems: "center" }}><TextField select size="small" label="Type" value={revisionType} onChange={(e) => setRevisionType(e.target.value)} sx={fieldSx}>{canUploadDesign && <MenuItem value="DESIGN_DRAWING">Design Drawing</MenuItem>}{canUploadEngineering && <MenuItem value="ENGINEERING_DRAWING">Production / Engineering Drawing</MenuItem>}</TextField><TextField size="small" label="Revision" value={revisionNo} onChange={(e) => setRevisionNo(e.target.value)} sx={fieldSx} /><TextField size="small" label="Change summary" value={summary} onChange={(e) => setSummary(e.target.value)} sx={fieldSx} /><Button component="label" startIcon={<UploadFileOutlinedIcon />} sx={secondaryBtnSx}>Choose<input hidden type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></Button><Button disabled={working} onClick={upload} sx={primaryBtnSx}>Upload</Button></Box></Card>}<Box sx={{ mt: 1 }}>{rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No revisions uploaded.</Box> : rows.map((row) => <Box key={row.id} sx={{ p: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "120px 100px 1fr 160px auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}><Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{readable(row.type)}</Typography><Typography sx={{ fontSize: 11, fontWeight: 950, color: "var(--mf-text)" }}>Rev {row.revisionNo}</Typography><Typography sx={{ fontSize: 10, color: "var(--mf-text-muted)" }}>{row.changeSummary || row.originalFileName}</Typography><Chip label={readable(row.status)} sx={statusSx} /><Box sx={{ display: "flex", gap: 0.5 }}><Button size="small" startIcon={<LaunchOutlinedIcon />} onClick={() => openRevision(row)} sx={secondaryBtnSx}>Open</Button>{canReview && row.status === "PENDING_IMPACT_REVIEW" && <Button size="small" onClick={() => setAction({ ...EMPTY_ACTION, kind: "REVISION_IMPACT", title: `Revision Impact — ${row.revisionNo}`, revision: row, decision: "ACCEPT" })} sx={primaryBtnSx}>Review</Button>}</Box></Box>)}</Box>{file.downstreamWorkflowStatus === "RELEASE_INVALIDATED_BY_REVISION" && <Alert severity="error" sx={{ mt: 1 }}>The previous Production Release is invalidated by an accepted revision. Engineering and PPC Gate 2 must run again.</Alert>}</Box>;
 }
 
 function Timeline({ rows }) {
@@ -857,7 +943,7 @@ function Timeline({ rows }) {
 function DesignTaskDialog({ value, setValue, working, onSave }) {
   const open = Boolean(value);
   if (!value) return null;
-  return <Dialog open={open} onClose={() => !working && setValue(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{value.mode === "edit" ? "Edit Design Task" : "Delegate Design Task"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.1, mt: 0.5 }}><TextField select label="Task Type" value={value.taskType} onChange={(e) => setValue((row) => ({ ...row, taskType: e.target.value }))} sx={fieldSx}>{DESIGN_TASK_TYPES.map((type) => <MenuItem key={type} value={type}>{readable(type)}</MenuItem>)}</TextField><TextField select label="Priority" value={value.priority} onChange={(e) => setValue((row) => ({ ...row, priority: e.target.value }))} sx={fieldSx}><MenuItem value="LOW">Low</MenuItem><MenuItem value="NORMAL">Normal</MenuItem><MenuItem value="HIGH">High</MenuItem><MenuItem value="URGENT">Urgent</MenuItem></TextField><TextField label="Task Title *" value={value.title} onChange={(e) => setValue((row) => ({ ...row, title: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Description / exact drawing work" multiline minRows={3} value={value.description} onChange={(e) => setValue((row) => ({ ...row, description: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Designer-2 / Design team assignees *" multiline minRows={2} helperText="Comma separated. One task may be shared by multiple members." value={value.assigneesText} onChange={(e) => setValue((row) => ({ ...row, assigneesText: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField type="datetime-local" label="Received Date / Time" InputLabelProps={{ shrink: true }} value={value.receivedAt} onChange={(e) => setValue((row) => ({ ...row, receivedAt: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due Date / Time" InputLabelProps={{ shrink: true }} value={value.dueAt} onChange={(e) => setValue((row) => ({ ...row, dueAt: e.target.value }))} sx={fieldSx} /><TextField select label="Blocks Design Handoff?" value={value.blocking} onChange={(e) => setValue((row) => ({ ...row, blocking: e.target.value }))} sx={fieldSx}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField><TextField label="Remarks" value={value.remarks} onChange={(e) => setValue((row) => ({ ...row, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setValue(null)} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{value.mode === "edit" ? "Save Task" : "Delegate Task"}</Button></DialogActions></Dialog>;
+  return <Dialog open={open} onClose={() => !working && setValue(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{value.mode === "edit" ? "Edit Design Task" : "Delegate Design Task"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.1, mt: 0.5 }}><TextField select label="Task Type" value={value.taskType} onChange={(e) => setValue((row) => ({ ...row, taskType: e.target.value }))} sx={fieldSx}>{DESIGN_TASK_TYPES.map((type) => <MenuItem key={type} value={type}>{readable(type)}</MenuItem>)}</TextField><TextField select label="Priority" value={value.priority} onChange={(e) => setValue((row) => ({ ...row, priority: e.target.value }))} sx={fieldSx}><MenuItem value="LOW">Low</MenuItem><MenuItem value="NORMAL">Normal</MenuItem><MenuItem value="HIGH">High</MenuItem><MenuItem value="URGENT">Urgent</MenuItem></TextField><TextField label="Task Title *" value={value.title} onChange={(e) => setValue((row) => ({ ...row, title: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Description / exact drawing work" multiline minRows={3} value={value.description} onChange={(e) => setValue((row) => ({ ...row, description: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Junior Designer / Design team assignees *" multiline minRows={2} helperText="Comma separated. One task may be shared by multiple members." value={value.assigneesText} onChange={(e) => setValue((row) => ({ ...row, assigneesText: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField type="datetime-local" label="Received Date / Time" InputLabelProps={{ shrink: true }} value={value.receivedAt} onChange={(e) => setValue((row) => ({ ...row, receivedAt: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due Date / Time" InputLabelProps={{ shrink: true }} value={value.dueAt} onChange={(e) => setValue((row) => ({ ...row, dueAt: e.target.value }))} sx={fieldSx} /><TextField select label="Blocks Design Handoff?" value={value.blocking} onChange={(e) => setValue((row) => ({ ...row, blocking: e.target.value }))} sx={fieldSx}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField><TextField label="Remarks" value={value.remarks} onChange={(e) => setValue((row) => ({ ...row, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setValue(null)} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{value.mode === "edit" ? "Save Task" : "Delegate Task"}</Button></DialogActions></Dialog>;
 }
 
 function DesignTaskStatusDialog({ value, setValue, working, onSave }) {

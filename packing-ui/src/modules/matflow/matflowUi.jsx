@@ -463,13 +463,21 @@ export const useMatFlowTheme = () => {
 export const MATFLOW_ROLES = Object.freeze({
   ADMIN: "ADMIN",
   MANAGER: "MATFLOW_MANAGER",
+  DESIGN_HEAD: "MATFLOW_DESIGN_HEAD",
+  DESIGNER: "MATFLOW_DESIGNER",
+  DESIGNER_JUNIOR: "MATFLOW_DESIGNER_JUNIOR",
+  PPC: "MATFLOW_PPC",
+  ENGINEERING_HEAD: "MATFLOW_ENGINEERING_HEAD",
   ENGINEERING: "MATFLOW_ENGINEERING",
+  ENGINEERING_JUNIOR: "MATFLOW_ENGINEERING_JUNIOR",
+  PRODUCTION: "MATFLOW_PRODUCTION",
+  DIRECTOR: "MATFLOW_DIRECTOR",
+
+  // Legacy authorities remain recognised so migrated users are not broken.
   STORE: "MATFLOW_STORE",
   PURCHASE: "MATFLOW_PURCHASE",
   PROCESSING: "MATFLOW_PROCESSING",
-  PRODUCTION: "MATFLOW_PRODUCTION",
   QC: "MATFLOW_QC",
-  DIRECTOR: "MATFLOW_DIRECTOR",
 });
 
 const ALL_MATFLOW_ROLES = Object.freeze(Object.values(MATFLOW_ROLES));
@@ -490,7 +498,13 @@ const ROLE_PRIORITY = [
   MATFLOW_ROLES.ADMIN,
   MATFLOW_ROLES.MANAGER,
   MATFLOW_ROLES.DIRECTOR,
+  MATFLOW_ROLES.DESIGN_HEAD,
+  MATFLOW_ROLES.PPC,
+  MATFLOW_ROLES.ENGINEERING_HEAD,
+  MATFLOW_ROLES.DESIGNER,
   MATFLOW_ROLES.ENGINEERING,
+  MATFLOW_ROLES.DESIGNER_JUNIOR,
+  MATFLOW_ROLES.ENGINEERING_JUNIOR,
   MATFLOW_ROLES.PRODUCTION,
   MATFLOW_ROLES.STORE,
   MATFLOW_ROLES.PURCHASE,
@@ -503,14 +517,49 @@ export const getMatFlowRole = (roleOrRoles, extraRoles = []) => {
   return ROLE_PRIORITY.find((role) => roles.includes(role)) || "";
 };
 
+const CONTROL_WORK_ROLES = Object.freeze([
+  MATFLOW_ROLES.ADMIN,
+  MATFLOW_ROLES.MANAGER,
+  MATFLOW_ROLES.DESIGN_HEAD,
+  MATFLOW_ROLES.DESIGNER,
+  MATFLOW_ROLES.DESIGNER_JUNIOR,
+  MATFLOW_ROLES.PPC,
+  MATFLOW_ROLES.ENGINEERING_HEAD,
+  MATFLOW_ROLES.ENGINEERING,
+  MATFLOW_ROLES.ENGINEERING_JUNIOR,
+  MATFLOW_ROLES.DIRECTOR,
+]);
+
+const PROJECT_REFERENCE_ROLES = Object.freeze([...CONTROL_WORK_ROLES]);
+const ENGINEERING_REFERENCE_ROLES = Object.freeze([
+  MATFLOW_ROLES.ADMIN,
+  MATFLOW_ROLES.MANAGER,
+  MATFLOW_ROLES.ENGINEERING_HEAD,
+  MATFLOW_ROLES.ENGINEERING,
+  MATFLOW_ROLES.DIRECTOR,
+]);
+
 const MATFLOW_SCREEN_ROLES = Object.freeze({
   dashboard: ALL_MATFLOW_ROLES,
-  work: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
-  projects: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
-  materials: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
-  boms: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
-  "bom-create": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
-  release: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.DIRECTOR],
+  work: CONTROL_WORK_ROLES,
+  projects: PROJECT_REFERENCE_ROLES,
+  materials: ENGINEERING_REFERENCE_ROLES,
+  boms: ENGINEERING_REFERENCE_ROLES,
+  "bom-create": [
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING,
+  ],
+  release: [
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.PPC,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING,
+    MATFLOW_ROLES.PRODUCTION,
+    MATFLOW_ROLES.DIRECTOR,
+  ],
 });
 
 export const canAccessMatFlowScreen = (screen, roleOrRoles) => {
@@ -521,9 +570,7 @@ export const canAccessMatFlowScreen = (screen, roleOrRoles) => {
 };
 
 /**
- * Plant-aware UI gate for the four-plant workflow. The backend remains the
- * authority; this prevents a remote-plant user from being offered desks that
- * physically exist only at AL-P1 Main Store.
+ * Plant-aware UI gate. The backend remains authoritative for plant access.
  */
 export const canAccessMatFlowScreenForContext = (screen, roleOrRoles, plantCodes = []) => {
   void plantCodes;
@@ -535,20 +582,28 @@ export const matFlowRoleLabel = (roleOrRoles) => {
   return ({
     [MATFLOW_ROLES.ADMIN]: "Administrator",
     [MATFLOW_ROLES.MANAGER]: "MatFlow Manager",
-    [MATFLOW_ROLES.ENGINEERING]: "Engineering",
-    [MATFLOW_ROLES.STORE]: "Stores",
-    [MATFLOW_ROLES.PURCHASE]: "Purchase",
-    [MATFLOW_ROLES.PROCESSING]: "Processing",
+    [MATFLOW_ROLES.DESIGN_HEAD]: "Design Head",
+    [MATFLOW_ROLES.DESIGNER]: "Designer",
+    [MATFLOW_ROLES.DESIGNER_JUNIOR]: "Junior Designer",
+    [MATFLOW_ROLES.PPC]: "PPC",
+    [MATFLOW_ROLES.ENGINEERING_HEAD]: "Engineering Head",
+    [MATFLOW_ROLES.ENGINEERING]: "Engineer",
+    [MATFLOW_ROLES.ENGINEERING_JUNIOR]: "Junior Engineer",
     [MATFLOW_ROLES.PRODUCTION]: "Production",
-    [MATFLOW_ROLES.QC]: "Quality Control",
     [MATFLOW_ROLES.DIRECTOR]: "Director",
+    [MATFLOW_ROLES.STORE]: "Legacy Stores",
+    [MATFLOW_ROLES.PURCHASE]: "Legacy Purchase",
+    [MATFLOW_ROLES.PROCESSING]: "Legacy Processing",
+    [MATFLOW_ROLES.QC]: "Legacy Quality Control",
   }[role] || "MatFlow User");
 };
 
 export const defaultMatFlowPathForRole = (roleOrRoles) => {
   const roles = getMatFlowRoles(roleOrRoles);
   if (!roles.length) return "/modules";
-  if (roles.includes(MATFLOW_ROLES.ENGINEERING)) return "/matflow/work";
+  if (roles.some((role) => CONTROL_WORK_ROLES.includes(role) && role !== MATFLOW_ROLES.DIRECTOR)) {
+    return "/matflow/work";
+  }
   if (roles.includes(MATFLOW_ROLES.PRODUCTION)) return "/matflow/release";
   return "/matflow/dashboard";
 };
