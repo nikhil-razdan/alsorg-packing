@@ -1114,6 +1114,38 @@ const purple = new Set([
 export function MatFlowStatusChip({ status }) {
   const { isDark } = useMatFlowTheme();
   const value = normalize(status) || "UNKNOWN";
+
+  // Release-health values are visual signals, not business-status badges.
+  // Keep the backend values (GREEN / AMBER / RED) for filtering and rules,
+  // but never expose those colour names as UI tags.
+  if (["GREEN", "AMBER", "RED"].includes(value)) {
+    const visual = value === "RED"
+      ? { label: "Critical attention", color: "var(--mf-danger-text)", dot: "var(--mf-danger-text)" }
+      : value === "AMBER"
+        ? { label: "Needs attention", color: "var(--mf-warning-text)", dot: "var(--mf-warning-text)" }
+        : { label: "On track", color: "var(--mf-success-text)", dot: "var(--mf-success-text)" };
+
+    return (
+      <Box
+        component="span"
+        sx={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 0.55,
+          minWidth: 0,
+          color: visual.color,
+          fontSize: 9.8,
+          fontWeight: 900,
+          lineHeight: 1.2,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Box component="span" sx={{ width: 7, height: 7, borderRadius: "50%", background: visual.dot, flex: "0 0 auto" }} />
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>{visual.label}</Box>
+      </Box>
+    );
+  }
+
   let tone = {
     color: "var(--mf-primary-text)",
     background: "var(--mf-primary-soft)",

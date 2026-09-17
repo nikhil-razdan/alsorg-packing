@@ -69,31 +69,59 @@ const parseAssignees = (value) =>
     )
   ).slice(0, 12);
 
-const healthSx = (health) => ({
-  height: 24,
-  borderRadius: 1.2,
-  fontWeight: 950,
-  fontSize: 10,
-  color:
-    health === "RED"
-      ? "var(--mf-danger-text)"
-      : health === "AMBER"
-      ? "var(--mf-warning-text)"
-      : "var(--mf-success-text)",
-  background:
-    health === "RED"
-      ? "var(--mf-danger-soft)"
-      : health === "AMBER"
-      ? "var(--mf-warning-soft)"
-      : "var(--mf-success-soft)",
-  border: "1px solid",
-  borderColor:
-    health === "RED"
-      ? "var(--mf-danger-border)"
-      : health === "AMBER"
-      ? "var(--mf-warning-border)"
-      : "var(--mf-success-border)",
-});
+const HEALTH_FILTERS = [
+  { value: "RED", label: "Critical attention" },
+  { value: "AMBER", label: "Needs attention" },
+  { value: "GREEN", label: "On track" },
+];
+
+const healthVisual = (health) => {
+  const value = String(health || "").toUpperCase();
+  if (value === "RED") {
+    return { label: "Critical attention", accent: "var(--mf-danger-text)", border: "var(--mf-danger-border)", soft: "var(--mf-danger-soft)" };
+  }
+  if (value === "AMBER") {
+    return { label: "Needs attention", accent: "var(--mf-warning-text)", border: "var(--mf-warning-border)", soft: "var(--mf-warning-soft)" };
+  }
+  if (value === "GREEN") {
+    return { label: "On track", accent: "var(--mf-success-text)", border: "var(--mf-success-border)", soft: "var(--mf-success-soft)" };
+  }
+  return { label: "", accent: "var(--mf-border-strong)", border: "var(--mf-border)", soft: "transparent" };
+};
+
+const productionFileListRowSx = (health, selected) => {
+  const visual = healthVisual(health);
+  return {
+    position: "relative",
+    p: 1.35,
+    pl: 1.65,
+    borderBottom: "1px solid var(--mf-border)",
+    cursor: "pointer",
+    background: selected ? "var(--mf-primary-soft)" : "transparent",
+    transition: "background .15s ease, box-shadow .15s ease",
+    "&::before": {
+      content: '""',
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 3,
+      background: visual.accent,
+    },
+    "&:hover": { background: selected ? "var(--mf-primary-soft)" : visual.soft },
+  };
+};
+
+const productionFileHeaderSx = (health) => {
+  const visual = healthVisual(health);
+  return {
+    ...panelSx,
+    p: 1.7,
+    mb: 1.2,
+    borderLeft: `3px solid ${visual.accent}`,
+    boxShadow: `inset 18px 0 28px -30px ${visual.accent}, var(--mf-card-shadow)`,
+  };
+};
 
 const statusSx = {
   height: 23,
@@ -512,7 +540,7 @@ export function MatFlowWorkWorkspacePage() {
           <TextField size="small" label="Search PD / File / Product / Drawing" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadList()} sx={fieldSx} />
           <TextField select size="small" label="Health" value={health} onChange={(e) => setHealth(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
-            {["GREEN", "AMBER", "RED"].map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}
+            {HEALTH_FILTERS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
           </TextField>
           <TextField select size="small" label="Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All stages</MenuItem>
@@ -529,10 +557,14 @@ export function MatFlowWorkWorkspacePage() {
           {files.length === 0 ? (
             <Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No Production Files found.</Box>
           ) : files.map((row) => (
-            <Box key={row.id} onClick={() => setSelectedId(row.id)} sx={{ p: 1.35, borderBottom: "1px solid var(--mf-border)", cursor: "pointer", background: selectedId === row.id ? "var(--mf-primary-soft)" : "transparent", "&:hover": { background: "var(--mf-hover)" } }}>
+            <Box key={row.id} onClick={() => setSelectedId(row.id)} sx={productionFileListRowSx(row.releaseHealth, selectedId === row.id)}>
               <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
                 <Typography sx={{ color: "var(--mf-text)", fontWeight: 950, fontSize: 12 }}>{row.productionFileNo}</Typography>
-                <Chip label={row.releaseHealth} sx={healthSx(row.releaseHealth)} />
+                {healthVisual(row.releaseHealth).label && (
+                  <Typography sx={{ color: healthVisual(row.releaseHealth).accent, fontWeight: 900, fontSize: 9.4 }}>
+                    {healthVisual(row.releaseHealth).label}
+                  </Typography>
+                )}
               </Box>
               <Typography sx={{ mt: 0.45, color: "var(--mf-text-secondary)", fontSize: 11, fontWeight: 800 }}>{row.projectCode} · {row.productName}</Typography>
               <Typography sx={{ mt: 0.2, color: "var(--mf-text-muted)", fontSize: 10 }}>{row.drawingNo} · {readable(row.stage)}</Typography>
@@ -545,14 +577,18 @@ export function MatFlowWorkWorkspacePage() {
           <Card sx={{ ...panelSx, p: 4, textAlign: "center", color: "var(--mf-text-muted)" }}>Select a Production File.</Card>
         ) : (
           <Box sx={{ minWidth: 0 }}>
-            <Card sx={{ ...panelSx, p: 1.7, mb: 1.2 }}>
+            <Card sx={productionFileHeaderSx(file.releaseHealth)}>
               <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1.2 }}>
                 <Box>
                   <Typography sx={{ fontSize: 19, fontWeight: 950, color: "var(--mf-text)" }}>{file.productionFileNo}</Typography>
                   <Typography sx={{ mt: 0.2, color: "var(--mf-text-muted)", fontSize: 11 }}>{file.projectCode} · {file.projectName} · {file.productName} · {file.drawingNo}</Typography>
                 </Box>
                 <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
-                  <Chip label={file.releaseHealth} sx={healthSx(file.releaseHealth)} />
+                  {healthVisual(file.releaseHealth).label && (
+                    <Typography sx={{ color: healthVisual(file.releaseHealth).accent, fontSize: 10, fontWeight: 900 }}>
+                      {healthVisual(file.releaseHealth).label}
+                    </Typography>
+                  )}
                   <Chip label={readable(file.stage)} sx={statusSx} />
                   {canSetup && <Button onClick={openSetup} sx={secondaryBtnSx}>Setup</Button>}
                 </Box>
@@ -721,7 +757,7 @@ function Overview({ file, detail, canDesignHead, canPpc, canEngineeringReview, c
       </Box>
 
       {file.designHeadRemarks && <Alert severity={file.designHeadDecision === "RETURNED" ? "warning" : "info"} sx={{ mt: 1.2 }}>Design Head: {file.designHeadRemarks}</Alert>}
-      {file.controlledReleaseReason && <Alert severity="warning" sx={{ mt: 1.2 }}>Controlled AMBER release: {file.controlledReleaseReason}</Alert>}
+      {file.controlledReleaseReason && <Alert severity="warning" sx={{ mt: 1.2 }}>Controlled release: {file.controlledReleaseReason}</Alert>}
       {file.revisionReviewRequired && <Alert severity="error" sx={{ mt: 1.2 }}>A revision impact review is required before this file can continue.</Alert>}
       {designStage && (detail.designHandoffBlockers || []).length > 0 && <Alert severity="info" sx={{ mt: 1.2 }}>Design handoff blockers: {(detail.designHandoffBlockers || []).join(" · ")}</Alert>}
       {!designStage && (detail.ppcGate2Blockers || []).length > 0 && <Alert severity="info" sx={{ mt: 1.2 }}>PPC Gate 2 blockers: {(detail.ppcGate2Blockers || []).join(" · ")}</Alert>}
@@ -955,5 +991,5 @@ function ActionDialog({ action, setAction, working, submit }) {
   const open = Boolean(action.kind);
   const close = () => !working && setAction(EMPTY_ACTION);
   const needsDecision = ["DESIGN_HEAD_REVIEW", "PPC1", "ENG_DECISION", "TASK_STATUS", "REVISION_IMPACT", "PPC2"].includes(action.kind);
-  return <Dialog open={open} onClose={close} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{action.title || "MatFlow Action"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.1, mt: 0.5 }}>{action.kind === "DESIGN_HEAD_REVIEW" && <TextField label={action.decision === "RETURN" ? "Return reason *" : "Design Head review remarks"} multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "DESIGN_SUBMIT" && <TextField label="Controlled Release reason (mandatory when checklist is AMBER)" multiline minRows={3} value={action.controlledReleaseReason} onChange={(e) => setAction((value) => ({ ...value, controlledReleaseReason: e.target.value }))} sx={fieldSx} />}{action.kind === "PPC1" && action.decision === "ACCEPT" && <TextField label="Assign Engineer / username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} />}{["PPC1", "ENG_DECISION", "PPC2"].includes(action.kind) && <TextField label="Remarks" multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CREATE" && <><TextField label="Query title" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} /><TextField label="Detail" multiline minRows={3} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /><TextField label="Assigned to / Designer username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due" InputLabelProps={{ shrink: true }} value={action.dueAt} onChange={(e) => setAction((value) => ({ ...value, dueAt: e.target.value }))} sx={fieldSx} /></>}{action.kind === "QUERY_RESPOND" && <TextField label="Response" multiline minRows={4} value={action.response} onChange={(e) => setAction((value) => ({ ...value, response: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CLOSE" && <TextField label="Closure note" multiline minRows={3} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "TASK_CREATE" && <><TextField label="Task key" value={action.taskKey} onChange={(e) => setAction((value) => ({ ...value, taskKey: e.target.value }))} sx={fieldSx} /><TextField label="Task title" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} /><TextField label="Assigned to" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} /><TextField label="Description" multiline minRows={2} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /></>}{action.kind === "TASK_STATUS" && <TextField label="Note / reason" multiline minRows={2} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "REVISION_IMPACT" && <><TextField select label="Decision" value={action.decision} onChange={(e) => setAction((value) => ({ ...value, decision: e.target.value }))} sx={fieldSx}><MenuItem value="ACCEPT">Accept and revalidate</MenuItem><MenuItem value="REJECT">Reject revision</MenuItem></TextField><TextField label="Impact assessment / note" multiline minRows={4} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} /></>}{needsDecision && action.kind !== "REVISION_IMPACT" && <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>Decision: <b>{readable(action.decision)}</b></Typography>}</Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={close} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || (action.kind === "DESIGN_HEAD_REVIEW" && action.decision === "RETURN" && !String(action.remarks || "").trim())} onClick={submit} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog>;
+  return <Dialog open={open} onClose={close} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{action.title || "MatFlow Action"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.1, mt: 0.5 }}>{action.kind === "DESIGN_HEAD_REVIEW" && <TextField label={action.decision === "RETURN" ? "Return reason *" : "Design Head review remarks"} multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "DESIGN_SUBMIT" && <TextField label="Controlled Release reason (mandatory when the checklist requires attention)" multiline minRows={3} value={action.controlledReleaseReason} onChange={(e) => setAction((value) => ({ ...value, controlledReleaseReason: e.target.value }))} sx={fieldSx} />}{action.kind === "PPC1" && action.decision === "ACCEPT" && <TextField label="Assign Engineer / username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} />}{["PPC1", "ENG_DECISION", "PPC2"].includes(action.kind) && <TextField label="Remarks" multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CREATE" && <><TextField label="Query title" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} /><TextField label="Detail" multiline minRows={3} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /><TextField label="Assigned to / Designer username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due" InputLabelProps={{ shrink: true }} value={action.dueAt} onChange={(e) => setAction((value) => ({ ...value, dueAt: e.target.value }))} sx={fieldSx} /></>}{action.kind === "QUERY_RESPOND" && <TextField label="Response" multiline minRows={4} value={action.response} onChange={(e) => setAction((value) => ({ ...value, response: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CLOSE" && <TextField label="Closure note" multiline minRows={3} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "TASK_CREATE" && <><TextField label="Task key" value={action.taskKey} onChange={(e) => setAction((value) => ({ ...value, taskKey: e.target.value }))} sx={fieldSx} /><TextField label="Task title" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} /><TextField label="Assigned to" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} /><TextField label="Description" multiline minRows={2} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /></>}{action.kind === "TASK_STATUS" && <TextField label="Note / reason" multiline minRows={2} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "REVISION_IMPACT" && <><TextField select label="Decision" value={action.decision} onChange={(e) => setAction((value) => ({ ...value, decision: e.target.value }))} sx={fieldSx}><MenuItem value="ACCEPT">Accept and revalidate</MenuItem><MenuItem value="REJECT">Reject revision</MenuItem></TextField><TextField label="Impact assessment / note" multiline minRows={4} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} /></>}{needsDecision && action.kind !== "REVISION_IMPACT" && <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>Decision: <b>{readable(action.decision)}</b></Typography>}</Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={close} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || (action.kind === "DESIGN_HEAD_REVIEW" && action.decision === "RETURN" && !String(action.remarks || "").trim())} onClick={submit} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog>;
 }

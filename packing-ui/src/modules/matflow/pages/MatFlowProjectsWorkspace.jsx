@@ -183,7 +183,7 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
 
   return (
-    <Box sx={productCardSx}>
+    <Box sx={productCardSx(product.releaseHealth)}>
       <Box sx={productHeaderSx}>
         <Box sx={{ minWidth: 0 }}>
           <Box sx={{ display: "flex", gap: 0.65, alignItems: "center", flexWrap: "wrap" }}>
@@ -218,7 +218,7 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
       </Box>
 
       <Box sx={identityGridSx}>
-        <Box sx={productionFilePanelSx}>
+        <Box sx={productionFilePanelSx(product.releaseHealth)}>
           <Box sx={panelTopRowSx}>
             <Box>
               <Typography sx={panelEyebrowSx}>PRODUCTION FILE</Typography>
@@ -226,7 +226,6 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
                 {product.productionFileNo || "Migration pending"}
               </Typography>
             </Box>
-            <MatFlowStatusChip status={product.releaseHealth || "PENDING"} />
           </Box>
           <Box sx={{ mt: 0.9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
             <Meta label="Stage" value={readable(product.stage || "NOT_STARTED")} />
@@ -609,7 +608,6 @@ export function MatFlowProjectsPage() {
                   </Box>
 
                   <Box sx={{ display: "grid", justifyItems: "end", gap: 0.4, flex: "0 0 auto" }}>
-                    <MatFlowStatusChip status={projectHealth} />
                     <Chip label={`${productionFiles.length} File${productionFiles.length === 1 ? "" : "s"}`} size="small" sx={softChipSx} />
                   </Box>
                 </Box>
@@ -649,7 +647,7 @@ export function MatFlowProjectsPage() {
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") openProductionFile(product);
                           }}
-                          sx={ticketFileRowSx}
+                          sx={ticketFileRowSx(product.releaseHealth)}
                         >
                           <Box sx={{ minWidth: 0 }}>
                             <Typography noWrap sx={{ fontSize: 9.8, fontWeight: 950, color: "var(--mf-text)" }}>
@@ -660,8 +658,10 @@ export function MatFlowProjectsPage() {
                             </Typography>
                           </Box>
                           <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                            <Typography sx={{ color: ticketHealthColor(product.releaseHealth), fontSize: 8.4, fontWeight: 900 }}>
+                              {healthLabel(product.releaseHealth)}
+                            </Typography>
                             <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={softChipSx} />
-                            <MatFlowStatusChip status={product.releaseHealth || "PENDING"} />
                           </Box>
                         </Box>
                       ))}
@@ -884,7 +884,19 @@ const ticketHealthColor = (health) => ({
   RED: "var(--mf-danger-text)",
   AMBER: "var(--mf-warning-text)",
   GREEN: "var(--mf-success-text)",
-}[health] || "var(--mf-border-strong)");
+}[String(health || "").toUpperCase()] || "var(--mf-border-strong)");
+
+const ticketHealthSoft = (health) => ({
+  RED: "var(--mf-danger-soft)",
+  AMBER: "var(--mf-warning-soft)",
+  GREEN: "var(--mf-success-soft)",
+}[String(health || "").toUpperCase()] || "var(--mf-panel-solid)");
+
+const healthLabel = (health) => ({
+  RED: "Critical attention",
+  AMBER: "Needs attention",
+  GREEN: "On track",
+}[String(health || "").toUpperCase()] || "");
 
 const ticketCardSx = (health) => ({
   ...panelSx,
@@ -897,7 +909,8 @@ const ticketCardSx = (health) => ({
   flexDirection: "column",
   borderRadius: 1.35,
   borderTop: `2px solid ${ticketHealthColor(health)}`,
-  boxShadow: "var(--mf-card-shadow)",
+  borderLeft: `3px solid ${ticketHealthColor(health)}`,
+  boxShadow: `inset 20px 0 30px -32px ${ticketHealthColor(health)}, var(--mf-card-shadow)`,
   "&::before": {
     content: '""',
     position: "absolute",
@@ -958,7 +971,7 @@ const ticketMetaGridSx = {
   alignContent: "center",
 };
 
-const ticketFileRowSx = {
+const ticketFileRowSx = (health) => ({
   px: 0.7,
   py: 0.55,
   display: "grid",
@@ -967,13 +980,14 @@ const ticketFileRowSx = {
   minHeight: 45,
   alignItems: "center",
   border: "1px solid var(--mf-border)",
+  borderLeft: `3px solid ${ticketHealthColor(health)}`,
   borderRadius: 1,
-  background: "var(--mf-surface)",
+  background: ticketHealthSoft(health),
   cursor: "pointer",
-  transition: "border-color .15s ease, background .15s ease",
-  "&:hover": { borderColor: "var(--mf-primary-border)", background: "var(--mf-hover)" },
+  transition: "border-color .15s ease, background .15s ease, transform .15s ease",
+  "&:hover": { borderColor: ticketHealthColor(health), transform: "translateY(-1px)" },
   "&:focus-visible": { outline: "2px solid var(--mf-primary)", outlineOffset: 1 },
-};
+});
 
 const ticketEmptyFileSx = {
   p: 0.75,
@@ -1048,12 +1062,14 @@ const metaValueSx = {
   textOverflow: "ellipsis",
 };
 
-const productCardSx = {
+const productCardSx = (health) => ({
   border: "1px solid var(--mf-border)",
+  borderLeft: `3px solid ${ticketHealthColor(health)}`,
   borderRadius: 1.5,
   background: "var(--mf-panel-solid)",
   overflow: "hidden",
-};
+  boxShadow: `inset 18px 0 28px -32px ${ticketHealthColor(health)}`,
+});
 
 const productHeaderSx = {
   px: 1.15,
@@ -1082,12 +1098,14 @@ const identityGridSx = {
   gap: 0.8,
 };
 
-const productionFilePanelSx = {
+const productionFilePanelSx = (health) => ({
   p: 1,
   borderRadius: 1.4,
-  border: "1px solid var(--mf-primary-border)",
-  background: "var(--mf-primary-soft)",
-};
+  border: "1px solid",
+  borderColor: ticketHealthColor(health),
+  borderLeftWidth: 3,
+  background: ticketHealthSoft(health),
+});
 
 const bomPanelSx = {
   p: 1,
