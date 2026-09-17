@@ -33,8 +33,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -58,6 +60,7 @@ public class MatFlowWorkspaceService {
     private static final long REVISION_MAX_BYTES = 30L * 1024L * 1024L;
     private static final Set<WorkItemStatus> OPEN_QUERY_STATUSES = Set.of(WorkItemStatus.OPEN, WorkItemStatus.RESPONDED);
     private static final Set<WorkItemStatus> OPEN_TASK_STATUSES = Set.of(WorkItemStatus.TODO, WorkItemStatus.ASSIGNED, WorkItemStatus.IN_PROGRESS, WorkItemStatus.BLOCKED);
+    private static final String QUERY_ALERT_READ_ACTION = "QUERY_ALERT_READ";
 
     private final MatFlowProductionFileRepository fileRepository;
     private final MatFlowWorkItemRepository workRepository;
@@ -856,38 +859,152 @@ public class MatFlowWorkspaceService {
 
     @Transactional(readOnly = true)
     public NotificationFeedResponse notifications(Integer limit) {
-        accessService.requireRead(); String actor=accessService.actor(); int max=limit==null?30:Math.max(1,Math.min(100,limit));
-        List<WorkItemStatus> open=List.of(WorkItemStatus.OPEN,WorkItemStatus.RESPONDED,WorkItemStatus.TODO,WorkItemStatus.ASSIGNED,WorkItemStatus.IN_PROGRESS,WorkItemStatus.BLOCKED);
-        List<NotificationResponse> rows=workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor,open).stream().filter(w->accessService.canAccessPlant(w.getProductionFile().getPlantCode())).limit(max).map(w->{
-            MatFlowProductionFile f=w.getProductionFile();
-            String productTitle = clean(f.getProductName()) == null ? w.getTitle() : f.getProductName();
-            boolean issueChat = w.getItemType()==WorkItemType.ENGINEERING_QUERY;
-            String message = issueChat
-                    ? w.getTitle() + (clean(w.getRespondedBy()) == null
-                            ? " · New issue"
-                            : " · Message from " + w.getRespondedBy())
-                    : w.getTitle()+" · Pending action";
-            String path = issueChat
-                    ? "/matflow/work?fileId="+f.getId()+"&tab=queries&queryId="+w.getId()
-                    : "/matflow/work?fileId="+f.getId();
-            return new NotificationResponse(w.getItemType().name(),w.getId(),productTitle,message,w.getPriority(),w.getDueAt(),f.getProjectCode(),f.getProductionFileNo(),path,w.getReadAt()!=null); }).toList();
-        int unread=(int)rows.stream().filter(r->!r.read()).count(); return new NotificationFeedResponse(unread,rows,now());
+        accessService.requireRead();
+        String actor = accessService.actor();
+        int max = limit == null ? 30 : Math.max(1, Math.min(100, limit));
+
+        List<WorkItemStatus> openTaskStatuses = List.of(
+                WorkItemStatus.OPEN,
+                WorkItemStatus.RESPONDED,
+                WorkItemStatus.TODO,
+                WorkItemStatus.ASSIGNED,
+                WorkItemStatus.IN_PROGRESS,
+                WorkItemStatus.BLOCKED);
+
+        List<MatFlowWorkItem> candidates = new ArrayList<>();
+        Map<UUID, List<MatFlowAuditLog>> queryAuditCache = new HashMap<>();
+
+        // Ordinary task notifications remain personal to the assigned username.
+        workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor, openTaskStatuses).stream()
+                .filter(item -> item.getItemType() != WorkItemType.ENGINEERING_QUERY)
+                .filter(item -> item.getProductionFile() != null)
+                .filter(item -> accessService.canAccessPlant(item.getProductionFile().getPlantCode()))
+                .forEach(candidates::add);
+
+        // Issue Chat alerts are broader than ordinary task notifications:
+        // designated action owner + department heads + MatFlow Manager + Director + Admin.
+        for (MatFlowProductionFile file : fileRepository.findAllByOrderByUpdatedAtDesc()) {
+            if (file == null || !file.isActive() || !accessService.canAccessPlant(file.getPlantCode())) continue;
+            if (accessService.isJuniorDesignerOnly() && !juniorDesignerCanAccessFile(file.getId())) continue;
+
+            for (MatFlowWorkItem issue : items(file.getId(), WorkItemType.ENGINEERING_QUERY)) {
+                if (!OPEN_QUERY_STATUSES.contains(issue.getStatus())) continue;
+                if (!isQueryAlertRecipient(issue, file, actor)) continue;
+                candidates.add(issue);
+            }
+        }
+
+        candidates.sort((left, right) -> {
+            boolean leftIssue = left.getItemType() == WorkItemType.ENGINEERING_QUERY;
+            boolean rightIssue = right.getItemType() == WorkItemType.ENGINEERING_QUERY;
+            if (leftIssue != rightIssue) return leftIssue ? -1 : 1;
+            if (leftIssue) {
+                return Comparator.nullsLast(Comparator.<LocalDateTime>reverseOrder())
+                        .compare(left.getUpdatedAt(), right.getUpdatedAt());
+            }
+            return Comparator.nullsLast(Comparator.<LocalDateTime>naturalOrder())
+                    .compare(left.getDueAt(), right.getDueAt());
+        });
+
+        List<NotificationResponse> rows = candidates.stream()
+                .limit(max)
+                .map(item -> {
+                    MatFlowProductionFile file = item.getProductionFile();
+                    String productTitle = clean(file.getProductName()) == null ? item.getTitle() : file.getProductName();
+                    boolean issueChat = item.getItemType() == WorkItemType.ENGINEERING_QUERY;
+                    boolean read = issueChat ? isQueryAlertRead(item, actor, queryAuditCache) : item.getReadAt() != null;
+
+                    String message;
+                    String path;
+                    if (issueChat) {
+                        String latestActor = clean(item.getRespondedBy());
+                        if (latestActor == null) latestActor = clean(item.getCreatedBy());
+                        String actionOwner = clean(item.getAssignedTo());
+                        String eventLabel = clean(item.getRespondedBy()) == null ? "New issue" : "New message";
+                        message = item.getTitle()
+                                + " · " + eventLabel
+                                + (latestActor == null ? "" : " from " + latestActor)
+                                + (actionOwner == null ? "" : " · Action: " + actionOwner);
+                        path = "/matflow/work?fileId=" + file.getId() + "&tab=queries&queryId=" + item.getId();
+                    } else {
+                        message = item.getTitle() + " · Pending action";
+                        path = "/matflow/work?fileId=" + file.getId();
+                    }
+
+                    return new NotificationResponse(
+                            item.getItemType().name(),
+                            item.getId(),
+                            productTitle,
+                            message,
+                            item.getPriority(),
+                            item.getDueAt(),
+                            file.getProjectCode(),
+                            file.getProductionFileNo(),
+                            path,
+                            read);
+                })
+                .toList();
+
+        int unread = (int) rows.stream().filter(row -> !row.read()).count();
+        return new NotificationFeedResponse(unread, rows, now());
     }
 
     @Transactional
     public NotificationFeedResponse markNotificationRead(UUID workItemId, Integer limit) {
-        accessService.requireRead(); MatFlowWorkItem item=workRepository.findById(workItemId).orElseThrow(()->notFound("Work item not found")); requireFile(item.getProductionFile().getId());
-        if(item.getAssignedTo()!=null && item.getAssignedTo().equalsIgnoreCase(accessService.actor())){ item.setReadAt(now()); item.setUpdatedBy(accessService.actor()); workRepository.save(item); }
+        accessService.requireRead();
+        MatFlowWorkItem item = workRepository.findById(workItemId)
+                .orElseThrow(() -> notFound("Work item not found"));
+        MatFlowProductionFile file = requireFile(item.getProductionFile().getId());
+        String actor = accessService.actor();
+
+        if (item.getItemType() == WorkItemType.ENGINEERING_QUERY) {
+            if (isQueryAlertRecipient(item, file, actor) && !isQueryAlertRead(item, actor)) {
+                auditService.log("WORK_ITEM", item.getId(), QUERY_ALERT_READ_ACTION, file,
+                        auditService.details("recipient", actor, "source", "NOTIFICATION_CENTER"));
+            }
+        } else if (item.getAssignedTo() != null && item.getAssignedTo().equalsIgnoreCase(actor)) {
+            item.setReadAt(now());
+            item.setUpdatedBy(actor);
+            workRepository.save(item);
+        }
         return notifications(limit);
     }
 
     @Transactional
     public NotificationFeedResponse markAllNotificationsRead(Integer limit) {
-        accessService.requireRead(); String actor=accessService.actor();
-        List<WorkItemStatus> open=List.of(WorkItemStatus.OPEN,WorkItemStatus.RESPONDED,WorkItemStatus.TODO,WorkItemStatus.ASSIGNED,WorkItemStatus.IN_PROGRESS,WorkItemStatus.BLOCKED);
-        for(MatFlowWorkItem item:workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor,open)){
-            if(accessService.canAccessPlant(item.getProductionFile().getPlantCode())){item.setReadAt(now());item.setUpdatedBy(actor);workRepository.save(item);}
+        accessService.requireRead();
+        String actor = accessService.actor();
+        List<WorkItemStatus> openTaskStatuses = List.of(
+                WorkItemStatus.OPEN,
+                WorkItemStatus.RESPONDED,
+                WorkItemStatus.TODO,
+                WorkItemStatus.ASSIGNED,
+                WorkItemStatus.IN_PROGRESS,
+                WorkItemStatus.BLOCKED);
+
+        for (MatFlowWorkItem item : workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor, openTaskStatuses)) {
+            if (item.getItemType() == WorkItemType.ENGINEERING_QUERY) continue;
+            if (item.getProductionFile() != null && accessService.canAccessPlant(item.getProductionFile().getPlantCode())) {
+                item.setReadAt(now());
+                item.setUpdatedBy(actor);
+                workRepository.save(item);
+            }
         }
+
+        Map<UUID, List<MatFlowAuditLog>> queryAuditCache = new HashMap<>();
+        for (MatFlowProductionFile file : fileRepository.findAllByOrderByUpdatedAtDesc()) {
+            if (file == null || !file.isActive() || !accessService.canAccessPlant(file.getPlantCode())) continue;
+            if (accessService.isJuniorDesignerOnly() && !juniorDesignerCanAccessFile(file.getId())) continue;
+
+            for (MatFlowWorkItem issue : items(file.getId(), WorkItemType.ENGINEERING_QUERY)) {
+                if (!OPEN_QUERY_STATUSES.contains(issue.getStatus())) continue;
+                if (!isQueryAlertRecipient(issue, file, actor) || isQueryAlertRead(issue, actor, queryAuditCache)) continue;
+                auditService.log("WORK_ITEM", issue.getId(), QUERY_ALERT_READ_ACTION, file,
+                        auditService.details("recipient", actor, "source", "NOTIFICATION_CENTER_READ_ALL"));
+                queryAuditCache.remove(file.getId());
+            }
+        }
+
         return notifications(limit);
     }
 
@@ -949,6 +1066,60 @@ public class MatFlowWorkspaceService {
         }
         if (candidate != null && actor != null && candidate.equalsIgnoreCase(actor)) return null;
         return candidate;
+    }
+
+    private boolean isQueryAlertRecipient(MatFlowWorkItem issue, MatFlowProductionFile file, String actor) {
+        String username = clean(actor);
+        if (issue == null || file == null || username == null) return false;
+        if (accessService.isJuniorDesignerOnly() && !juniorDesignerCanAccessFile(file.getId())) return false;
+
+        // The designated action owner always gets the alert.
+        if (equalsIgnoreCase(issue.getAssignedTo(), username)) return true;
+
+        // Explicit heads saved on the Production File remain recipients even if the
+        // account later carries a different MatFlow role label.
+        if (equalsIgnoreCase(file.getDesignHead(), username)
+                || equalsIgnoreCase(file.getEngineeringHead(), username)) {
+            return true;
+        }
+
+        // Oversight alerts are role-based and plant-scoped.
+        return accessService.hasAnyRole(
+                "ADMIN",
+                "MATFLOW_MANAGER",
+                "MATFLOW_DIRECTOR",
+                "MATFLOW_DESIGN_HEAD",
+                "MATFLOW_ENGINEERING_HEAD");
+    }
+
+    private boolean isQueryAlertRead(MatFlowWorkItem issue, String actor) {
+        return isQueryAlertRead(issue, actor, new HashMap<>());
+    }
+
+    private boolean isQueryAlertRead(
+            MatFlowWorkItem issue,
+            String actor,
+            Map<UUID, List<MatFlowAuditLog>> auditCache) {
+        String username = clean(actor);
+        if (issue == null || issue.getProductionFile() == null || username == null) return false;
+
+        UUID fileId = issue.getProductionFile().getId();
+        List<MatFlowAuditLog> audits = auditCache.computeIfAbsent(fileId, auditService::timeline);
+        LocalDateTime lastRead = audits.stream()
+                .filter(audit -> issue.getId().equals(audit.getEntityId()))
+                .filter(audit -> QUERY_ALERT_READ_ACTION.equalsIgnoreCase(clean(audit.getAction())))
+                .filter(audit -> username.equalsIgnoreCase(clean(audit.getActor())))
+                .map(MatFlowAuditLog::getActionAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+
+        LocalDateTime latestActivity = issue.getUpdatedAt();
+        return lastRead != null && (latestActivity == null || !lastRead.isBefore(latestActivity));
+    }
+
+    private boolean isQueryAlertReadAudit(MatFlowAuditLog audit) {
+        return audit != null && QUERY_ALERT_READ_ACTION.equalsIgnoreCase(clean(audit.getAction()));
     }
 
     private long openQueryCount(UUID fileId){ return workRepository.countByProductionFile_IdAndItemTypeAndStatusIn(fileId,WorkItemType.ENGINEERING_QUERY,OPEN_QUERY_STATUSES); }
@@ -1048,10 +1219,13 @@ public class MatFlowWorkspaceService {
         Set<UUID> visibleQueryIds = visibleQueryRows.stream().map(MatFlowWorkItem::getId).collect(java.util.stream.Collectors.toSet());
         List<AuditEventResponse> timeline = juniorDesignerOnly
                 ? auditService.timeline(file.getId()).stream()
+                        .filter(audit -> !isQueryAlertReadAudit(audit))
                         .filter(audit -> visibleQueryIds.contains(audit.getEntityId()))
                         .filter(audit -> audit.getAction() != null && audit.getAction().contains("QUERY"))
                         .map(this::toAudit).toList()
-                : auditService.timeline(file.getId()).stream().map(this::toAudit).toList();
+                : auditService.timeline(file.getId()).stream()
+                        .filter(audit -> !isQueryAlertReadAudit(audit))
+                        .map(this::toAudit).toList();
 
         return new ProductionFileDetailResponse(
                 toFileResponse(file),

@@ -50,6 +50,7 @@ import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurned
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
@@ -134,7 +135,7 @@ export default function MatFlowLayout() {
             if (!quiet) setNotificationError("");
         } catch (requestError) {
             if (!quiet) {
-                setNotificationError(readMatFlowError(requestError, "Unable to load task notifications."));
+                setNotificationError(readMatFlowError(requestError, "Unable to load alerts and notifications."));
             }
         }
     }, [selectedPlantParam]);
@@ -211,7 +212,7 @@ export default function MatFlowLayout() {
             setNotificationFeed(response?.data || { unreadCount: 0, notifications: [] });
             setNotificationError("");
         } catch (requestError) {
-            setNotificationError(readMatFlowError(requestError, "Unable to mark notifications as read."));
+            setNotificationError(readMatFlowError(requestError, "Unable to mark alerts and notifications as read."));
         }
     };
 
@@ -339,7 +340,7 @@ export default function MatFlowLayout() {
                                 {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
                             </TextField>
                         )}
-                        <Tooltip title="Task notifications">
+                        <Tooltip title="Alerts & notifications">
                             <Button
                                 onClick={() => {
                                     setNotificationsOpen(true);
@@ -395,7 +396,7 @@ export default function MatFlowLayout() {
                 <Box sx={{ p: 1.4, position: "sticky", top: 0, zIndex: 2, background: "var(--mf-header-bg)", backdropFilter: "blur(14px)", borderBottom: "1px solid var(--mf-border)" }}>
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                         <Box>
-                            <Typography sx={{ fontSize: 14, fontWeight: 950, color: "var(--mf-text)" }}>Notifications</Typography>
+                            <Typography sx={{ fontSize: 14, fontWeight: 950, color: "var(--mf-text)" }}>Alerts & notifications</Typography>
                             <Typography sx={mutedSx}>{notificationFeed?.unreadCount || 0} unread · updates automatically</Typography>
                         </Box>
                         <Button
@@ -418,45 +419,55 @@ export default function MatFlowLayout() {
                     {(notificationFeed?.notifications || []).length === 0 ? (
                         <Box sx={{ p: 2.4, textAlign: "center", border: "1px dashed var(--mf-border)", borderRadius: 2 }}>
                             <NotificationsNoneOutlinedIcon sx={{ color: "var(--mf-text-muted)" }} />
-                            <Typography sx={{ mt: .4, fontSize: 10, fontWeight: 800, color: "var(--mf-text-muted)" }}>No task notifications</Typography>
+                            <Typography sx={{ mt: .4, fontSize: 10, fontWeight: 800, color: "var(--mf-text-muted)" }}>No alerts or task notifications</Typography>
                         </Box>
-                    ) : (notificationFeed?.notifications || []).map((notification) => (
-                        <Box
-                            key={`${notification.referenceId}-${notification.updatedAt}`}
-                            component="button"
-                            type="button"
-                            onClick={() => openTaskNotification(notification)}
-                            sx={{
-                                width: "100%",
-                                textAlign: "left",
-                                p: 1,
-                                borderRadius: 2,
-                                border: notification.read ? "1px solid var(--mf-border)" : "1px solid var(--mf-primary-border)",
-                                background: notification.read ? "var(--mf-panel-bg)" : "var(--mf-primary-soft)",
-                                color: "inherit",
-                                cursor: "pointer",
-                                fontFamily: "inherit",
-                                "&:hover": { borderColor: "var(--mf-primary)" },
-                            }}
-                        >
-                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7 }}>
-                                <Typography sx={{ fontSize: 9, fontWeight: 950, color: "var(--mf-primary-text)", letterSpacing: ".025em" }}>
-                                    {notification.projectCode ? `PD No. ${notification.projectCode}` : "PD No. —"}
-                                    {notification.referenceNumber ? ` · File ${notification.referenceNumber}` : ""}
+                    ) : (notificationFeed?.notifications || []).map((notification) => {
+                        const issueAlert = String(notification.referenceType || "").toUpperCase() === "ENGINEERING_QUERY";
+                        const unreadBorder = issueAlert ? "var(--mf-warning-border)" : "var(--mf-primary-border)";
+                        const unreadBackground = issueAlert ? "var(--mf-warning-soft)" : "var(--mf-primary-soft)";
+                        const alertAccent = issueAlert ? "var(--mf-warning-text)" : "var(--mf-primary-text)";
+                        return (
+                            <Box
+                                key={`${notification.referenceId}-${notification.updatedAt || notification.message || ""}`}
+                                component="button"
+                                type="button"
+                                onClick={() => openTaskNotification(notification)}
+                                sx={{
+                                    width: "100%",
+                                    textAlign: "left",
+                                    p: 1,
+                                    borderRadius: 2,
+                                    border: notification.read ? "1px solid var(--mf-border)" : `1px solid ${unreadBorder}`,
+                                    background: notification.read ? "var(--mf-panel-bg)" : unreadBackground,
+                                    color: "inherit",
+                                    cursor: "pointer",
+                                    fontFamily: "inherit",
+                                    "&:hover": { borderColor: issueAlert ? "var(--mf-warning-text)" : "var(--mf-primary)" },
+                                }}
+                            >
+                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "center" }}>
+                                    <Box sx={{ display: "flex", alignItems: "center", gap: .45, minWidth: 0 }}>
+                                        {issueAlert && <ForumOutlinedIcon sx={{ fontSize: 13, color: alertAccent, flex: "0 0 auto" }} />}
+                                        <Typography noWrap sx={{ fontSize: 9, fontWeight: 950, color: alertAccent, letterSpacing: ".025em" }}>
+                                            {issueAlert ? "ISSUE ALERT · " : ""}
+                                            {notification.projectCode ? `PD No. ${notification.projectCode}` : "PD No. —"}
+                                            {notification.referenceNumber ? ` · File ${notification.referenceNumber}` : ""}
+                                        </Typography>
+                                    </Box>
+                                    {!notification.read && <Box sx={{ mt: .05, width: 7, height: 7, borderRadius: 99, bgcolor: issueAlert ? "var(--mf-warning-text)" : "var(--mf-primary)", flex: "0 0 auto" }} />}
+                                </Box>
+                                <Typography sx={{ mt: .3, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
+                                    {notification.productName || notification.title || "Product"}
                                 </Typography>
-                                {!notification.read && <Box sx={{ mt: .25, width: 7, height: 7, borderRadius: 99, bgcolor: "var(--mf-primary)" }} />}
+                                <Typography sx={{ mt: .22, fontSize: 9.5, lineHeight: 1.45, fontWeight: 700, color: "var(--mf-text-secondary)" }}>
+                                    {notification.message}
+                                </Typography>
+                                <Typography sx={{ mt: .5, fontSize: 8.7, fontWeight: 700, color: "var(--mf-text-muted)" }}>
+                                    {issueAlert ? "Issue Chat" : readableNotificationStatus(notification.status)}
+                                </Typography>
                             </Box>
-                            <Typography sx={{ mt: .3, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
-                                {notification.productName || notification.title || "Product"}
-                            </Typography>
-                            <Typography sx={{ mt: .22, fontSize: 9.5, lineHeight: 1.45, fontWeight: 700, color: "var(--mf-text-secondary)" }}>
-                                {notification.message}
-                            </Typography>
-                            <Typography sx={{ mt: .5, fontSize: 8.7, fontWeight: 700, color: "var(--mf-text-muted)" }}>
-                                {readableNotificationStatus(notification.status)}
-                            </Typography>
-                        </Box>
-                    ))}
+                        );
+                    })}
                 </Box>
             </Drawer>
         </Box>
