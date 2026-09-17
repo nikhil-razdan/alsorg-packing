@@ -97,14 +97,14 @@ function reportColumns(type) {
   ];
   if (type === REPORTS.QUERIES) return [
     ...identityColumns,
-    { key: "taskKey", label: "Query No.", width: 18 },
-    { key: "taskTitle", label: "Query / Issue", width: 34 },
+    { key: "taskKey", label: "Issue No.", width: 18 },
+    { key: "taskTitle", label: "Issue / Topic", width: 34 },
     { key: "description", label: "Description", width: 40 },
     { key: "assignee", label: "Assigned To", width: 22 },
     { key: "status", label: "Status", width: 16 },
     { key: "priority", label: "Priority", width: 13 },
     { key: "dueAt", label: "Due At", width: 22 },
-    { key: "responseText", label: "Response", width: 40 },
+    { key: "responseText", label: "Latest Message", width: 40 },
     { key: "respondedBy", label: "Responded By", width: 20 },
     { key: "respondedAt", label: "Responded At", width: 22 },
     { key: "updatedAt", label: "Last Updated", width: 22 },
@@ -126,7 +126,7 @@ function reportTitle(type) {
   return {
     [REPORTS.DESIGN]: "Design Department · Task Assignment Report",
     [REPORTS.ENGINEERING]: "Engineering Department · Task Assignment Report",
-    [REPORTS.QUERIES]: "Design ↔ Engineering · Open Queries / Issues",
+    [REPORTS.QUERIES]: "Design ↔ Engineering · Open Issue Chats",
     [REPORTS.PPC]: "PPC · Handoff & Release Report",
   }[type] || "MatFlow Department Report";
 }
@@ -163,7 +163,7 @@ const pageColumns = (type) => {
   ];
   if (type === REPORTS.QUERIES) return [
     ...identity,
-    { key: "task", label: "Query / Issue", width: "260px" },
+    { key: "task", label: "Issue / Topic", width: "260px" },
     { key: "assignee", label: "Assigned To", width: "180px" },
     { key: "status", label: "Status", width: "115px" },
     { key: "priority", label: "Priority", width: "105px" },
@@ -224,13 +224,15 @@ export function MatFlowReportsPage() {
   const navigate = useNavigate();
   const access = useMemo(() => getMatFlowDepartmentAccess(roles), [roles]);
   const primary = useMemo(() => primaryMatFlowDepartment(roles), [roles]);
-  const canSeeQueries = access.design || access.engineering || access.management;
+  // PPC receives read-only Issue Chat visibility because unresolved cross-department
+  // issues are gate context, not PPC-owned work.
+  const canSeeQueries = access.design || access.engineering || access.ppc || access.management;
 
   const availableReports = useMemo(() => {
     const rows = [];
     if (access.design) rows.push({ value: REPORTS.DESIGN, label: "Design Tasks" });
     if (access.engineering) rows.push({ value: REPORTS.ENGINEERING, label: "Engineering Tasks" });
-    if (canSeeQueries) rows.push({ value: REPORTS.QUERIES, label: "Open Queries / Issues" });
+    if (canSeeQueries) rows.push({ value: REPORTS.QUERIES, label: "Issue Chats" });
     if (access.ppc || access.production) rows.push({ value: REPORTS.PPC, label: "PPC / Release" });
     return rows;
   }, [access, canSeeQueries]);
@@ -343,6 +345,7 @@ export function MatFlowReportsPage() {
           : (detail.queries || []).filter((task) => ["OPEN", "RESPONDED"].includes(task.status));
         source.forEach((task) => mapped.push({
           productionFileId: file.id,
+          queryId: reportType === REPORTS.QUERIES ? task.id : null,
           productionFileNo: file.productionFileNo,
           projectCode: file.projectCode,
           projectName: file.projectName,
@@ -545,7 +548,17 @@ export function MatFlowReportsPage() {
                   }}
                 >
                   {visibleColumns.map((column) => column.key === "action" ? (
-                    <Button key={column.key} size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}`)} sx={secondaryBtnSx}>Open</Button>
+                    <Button
+                      key={column.key}
+                      size="small"
+                      endIcon={<OpenInNewOutlinedIcon />}
+                      onClick={() => navigate(reportType === REPORTS.QUERIES && row.queryId
+                        ? `/matflow/work?fileId=${row.productionFileId}&tab=queries&queryId=${row.queryId}`
+                        : `/matflow/work?fileId=${row.productionFileId}`)}
+                      sx={secondaryBtnSx}
+                    >
+                      {reportType === REPORTS.QUERIES ? "Open chat" : "Open"}
+                    </Button>
                   ) : (
                     <Box key={column.key} sx={{ minWidth: 0 }}>
                       {pageCellValue(row, column.key, reportType)}

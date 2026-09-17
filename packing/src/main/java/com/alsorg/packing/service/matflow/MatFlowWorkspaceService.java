@@ -482,7 +482,7 @@ public class MatFlowWorkspaceService {
             file.setCurrentOwner(clean(file.getDesignHead()) != null ? file.getDesignHead() : file.getDesigner());
             invalidateDesignHeadApproval(file);
         } else {
-            if (file.getReleaseHealth() == ReleaseHealth.RED) throw conflict("RED file cannot pass PPC Gate 1");
+            if (file.getReleaseHealth() == ReleaseHealth.RED) throw conflict("A file requiring critical attention cannot pass PPC Gate 1");
             if (clean(request.assignedTo()) != null) file.setAssignedEngineer(request.assignedTo());
             if (clean(file.getAssignedEngineer()) == null) throw conflict("Assign an Engineer before accepting PPC Gate 1");
             templateService.seedEngineeringChecklist(file);
@@ -521,34 +521,112 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse createQuery(UUID fileId, QueryCreateRequest request) {
-        accessService.requireSharedQueryWrite(); MatFlowProductionFile file=requireFile(fileId);
+        accessService.requireSharedQueryWrite();
+        MatFlowProductionFile file = requireFile(fileId);
         if (!Set.of(ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY,
                 ProductionFileStage.ENGINEERING_WORK, ProductionFileStage.REVISION_REVIEW).contains(file.getStage())) {
-            throw conflict("Design / Engineering queries can be raised after PPC Gate 1 while the Product is in Engineering");
+            throw conflict("Design / Engineering issues can be raised after PPC Gate 1 while the Product is in Engineering");
         }
-        MatFlowWorkItem item = new MatFlowWorkItem(); item.setProductionFile(file); item.setItemType(WorkItemType.ENGINEERING_QUERY);
-        item.setItemKey("Q-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT)); item.setSection("Design ↔ Engineering Query / Issue"); item.setTitle(request.title()); item.setDescription(request.description());
-        item.setCriticality(Criticality.REQUIRED); item.setBlocking(true); item.setStatus(WorkItemStatus.OPEN); item.setAssignedTo(request.assignedTo()); item.setDueAt(request.dueAt()); item.setPriority(request.priority());
-        item.setDisplayOrder((int) (openQueryCount(fileId) + 1)); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); item = workRepository.save(item);
-        file.setEngineeringDecision(EngineeringDecision.QUERY_RAISED); file.setStage(ProductionFileStage.ENGINEERING_QUERY); file.setCurrentDepartment("DESIGN / ENGINEERING QUERY"); file.setCurrentOwner(request.assignedTo()); file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
-        auditService.log("WORK_ITEM", item.getId(), "SHARED_QUERY_RAISED", file, auditService.details("title", item.getTitle(), "assignedTo", item.getAssignedTo(), "dueAt", item.getDueAt(), "raisedBy", accessService.actor()));
+
+        String title = clean(request.title());
+        if (title == null) throw badRequest("Issue title is required");
+        String openingMessage = clean(request.description());
+        String actor = accessService.actor();
+        String fromDepartment = sharedQueryActorDepartment();
+        String routedTo = clean(request.assignedTo());
+        if (routedTo == null) routedTo = defaultSharedQueryCounterpart(file, fromDepartment, actor);
+
+        MatFlowWorkItem item = new MatFlowWorkItem();
+        item.setProductionFile(file);
+        item.setItemType(WorkItemType.ENGINEERING_QUERY);
+        item.setItemKey("Q-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT));
+        item.setSection("Design ↔ Engineering Issue Chat");
+        item.setTitle(title);
+        item.setDescription(openingMessage);
+        item.setCriticality(Criticality.REQUIRED);
+        item.setBlocking(true);
+        item.setStatus(WorkItemStatus.OPEN);
+        item.setAssignedTo(routedTo);
+        item.setDueAt(request.dueAt());
+        item.setPriority(request.priority());
+        item.setDisplayOrder((int) (openQueryCount(fileId) + 1));
+        item.setCreatedBy(actor);
+        item.setUpdatedBy(actor);
+        item = workRepository.save(item);
+
+        file.setEngineeringDecision(EngineeringDecision.QUERY_RAISED);
+        file.setStage(ProductionFileStage.ENGINEERING_QUERY);
+        file.setCurrentDepartment("DESIGN / ENGINEERING QUERY");
+        file.setCurrentOwner(routedTo);
+        file.setUpdatedBy(actor);
+        refreshHealth(file);
+        fileRepository.save(file);
+
+        auditService.log("WORK_ITEM", item.getId(), "SHARED_QUERY_RAISED", file,
+                auditService.details(
+                        "title", item.getTitle(),
+                        "message", openingMessage,
+                        "description", openingMessage,
+                        "priority", item.getPriority(),
+                        "assignedTo", routedTo,
+                        "dueAt", item.getDueAt(),
+                        "fromDepartment", fromDepartment,
+                        "raisedBy", actor));
         return toDetail(file);
     }
 
     @Transactional
     public ProductionFileDetailResponse respondQuery(UUID fileId, UUID queryId, QueryResponseRequest request) {
-        accessService.requireSharedQueryWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, queryId, WorkItemType.ENGINEERING_QUERY); requireVersion(item.getRowVersion(), request.rowVersion());
-        if (!Set.of(WorkItemStatus.OPEN, WorkItemStatus.RESPONDED).contains(item.getStatus())) throw conflict("Query is already closed");
-        item.setResponseText(request.response()); item.setRespondedBy(accessService.actor()); item.setRespondedAt(now()); item.setStatus(WorkItemStatus.RESPONDED); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
-        file.setCurrentDepartment("DESIGN / ENGINEERING QUERY"); file.setCurrentOwner(item.getCreatedBy()); file.setUpdatedBy(accessService.actor()); fileRepository.save(file);
-        auditService.log("WORK_ITEM", item.getId(), "SHARED_QUERY_RESPONDED", file, auditService.details("response", request.response(), "respondedBy", accessService.actor()));
+        accessService.requireSharedQueryWrite();
+        MatFlowProductionFile file = requireFile(fileId);
+        MatFlowWorkItem item = requireWork(fileId, queryId, WorkItemType.ENGINEERING_QUERY);
+        requireVersion(item.getRowVersion(), request.rowVersion());
+        if (!Set.of(WorkItemStatus.OPEN, WorkItemStatus.RESPONDED).contains(item.getStatus())) {
+            throw conflict("Issue is already resolved");
+        }
+
+        String message = clean(request.response());
+        if (message == null) throw badRequest("Message is required");
+        String actor = accessService.actor();
+        String fromDepartment = sharedQueryActorDepartment();
+        String routedTo = defaultSharedQueryCounterpart(file, fromDepartment, actor);
+        if (routedTo == null) {
+            String creator = clean(item.getCreatedBy());
+            if (creator != null && !creator.equalsIgnoreCase(actor)) routedTo = creator;
+        }
+        if (routedTo == null) {
+            String currentAssignee = clean(item.getAssignedTo());
+            if (currentAssignee != null && !currentAssignee.equalsIgnoreCase(actor)) routedTo = currentAssignee;
+        }
+
+        item.setResponseText(message); // latest-message snapshot; full conversation remains in immutable audit events.
+        item.setRespondedBy(actor);
+        item.setRespondedAt(now());
+        item.setStatus(WorkItemStatus.RESPONDED);
+        item.setAssignedTo(routedTo);
+        item.setReadAt(null);
+        item.setUpdatedBy(actor);
+        workRepository.save(item);
+
+        file.setCurrentDepartment("DESIGN / ENGINEERING QUERY");
+        file.setCurrentOwner(routedTo);
+        file.setUpdatedBy(actor);
+        fileRepository.save(file);
+
+        auditService.log("WORK_ITEM", item.getId(), "SHARED_QUERY_MESSAGE", file,
+                auditService.details(
+                        "message", message,
+                        "response", message,
+                        "fromDepartment", fromDepartment,
+                        "routedTo", routedTo,
+                        "sentBy", actor));
         return toDetail(file);
     }
 
     @Transactional
     public ProductionFileDetailResponse closeQuery(UUID fileId, UUID queryId, QueryCloseRequest request) {
         accessService.requireSharedQueryClose(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, queryId, WorkItemType.ENGINEERING_QUERY); requireVersion(item.getRowVersion(), request.rowVersion());
-        if (item.getStatus() != WorkItemStatus.RESPONDED && item.getStatus() != WorkItemStatus.OPEN) throw conflict("Query is already closed");
+        if (item.getStatus() != WorkItemStatus.RESPONDED && item.getStatus() != WorkItemStatus.OPEN) throw conflict("Issue is already resolved");
         item.setStatus(WorkItemStatus.CLOSED); item.setCompletionNote(request.note()); item.setClosedBy(accessService.actor()); item.setClosedAt(now()); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
         if (openQueryCount(fileId) == 0) {
             file.setEngineeringDecision(EngineeringDecision.PENDING); file.setStage(ProductionFileStage.ENGINEERING_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer());
@@ -773,10 +851,16 @@ public class MatFlowWorkspaceService {
         List<NotificationResponse> rows=workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor,open).stream().filter(w->accessService.canAccessPlant(w.getProductionFile().getPlantCode())).limit(max).map(w->{
             MatFlowProductionFile f=w.getProductionFile();
             String productTitle = clean(f.getProductName()) == null ? w.getTitle() : f.getProductName();
-            String message = w.getItemType()==WorkItemType.ENGINEERING_QUERY
-                    ? w.getTitle()+" · Shared Design / Engineering query requires attention"
+            boolean issueChat = w.getItemType()==WorkItemType.ENGINEERING_QUERY;
+            String message = issueChat
+                    ? w.getTitle() + (clean(w.getRespondedBy()) == null
+                            ? " · New issue"
+                            : " · Message from " + w.getRespondedBy())
                     : w.getTitle()+" · Pending action";
-            return new NotificationResponse(w.getItemType().name(),w.getId(),productTitle,message,w.getPriority(),w.getDueAt(),f.getProjectCode(),f.getProductionFileNo(),"/matflow/work?fileId="+f.getId(),w.getReadAt()!=null); }).toList();
+            String path = issueChat
+                    ? "/matflow/work?fileId="+f.getId()+"&tab=queries&queryId="+w.getId()
+                    : "/matflow/work?fileId="+f.getId();
+            return new NotificationResponse(w.getItemType().name(),w.getId(),productTitle,message,w.getPriority(),w.getDueAt(),f.getProjectCode(),f.getProductionFileNo(),path,w.getReadAt()!=null); }).toList();
         int unread=(int)rows.stream().filter(r->!r.read()).count(); return new NotificationFeedResponse(unread,rows,now());
     }
 
@@ -825,7 +909,7 @@ public class MatFlowWorkspaceService {
 
     private List<String> gate2Blockers(MatFlowProductionFile file){
         List<String> blockers=new ArrayList<>(); if(file.isRevisionReviewRequired())blockers.add("Revision impact review is pending"); if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED)blockers.add("Engineering is not approved");
-        ChecklistProgress ep=progress(file.getId(),WorkItemType.ENGINEERING_CHECK); if(ep.criticalPending()>0||ep.requiredPending()>0)blockers.add("Engineering checklist is incomplete"); if(openQueryCount(file.getId())>0)blockers.add("Engineering Queries are still open");
+        ChecklistProgress ep=progress(file.getId(),WorkItemType.ENGINEERING_CHECK); if(ep.criticalPending()>0||ep.requiredPending()>0)blockers.add("Engineering checklist is incomplete"); if(openQueryCount(file.getId())>0)blockers.add("Design ↔ Engineering issues are still open");
         List<MatFlowWorkItem> pending=items(file.getId(),WorkItemType.ENGINEERING_TASK).stream().filter(MatFlowWorkItem::isBlocking).filter(x->!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).toList(); if(!pending.isEmpty())blockers.add("Engineering documentation tasks pending: "+pending.stream().map(MatFlowWorkItem::getTitle).limit(4).reduce((a,b)->a+", "+b).orElse("pending"));
         MatFlowBom bom=latestBom(file.getId()); if(bom==null||bom.getStatus()!=BomStatus.READY_FOR_RELEASE)blockers.add("BOM is not Ready for Release"); return blockers;
     }
@@ -834,6 +918,29 @@ public class MatFlowWorkspaceService {
         List<MatFlowWorkItem> blocking = items(fileId,WorkItemType.ENGINEERING_TASK).stream().filter(MatFlowWorkItem::isBlocking).toList();
         return !blocking.isEmpty() && blocking.stream().allMatch(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus()));
     }
+    private String sharedQueryActorDepartment() {
+        boolean design = accessService.hasAnyRole("MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
+        boolean engineering = accessService.hasAnyRole("MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
+        if (design && !engineering) return "DESIGN";
+        if (engineering && !design) return "ENGINEERING";
+        return "MANAGEMENT";
+    }
+
+    private String defaultSharedQueryCounterpart(MatFlowProductionFile file, String fromDepartment, String actor) {
+        String candidate = null;
+        if ("DESIGN".equals(fromDepartment)) {
+            candidate = clean(file.getAssignedEngineer());
+            if (candidate == null) candidate = clean(file.getEngineeringHead());
+        } else if ("ENGINEERING".equals(fromDepartment)) {
+            candidate = clean(file.getDesigner());
+            if (candidate == null) candidate = clean(file.getDesignHead());
+        } else {
+            candidate = clean(file.getCurrentOwner());
+        }
+        if (candidate != null && actor != null && candidate.equalsIgnoreCase(actor)) return null;
+        return candidate;
+    }
+
     private long openQueryCount(UUID fileId){ return workRepository.countByProductionFile_IdAndItemTypeAndStatusIn(fileId,WorkItemType.ENGINEERING_QUERY,OPEN_QUERY_STATUSES); }
 
     private void refreshHealth(MatFlowProductionFile file){
@@ -900,7 +1007,7 @@ public class MatFlowWorkspaceService {
         List<WorkItemResponse> engineeringChecklist = engineering
                 ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_CHECK))
                 : List.of();
-        List<WorkItemResponse> sharedQueries = (design || engineering)
+        List<WorkItemResponse> sharedQueries = (design || engineering || ppc)
                 ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_QUERY))
                 : List.of();
         boolean juniorEngineerOnly = accessService.hasAnyRole("MATFLOW_ENGINEERING_JUNIOR")

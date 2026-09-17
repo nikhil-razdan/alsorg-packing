@@ -110,7 +110,7 @@ public class MatFlowInsightService {
             if (file.isRevisionReviewRequired()) blockers.add("Revision review");
             if (pendingDesignTasks > 0 && Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(file.getStage())) blockers.add(pendingDesignTasks + " Design task" + (pendingDesignTasks == 1 ? "" : "s") + " pending");
             if (designHolds > 0) blockers.add(designHolds + " Design task" + (designHolds == 1 ? "" : "s") + " on hold");
-            if (queries > 0) blockers.add(queries + " open quer" + (queries == 1 ? "y" : "ies"));
+            if (queries > 0) blockers.add(queries + " open issue" + (queries == 1 ? "" : "s"));
             if (pendingTasks > 0) blockers.add(pendingTasks + " engineering task" + (pendingTasks == 1 ? "" : "s"));
             if (totalOverdue > 0) blockers.add(totalOverdue + " overdue work item" + (totalOverdue == 1 ? "" : "s"));
             if (blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.RED) blockers.add("Critical release information pending");

@@ -37,7 +37,7 @@ const blockersForFocus = (row, focus) => {
   if (focus === "DESIGN") {
     return blockers.filter((value) => {
       const text = String(value || "").toLowerCase();
-      return text.includes("design") || text.includes("query") || text.includes("overdue") || text.includes("revision");
+      return text.includes("design") || text.includes("query") || text.includes("issue") || text.includes("overdue") || text.includes("revision");
     });
   }
   if (focus === "ENGINEERING") {
@@ -148,7 +148,7 @@ export function MatFlowDashboardPage() {
       .filter((row) => {
         if (focus === "DESIGN") return DESIGN_STAGES.has(row.stage) || (row.stage === "ENGINEERING_QUERY" && Number(row.openQueries || 0) > 0);
         if (focus === "ENGINEERING") return ENGINEERING_STAGES.has(row.stage) || row.stage === "PPC_GATE_2";
-        if (focus === "PPC") return PPC_STAGES.has(row.stage);
+        if (focus === "PPC") return PPC_STAGES.has(row.stage) || (row.stage === "ENGINEERING_QUERY" && Number(row.openQueries || 0) > 0);
         if (focus === "PRODUCTION") return row.stage === "PRODUCTION_RELEASED";
         return true;
       })
@@ -165,7 +165,7 @@ export function MatFlowDashboardPage() {
     ];
     if (focus === "ENGINEERING") return [
       ["In Engineering", engineering?.filesInEngineering || 0, "Current files"],
-      ["Open Queries", engineering?.openQueries || 0, "Shared with Design", Number(engineering?.openQueries || 0) > 0],
+      ["Open Issues", engineering?.openQueries || 0, "Shared with Design", Number(engineering?.openQueries || 0) > 0],
       ["Pending Tasks", engineering?.pendingTasks || 0, "Documentation work"],
       ["Completed Tasks", engineering?.completedTasks || 0, "Engineering tasks done"],
     ];
@@ -173,7 +173,7 @@ export function MatFlowDashboardPage() {
       ["Gate 1", data?.ppcGate1 || 0, "Awaiting / at Gate 1"],
       ["Gate 2", data?.ppcGate2 || 0, "Ready for release review"],
       ["Released", data?.productionReleased || 0, "Production Released"],
-      ["Attention", attention.length, "Current PPC queue", attention.length > 0],
+      ["Open Issues", data?.openQueries || 0, "Read-only Design ↔ Engineering visibility", Number(data?.openQueries || 0) > 0],
     ];
     if (focus === "PRODUCTION") return [
       ["Released", data?.productionReleased || 0, "Validated handoff"],
@@ -247,7 +247,16 @@ export function MatFlowDashboardPage() {
               <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-secondary)" }}>{blockersForFocus(row, focus).slice(0, 2).join(" · ") || "Attention required"}</Typography>
               <Typography sx={{ mt: 0.1, fontSize: 8.7, color: "var(--mf-text-muted)" }}>{dueLabel(row)}</Typography>
             </Box>
-            <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}`)} sx={secondaryBtnSx}>Open</Button>
+            <Button
+              size="small"
+              endIcon={<OpenInNewOutlinedIcon />}
+              onClick={() => navigate(Number(row.openQueries || 0) > 0
+                ? `/matflow/work?fileId=${row.productionFileId}&tab=queries`
+                : `/matflow/work?fileId=${row.productionFileId}`)}
+              sx={secondaryBtnSx}
+            >
+              {Number(row.openQueries || 0) > 0 ? "View issues" : "Open"}
+            </Button>
           </Box>
         ))}
       </Card>
