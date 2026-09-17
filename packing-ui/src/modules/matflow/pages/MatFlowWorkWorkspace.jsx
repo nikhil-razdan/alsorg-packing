@@ -41,6 +41,7 @@ import {
   MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
   MatFlowViewToggle,
+  MatFlowListGrid,
   PageHero,
   getMatFlowDepartmentAccess,
   primaryMatFlowDepartment,
@@ -1121,7 +1122,7 @@ export function MatFlowWorkWorkspacePage() {
       ) : (
       <>
       <Card sx={{ ...panelSx, p: 1.2 }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: juniorDesignerOnly ? "minmax(280px,2fr) 150px auto" : "minmax(260px,2fr) 135px 165px minmax(180px,1fr) auto" }, gap: 0.8 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: juniorDesignerOnly ? (viewMode === "CARD" ? "minmax(280px,2fr) 150px auto" : "minmax(320px,1fr) auto") : (viewMode === "CARD" ? "minmax(260px,2fr) 135px 165px minmax(180px,1fr) auto" : "minmax(320px,2fr) 165px minmax(180px,1fr) auto") }, gap: 0.8 }}>
           <TextField
             size="small"
             label="Search PD No. / Client / Project / Product / Drawing"
@@ -1130,10 +1131,10 @@ export function MatFlowWorkWorkspacePage() {
             onKeyDown={(e) => e.key === "Enter" && loadList()}
             sx={fieldSx}
           />
-          <TextField select size="small" label="View by" value={groupBy} onChange={(e) => { setGroupBy(e.target.value); setExpandedGroupKey(""); }} sx={fieldSx}>
+          {viewMode === "CARD" && <TextField select size="small" label="View by" value={groupBy} onChange={(e) => { setGroupBy(e.target.value); setExpandedGroupKey(""); }} sx={fieldSx}>
             <MenuItem value="PD">PD No.</MenuItem>
             <MenuItem value="CLIENT">Client</MenuItem>
-          </TextField>
+          </TextField>}
           {!juniorDesignerOnly && <TextField select size="small" label="Health" value={health} onChange={(e) => setHealth(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
             {HEALTH_FILTERS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
@@ -1148,7 +1149,43 @@ export function MatFlowWorkWorkspacePage() {
         </Box>
       </Card>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "430px minmax(0,1fr)" }, gap: 1.2, alignItems: "start" }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: viewMode === "LIST" ? "1fr" : { xs: "1fr", xl: "430px minmax(0,1fr)" }, gap: 1.2, alignItems: "start" }}>
+        {viewMode === "LIST" ? (
+          files.length === 0 ? (
+            <Card sx={{ ...panelSx, p: 0 }}><Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No work matches the current filters.</Box></Card>
+          ) : (
+            <MatFlowListGrid
+              columns={[
+                { key: "product", label: "Product / File", width: "300px" },
+                { key: "pd", label: "PD No.", width: "140px" },
+                { key: "context", label: "Client / Project", width: "220px" },
+                { key: "stage", label: "Stage", width: "170px" },
+                { key: "owner", label: "Department / Owner", width: "210px" },
+                { key: "attention", label: "Health / Issues", width: "190px" },
+                { key: "due", label: "Due", width: "125px" },
+                { key: "action", label: "", width: "105px", align: "right" },
+              ]}
+              rows={files}
+              minWidth={1420}
+              getRowKey={(row) => row.id}
+              rowAccent={(row) => healthVisual(row.releaseHealth).accent}
+              rowSx={(row) => selectedId === row.id ? { background: "var(--mf-primary-soft)", "&:hover": { background: "var(--mf-primary-soft)" } } : {}}
+              onRowClick={(row) => { setSelectedQueryId(""); setSelectedId(row.id); }}
+              rowAriaLabel={(row) => `Open ${row.productName || "Product"} ${row.projectCode || ""}`}
+              renderCell={(row, column) => {
+                const visual = healthVisual(row.releaseHealth);
+                if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
+                if (column.key === "pd") return <Typography sx={{ fontSize: 10.2, fontWeight: 950, color: "var(--mf-text)" }}>{row.projectCode || "—"}</Typography>;
+                if (column.key === "context") return <Box><Typography sx={{ fontSize: 9.9, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>;
+                if (column.key === "stage") return <Box><Typography sx={{ fontSize: 9.8, fontWeight: 900, color: visual.accent }}>{readable(row.stage)}</Typography>{workspaceFocus === "DESIGN" && retainWholePdInDesign && <Typography noWrap sx={{ mt: 0.08, fontSize: 8.3, color: "var(--mf-text-muted)" }}>{designProductWorkflowNote(row)}</Typography>}</Box>;
+                if (column.key === "owner") return <Box><Typography sx={{ fontSize: 9.6, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.currentDepartment ? readable(row.currentDepartment) : "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography></Box>;
+                if (column.key === "attention") return <Box><Typography sx={{ fontSize: 9.6, fontWeight: 900, color: visual.accent }}>{visual.label || "Workflow"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: Number(row.openQueries || 0) > 0 ? "var(--mf-warning-text)" : "var(--mf-text-muted)" }}>{Number(row.openQueries || 0) > 0 ? `${row.openQueries} open issue${Number(row.openQueries) === 1 ? "" : "s"}` : fileAttention(row, workspaceFocus) ? "Action required" : "No open issues"}</Typography></Box>;
+                if (column.key === "due") return <Typography sx={{ fontSize: 9.4, fontWeight: 800, color: "var(--mf-text-secondary)", whiteSpace: "nowrap" }}>{compactDate(row.plannedProductionReleaseDate || row.plannedDispatchDate)}</Typography>;
+                return <Button size="small" onClick={(event) => { event.stopPropagation(); setSelectedQueryId(""); setSelectedId(row.id); }} sx={secondaryBtnSx}>Open</Button>;
+              }}
+            />
+          )
+        ) : (
         <Card sx={{ ...panelSx, p: 0, maxHeight: { xl: "calc(100vh - 210px)" }, overflow: "auto" }}>
           <Box sx={{ px: 1.25, py: 1.05, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
             <Box>
@@ -1273,6 +1310,7 @@ export function MatFlowWorkWorkspacePage() {
             );
           })}
         </Card>
+        )}
 
         {!detail ? (
           <Card sx={{ ...panelSx, p: { xs: 2.2, md: 3 }, minHeight: 270 }}>
@@ -1580,26 +1618,56 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
         </Box>
       </Card>
 
-      <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-        <Box sx={{ display: viewMode === "CARD" ? "none" : { xs: "none", lg: "grid" }, gridTemplateColumns: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto", gap: 1, px: 1.3, py: 0.9, background: "var(--mf-table-head)", borderBottom: "1px solid var(--mf-border)" }}>
-          {["Product / PD", "Project / Client", "Task", "Received / Due", "Assigned User(s)", "Status", ""].map((label, index) => <Typography key={`${label}-${index}`} sx={{ fontSize: 9, fontWeight: 900, color: "var(--mf-text-muted)" }}>{label}</Typography>)}
+      {loading ? (
+        <Card sx={{ ...panelSx, p: 0 }}><Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Design tasks…</Box></Card>
+      ) : rows.length === 0 ? (
+        <Card sx={{ ...panelSx, p: 0 }}><Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Design tasks match the current filters.</Box></Card>
+      ) : viewMode === "CARD" ? (
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
+          {rows.map((row) => {
+            const task = row.task || {};
+            return (
+              <Card key={task.id} sx={{ ...panelSx, p: 1.1, display: "grid", gap: 0.8, boxShadow: "none", borderTop: `3px solid ${designTaskStatusAccent(task.status)}` }}>
+                <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
+                  <Box><Typography sx={{ fontSize: 8.4, color: "var(--mf-text-muted)" }}>PROJECT / CLIENT</Typography><Typography sx={{ mt: 0.08, fontSize: 9.7, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"} · {row.clientName || "—"}</Typography></Box>
+                  <Box><Typography sx={{ fontSize: 8.4, color: "var(--mf-text-muted)" }}>STATUS</Typography><Typography sx={{ mt: 0.08, fontSize: 9.7, fontWeight: 900, color: designTaskStatusAccent(task.status) }}>{designTaskStatusLabel(task.status)}</Typography></Box>
+                </Box>
+                <Box><Typography sx={{ fontSize: 10.7, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>
+                <Typography sx={{ fontSize: 9.3, color: "var(--mf-text-secondary)" }}>{juniorDesignerOnly ? (currentUsername || "You") : ((task.assignees || []).join(", ") || "Unassigned")} · due {toDateTime(task.dueAt)}</Typography>
+                <Button size="small" onClick={() => onOpenFile(row.productionFileId)} sx={secondaryBtnSx}>{juniorDesignerOnly ? "Open Task" : "Open File"}</Button>
+              </Card>
+            );
+          })}
         </Box>
-        {loading ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Design tasks…</Box> : rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Design tasks match the current filters.</Box> : rows.map((row) => {
-          const task = row.task || {};
-          return (
-            <Box key={task.id} sx={{ px: 1.3, py: 1.05, display: "grid", gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", lg: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto" }, gap: 1, alignItems: "center", borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.5 : 0, m: viewMode === "CARD" ? 0.8 : 0, background: viewMode === "CARD" ? "var(--mf-panel-solid)" : "transparent" }}>
-              <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
-              <Box><Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{row.clientName || "Client not assigned"}</Typography></Box>
-              <Box><Typography sx={{ fontSize: 10.8, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>
-              <Box><Typography sx={{ fontSize: 9.8, color: "var(--mf-text-secondary)" }}>{toDateTime(task.receivedAt)}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Due {toDateTime(task.dueAt)}</Typography></Box>
-              <Box><Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{juniorDesignerOnly ? (currentUsername || "You") : ((task.assignees || []).join(", ") || "Unassigned")}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Assigned by {task.assignedBy || task.designer1 || "—"}</Typography></Box>
-              <Box><Chip label={designTaskStatusLabel(task.status)} sx={{ ...statusSx, color: designTaskStatusAccent(task.status) }} /></Box>
-              <Button size="small" onClick={() => onOpenFile(row.productionFileId)} sx={secondaryBtnSx}>{juniorDesignerOnly ? "Open Task" : "Open File"}</Button>
-            </Box>
-          );
-        })}
-      </Card>
-    </Box>
+      ) : (
+        <MatFlowListGrid
+          columns={[
+            { key: "product", label: "Product / PD", width: "300px" },
+            { key: "context", label: "Project / Client", width: "220px" },
+            { key: "task", label: "Task", width: "minmax(320px,1.3fr)" },
+            { key: "dates", label: "Received / Due", width: "220px" },
+            { key: "assignees", label: "Assigned User(s)", width: "240px" },
+            { key: "status", label: "Status", width: "150px" },
+            { key: "action", label: "", width: "120px", align: "right" },
+          ]}
+          rows={rows}
+          minWidth={1470}
+          getRowKey={(row, index) => row.task?.id || `${row.productionFileId}-${index}`}
+          rowAccent={(row) => designTaskStatusAccent(row.task?.status)}
+          renderCell={(row, column) => {
+            const task = row.task || {};
+            if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
+            if (column.key === "context") return <Box><Typography sx={{ fontSize: 9.9, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.clientName || "Client not assigned"}</Typography></Box>;
+            if (column.key === "task") return <Box><Typography sx={{ fontSize: 10.5, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>;
+            if (column.key === "dates") return <Box><Typography sx={{ fontSize: 9.5, color: "var(--mf-text-secondary)" }}>{toDateTime(task.receivedAt)}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>Due {toDateTime(task.dueAt)}</Typography></Box>;
+            if (column.key === "assignees") return <Box><Typography sx={{ fontSize: 9.6, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{juniorDesignerOnly ? (currentUsername || "You") : ((task.assignees || []).join(", ") || "Unassigned")}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>Assigned by {task.assignedBy || task.designer1 || "—"}</Typography></Box>;
+            if (column.key === "status") return <Typography sx={{ fontSize: 9.8, fontWeight: 900, color: designTaskStatusAccent(task.status) }}>{designTaskStatusLabel(task.status)}</Typography>;
+            return <Button size="small" onClick={() => onOpenFile(row.productionFileId)} sx={secondaryBtnSx}>{juniorDesignerOnly ? "Open Task" : "Open File"}</Button>;
+          }}
+        />
+      )}
+   </Box>
   );
 }
 

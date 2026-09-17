@@ -33,6 +33,7 @@ import {
   MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
   MatFlowViewToggle,
+  MatFlowListGrid,
   MatFlowStatusChip,
   pageSx,
   panelSx,
@@ -353,18 +354,27 @@ export function MatFlowBomListPage() {
           ))}
         </Box>
       ) : (
-        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-          <Box sx={listHeadSx}><div>Product / PD</div><div>BOM / Drawing</div><div>Revision</div><div>Status</div><div>Updated</div></Box>
-          {filteredRows.map((row) => (
-            <Box key={row.id} component="button" type="button" onClick={() => nav(`/matflow/boms/${row.id}`)} sx={listRowSx}>
-              <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
-              <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography></Box>
-              <Typography sx={rowSecondarySx}>Rev {row.revisionNo}</Typography>
-              <MatFlowStatusChip status={row.status} />
-              <Typography sx={rowMutedSx}>{row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}</Typography>
-            </Box>
-          ))}
-        </Card>
+        <MatFlowListGrid
+          columns={[
+            { key: "product", label: "Product / PD", width: "300px" },
+            { key: "bom", label: "BOM / Drawing", width: "minmax(330px,1.4fr)" },
+            { key: "revision", label: "Revision", width: "110px" },
+            { key: "status", label: "Status", width: "180px" },
+            { key: "updated", label: "Updated", width: "190px" },
+          ]}
+          rows={filteredRows}
+          minWidth={1120}
+          getRowKey={(row) => row.id}
+          onRowClick={(row) => nav(`/matflow/boms/${row.id}`)}
+          rowAriaLabel={(row) => `Open BOM ${row.bomNumber || ""}`}
+          renderCell={(row, column) => {
+            if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
+            if (column.key === "bom") return <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography></Box>;
+            if (column.key === "revision") return <Typography sx={rowSecondarySx}>Rev {row.revisionNo}</Typography>;
+            if (column.key === "status") return <MatFlowStatusChip status={row.status} />;
+            return <Typography sx={rowMutedSx}>{row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}</Typography>;
+          }}
+        />
       )}
 
       <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
@@ -379,58 +389,46 @@ export function MatFlowBomListPage() {
 
         {!pendingBomFiles.length ? (
           <EmptyState>Every active Production File already has a current BOM.</EmptyState>
+        ) : viewMode === "CARD" ? (
+          <Box sx={{ p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
+            {pendingBomFiles.slice(0, 40).map((file) => {
+              const eligible = file.stage === "ENGINEERING_WORK" && file.engineeringDecision === "APPROVED";
+              return (
+                <Box key={file.id} sx={{ p: 1.1, border: "1px solid var(--mf-border)", borderRadius: 1.5, display: "grid", gap: 0.75, background: "var(--mf-panel-solid)" }}>
+                  <MatFlowProductIdentity productName={file.productName} projectCode={file.projectCode} productionFileNo={file.productionFileNo} drawingNo={file.drawingNo} size="sm" />
+                  <Box sx={{ display: "flex", gap: 0.7, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(file.stage)}</Typography>
+                    <MatFlowStatusChip status={file.releaseHealth} />
+                  </Box>
+                  <Typography sx={{ fontSize: 9.7, fontWeight: 800, color: eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)" }}>{eligible ? "Ready to start BOM" : "Not yet BOM eligible"}</Typography>
+                  <Button size="small" onClick={() => nav(`/matflow/work?fileId=${file.id}`)} sx={secondaryBtnSx}>Open File</Button>
+                </Box>
+              );
+            })}
+          </Box>
         ) : (
-          <Box sx={viewMode === "CARD" ? { p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 } : {}}>
-          {pendingBomFiles.slice(0, 40).map((file) => {
-            const eligible =
-              file.stage === "ENGINEERING_WORK" &&
-              file.engineeringDecision === "APPROVED";
-            return (
-              <Box
-                key={file.id}
-                sx={{
-                  px: 1.5,
-                  py: 1.05,
-                  borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)",
-                  border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined,
-                  borderRadius: viewMode === "CARD" ? 1.5 : 0,
-                  display: "grid",
-                  gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", md: "1.25fr .8fr .7fr 1.1fr auto" },
-                  gap: 1,
-                  alignItems: "center",
-                  "&:last-child": { borderBottom: 0 },
-                }}
-              >
-                <MatFlowProductIdentity
-                  productName={file.productName}
-                  projectCode={file.projectCode}
-                  productionFileNo={file.productionFileNo}
-                  drawingNo={file.drawingNo}
-                  size="sm"
-                />
-                <Typography sx={{ fontSize: 10.2, fontWeight: 800, color: "var(--mf-text-secondary)" }}>
-                  {readable(file.stage)}
-                </Typography>
-                <MatFlowStatusChip status={file.releaseHealth} />
-                <Typography
-                  sx={{
-                    fontSize: 9.8,
-                    fontWeight: 800,
-                    color: eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)",
-                  }}
-                >
-                  {eligible ? "Ready to start BOM" : "Not yet BOM eligible"}
-                </Typography>
-                <Button
-                  size="small"
-                  onClick={() => nav(`/matflow/work?fileId=${file.id}`)}
-                  sx={secondaryBtnSx}
-                >
-                  Open File
-                </Button>
-              </Box>
-            );
-          })}
+          <Box sx={{ p: 1 }}>
+            <MatFlowListGrid
+              columns={[
+                { key: "product", label: "Product / PD", width: "300px" },
+                { key: "stage", label: "Stage", width: "180px" },
+                { key: "health", label: "Health", width: "150px" },
+                { key: "readiness", label: "BOM Readiness", width: "minmax(260px,1fr)" },
+                { key: "action", label: "", width: "120px", align: "right" },
+              ]}
+              rows={pendingBomFiles.slice(0, 40)}
+              minWidth={1040}
+              getRowKey={(file) => file.id}
+              rowAccent={(file) => String(file.releaseHealth || "").toUpperCase() === "RED" ? "var(--mf-danger-text)" : String(file.releaseHealth || "").toUpperCase() === "AMBER" ? "var(--mf-warning-text)" : String(file.releaseHealth || "").toUpperCase() === "GREEN" ? "var(--mf-success-text)" : "transparent"}
+              renderCell={(file, column) => {
+                const eligible = file.stage === "ENGINEERING_WORK" && file.engineeringDecision === "APPROVED";
+                if (column.key === "product") return <MatFlowProductIdentity productName={file.productName} projectCode={file.projectCode} productionFileNo={file.productionFileNo} drawingNo={file.drawingNo} size="sm" />;
+                if (column.key === "stage") return <Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(file.stage)}</Typography>;
+                if (column.key === "health") return <MatFlowStatusChip status={file.releaseHealth} />;
+                if (column.key === "readiness") return <Typography sx={{ fontSize: 9.7, fontWeight: 850, color: eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)" }}>{eligible ? "Ready to start BOM" : "Not yet BOM eligible"}</Typography>;
+                return <Button size="small" onClick={() => nav(`/matflow/work?fileId=${file.id}`)} sx={secondaryBtnSx}>Open File</Button>;
+              }}
+            />
           </Box>
         )}
       </Card>
@@ -1226,7 +1224,10 @@ const listHeadSx = {
   px: 1.5,
   py: 0.85,
   background: "var(--mf-table-head)",
-  borderBottom: "1px solid var(--mf-border)",
+  borderBottom: "1px solid var(--mf-border-strong)",
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
   color: "var(--mf-text-muted)",
   fontSize: 9,
   fontWeight: 900,

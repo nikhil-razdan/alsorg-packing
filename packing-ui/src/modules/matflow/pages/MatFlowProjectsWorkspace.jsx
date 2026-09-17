@@ -35,6 +35,7 @@ import {
   MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
   MatFlowViewToggle,
+  MatFlowListGrid,
   PageHero,
   EmptyState,
   MatFlowStatusChip,
@@ -526,7 +527,7 @@ export function MatFlowProjectsPage() {
     MATFLOW_ROLES.ENGINEERING
   );
 
-  const [viewMode, setViewMode] = useMatFlowViewMode("projects", "CARD");
+  const [viewMode, setViewMode] = useMatFlowViewMode("projects", "LIST");
   const [rows, setRows] = useState([]);
   const [boms, setBoms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -788,6 +789,97 @@ export function MatFlowProjectsPage() {
         <Card sx={{ ...panelSx, p: 0 }}>
           <EmptyState>No projects found.</EmptyState>
         </Card>
+      ) : viewMode === "LIST" ? (
+        <Box sx={{ display: "grid", gap: 1 }}>
+          <MatFlowListGrid
+            columns={[
+              { key: "pd", label: "PD No.", width: "160px" },
+              { key: "project", label: "Project / Client", width: "minmax(280px,1.1fr)" },
+              { key: "products", label: "Products / Files", width: "150px" },
+              { key: "workflow", label: "Workflow", width: "minmax(260px,1fr)" },
+              { key: "health", label: "Health", width: "140px" },
+              { key: "completion", label: "Tentative Completion", width: "170px" },
+              { key: "owner", label: "Manager / Designer", width: "200px" },
+              { key: "actions", label: "", width: "250px", align: "right" },
+            ]}
+            rows={filteredRows}
+            minWidth={1580}
+            getRowKey={(project) => project.id}
+            rowAccent={(project) => {
+              const values = (project.products || []).filter((product) => product.productionFileId).map((product) => String(product.releaseHealth || "").toUpperCase());
+              if (values.includes("RED")) return "var(--mf-danger-text)";
+              if (values.includes("AMBER")) return "var(--mf-warning-text)";
+              if (values.includes("GREEN")) return "var(--mf-success-text)";
+              return "transparent";
+            }}
+            renderCell={(project, column) => {
+              const products = project.products || [];
+              const productionFiles = products.filter((product) => product.productionFileId);
+              const stageCounts = productionFiles.reduce((map, product) => {
+                const key = product.stage || "NOT_STARTED";
+                map.set(key, (map.get(key) || 0) + 1);
+                return map;
+              }, new Map());
+              const healthValues = productionFiles.map((product) => String(product.releaseHealth || "").toUpperCase());
+              const projectHealth = healthValues.includes("RED") ? "RED" : healthValues.includes("AMBER") ? "AMBER" : healthValues.includes("GREEN") && healthValues.length ? "GREEN" : "PENDING";
+              const bomCount = products.reduce((total, product) => total + (bomsByFile.get(product.productionFileId) || []).length, 0);
+              const productsWithBom = products.filter((product) => (bomsByFile.get(product.productionFileId) || []).length > 0).length;
+              if (column.key === "pd") return <Box><Typography sx={{ fontSize: 10.7, fontWeight: 950, color: "var(--mf-text)" }}>{project.projectCode || "—"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>{project.plantCode || "No plant"}</Typography></Box>;
+              if (column.key === "project") return <Box><Typography noWrap sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{project.projectName || "Unnamed Project"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 9, color: "var(--mf-text-secondary)" }}>{project.clientName || "Client not assigned"}</Typography></Box>;
+              if (column.key === "products") return <Box><Typography sx={{ fontSize: 10.2, fontWeight: 900, color: "var(--mf-text)" }}>{products.length} product{products.length === 1 ? "" : "s"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{productionFiles.length} file{productionFiles.length === 1 ? "" : "s"}{canSeeEngineeringReference ? ` · ${productsWithBom}/${products.length || 0} with BOM · ${bomCount} rev` : ""}</Typography></Box>;
+              if (column.key === "workflow") return <Box sx={{ display: "flex", gap: 0.35, flexWrap: "wrap" }}>{Array.from(stageCounts.entries()).slice(0, 3).map(([stageName, count]) => <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />)}{!stageCounts.size && <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>No Production File yet</Typography>}</Box>;
+              if (column.key === "health") return <Typography sx={{ fontSize: 9.8, fontWeight: 900, color: ticketHealthColor(projectHealth) }}>{healthLabel(projectHealth)}</Typography>;
+              if (column.key === "completion") return <Typography sx={{ fontSize: 9.7, fontWeight: 800, color: project.requiredDate ? "var(--mf-text-secondary)" : "var(--mf-text-muted)" }}>{project.requiredDate ? formatDate(project.requiredDate) : "Not set"}</Typography>;
+              if (column.key === "owner") return <Box><Typography noWrap sx={{ fontSize: 9.7, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{project.projectManager || "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{project.designer1 || "Designer not assigned"}</Typography></Box>;
+              return <Box sx={{ display: "flex", gap: 0.45, justifyContent: "flex-end", flexWrap: "nowrap" }}>
+                {canProjectWrite && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(project)} sx={secondaryBtnSx}>Edit</Button>}
+                {canProjectWrite && <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={primaryBtnSx}>Add</Button>}
+                <Button size="small" endIcon={expanded[project.id] ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />} onClick={() => setExpanded((current) => ({ ...current, [project.id]: !current[project.id] }))} sx={secondaryBtnSx}>{expanded[project.id] ? "Close" : "Details"}</Button>
+              </Box>;
+            }}
+          />
+
+          {filteredRows.filter((project) => expanded[project.id]).map((project) => {
+            const products = project.products || [];
+            return (
+              <Card key={`details-${project.id}`} sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
+                <Box sx={{ px: 1.35, py: 1, background: "var(--mf-table-head)", borderBottom: "1px solid var(--mf-border-strong)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                  <Box>
+                    <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>{project.projectCode} · {project.projectName || "Unnamed Project"}</Typography>
+                    <Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{project.clientName || "Client not assigned"} · {project.plantCode || "No plant"}</Typography>
+                  </Box>
+                  <Button size="small" onClick={() => setExpanded((current) => ({ ...current, [project.id]: false }))} sx={secondaryBtnSx}>Close details</Button>
+                </Box>
+                <Box sx={{ px: 1.35, py: 1.05, borderBottom: "1px solid var(--mf-border)" }}>
+                  <Box sx={projectMetaGridSx}>
+                    <Meta label="Plant" value={project.plantCode} />
+                    <Meta label="Priority" value={project.priority || "NORMAL"} />
+                    <Meta label="Tentative Completion" value={project.requiredDate ? formatDate(project.requiredDate) : "Not set"} />
+                    {juniorDesignerOnly ? <Meta label="Client" value={project.clientName || "—"} /> : <Meta label="Project Manager" value={project.projectManager || "—"} />}
+                    {!juniorDesignerOnly && <Meta label="Designer" value={project.designer1 || "—"} />}
+                    {!juniorDesignerOnly && <Meta label="Design Head" value={project.designHead || "—"} />}
+                  </Box>
+                </Box>
+                <Box sx={{ px: 1.35, py: 1.2 }}>
+                  {!products.length ? <EmptyState>No products added.</EmptyState> : (
+                    <Box sx={{ display: "grid", gap: 0.9 }}>
+                      {products.map((product) => juniorDesignerOnly ? (
+                        <Box key={product.id} sx={{ p: 1.1, border: "1px solid var(--mf-border)", borderRadius: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0,1.4fr) .8fr .8fr auto" }, gap: 1, alignItems: "center", background: "var(--mf-panel-solid)" }}>
+                          <MatFlowProductIdentity productName={product.productName} projectCode={project.projectCode} productionFileNo={product.productionFileNo} drawingNo={product.drawingNo} size="sm" />
+                          <Box><Typography sx={{ fontSize: 9, color: "var(--mf-text-muted)" }}>Dimensions</Typography><Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{product.dimensions || "—"}</Typography></Box>
+                          <Box><Typography sx={{ fontSize: 9, color: "var(--mf-text-muted)" }}>Required</Typography><Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{formatDate(product.requiredDate)}</Typography></Box>
+                          <Button size="small" onClick={() => openProductionFile(product)} sx={primaryBtnSx}>Open my task</Button>
+                        </Box>
+                      ) : (
+                        <ProductMasterRow key={product.id} project={project} product={product} boms={bomsByFile.get(product.productionFileId) || []} canEdit={canProjectWrite} showEngineering={canSeeEngineeringReference} onEdit={openProductEdit} onImage={uploadImage} onOpenFile={openProductionFile} onOpenBom={openBom} />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </Card>
+            );
+          })}
+        </Box>
       ) : (
         <Box sx={{
           display: "grid",

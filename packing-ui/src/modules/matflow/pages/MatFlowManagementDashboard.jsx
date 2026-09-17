@@ -9,6 +9,7 @@ import {
   LoadingBlock,
   MatFlowProductIdentity,
   MatFlowViewToggle,
+  MatFlowListGrid,
   MATFLOW_LIST_CARD_OPTIONS,
   MATFLOW_ROLES,
   getMatFlowDepartmentAccess,
@@ -63,6 +64,28 @@ const dueLabel = (row) => {
   if (days < 0) return `${Math.abs(days)}d overdue`;
   if (days === 0) return "Due today";
   return `${days}d to release`;
+};
+
+const designTaskStatusLabel = (status) => {
+  const value = String(status || "").toUpperCase();
+  if (["COMPLETED", "DONE", "CANCELLED"].includes(value)) return "Completed";
+  if (["WIP", "WORKING", "HOLD", "IN_PROGRESS"].includes(value)) return "WIP";
+  return "Pending / Yet To Start";
+};
+
+const designTaskStatusAccent = (status) => {
+  const value = String(status || "").toUpperCase();
+  if (["COMPLETED", "DONE", "CANCELLED"].includes(value)) return "var(--mf-success-text)";
+  if (["WIP", "WORKING", "HOLD", "IN_PROGRESS"].includes(value)) return "var(--mf-primary-text)";
+  return "var(--mf-warning-text)";
+};
+
+const attentionAccent = (row) => {
+  if (String(row?.releaseHealth || "").toUpperCase() === "RED") return "var(--mf-danger-text)";
+  if (String(row?.releaseHealth || "").toUpperCase() === "AMBER") return "var(--mf-warning-text)";
+  if (String(row?.releaseHealth || "").toUpperCase() === "GREEN") return "var(--mf-success-text)";
+  if (String(row?.stage || "").toUpperCase() === "PRODUCTION_RELEASED") return "var(--mf-success-text)";
+  return "transparent";
 };
 
 function Metric({ label, value, helper, attention = false }) {
@@ -244,70 +267,95 @@ export function MatFlowDashboardPage() {
       </Card>
 
       {juniorDesignerOnly ? (
-        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-          <Box sx={{ px: 1.25, py: 0.9, borderBottom: "1px solid var(--mf-border)" }}>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>My assigned tasks</Typography>
-            <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>No other Design users, products or department-wide work is included.</Typography>
-          </Box>
-          {!juniorTaskRows.length ? (
-            <Box sx={{ p: 2.5, textAlign: "center", fontSize: 10.5, color: "var(--mf-text-muted)" }}>No assigned Design tasks match the current search.</Box>
-          ) : (
-          <Box sx={viewMode === "CARD" ? { p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 } : {}}>
-          {juniorTaskRows.map((row) => {
-            const task = row.task || {};
-            return (
-              <Box key={task.id || `${row.productionFileId}-${task.taskNo}`} sx={{ px: 1.25, py: 0.95, display: "grid", gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", md: "1.35fr .95fr 1.3fr .8fr auto" }, gap: 0.9, alignItems: "center", borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.5 : 0, background: viewMode === "CARD" ? "var(--mf-panel-solid)" : "transparent", "&:last-child": { borderBottom: viewMode === "CARD" ? undefined : 0 } }}>
-                <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
-                <Box><Typography sx={{ fontSize: 10.1, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "Client not assigned"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>
-                <Box><Typography sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{task.title || "Assigned task"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo || "—"} · {readable(task.taskType || "OTHER")}</Typography></Box>
-                <Box><Typography sx={{ fontSize: 9.6, fontWeight: 900, color: String(task.status || "").toUpperCase() === "COMPLETED" ? "var(--mf-success-text)" : String(task.status || "").toUpperCase() === "WIP" ? "var(--mf-primary-text)" : "var(--mf-warning-text)" }}>{String(task.status || "PENDING").toUpperCase() === "PENDING" ? "Pending / Yet To Start" : task.status}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>Due {task.dueAt ? new Date(task.dueAt).toLocaleString() : "—"}</Typography></Box>
-                <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}&tab=designTasks`)} sx={secondaryBtnSx}>Open task</Button>
-              </Box>
-            );
-          })}
-          </Box>
-          )}
-        </Card>
-      ) : (
-        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-        <Box sx={{ px: 1.25, py: 0.9, borderBottom: "1px solid var(--mf-border)" }}>
-          <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>Needs attention</Typography>
-          <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>Only records relevant to {focusLabel(focus).toLowerCase()} are listed here.</Typography>
-        </Box>
-        {!attention.length ? (
-          <Box sx={{ p: 2.5, textAlign: "center", fontSize: 10.5, color: "var(--mf-text-muted)" }}>No matching attention items.</Box>
+        viewMode === "LIST" && juniorTaskRows.length ? (
+          <MatFlowListGrid
+            columns={[
+              { key: "product", label: "Product / PD", width: "300px" },
+              { key: "context", label: "Client / Project", width: "220px" },
+              { key: "task", label: "Task", width: "minmax(300px,1.3fr)" },
+              { key: "status", label: "Status / Due", width: "210px" },
+              { key: "action", label: "", width: "120px", align: "right" },
+            ]}
+            rows={juniorTaskRows}
+            minWidth={1160}
+            getRowKey={(row, index) => row.task?.id || `${row.productionFileId}-${index}`}
+            rowAccent={(row) => designTaskStatusAccent(row.task?.status)}
+            renderCell={(row, column) => {
+              const task = row.task || {};
+              if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
+              if (column.key === "context") return <Box><Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>;
+              if (column.key === "task") return <Box><Typography sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{task.title || "Assigned task"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo || "—"} · {readable(task.taskType || "OTHER")}</Typography></Box>;
+              if (column.key === "status") return <Box><Typography sx={{ fontSize: 9.8, fontWeight: 900, color: designTaskStatusAccent(task.status) }}>{designTaskStatusLabel(task.status)}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>Due {task.dueAt ? new Date(task.dueAt).toLocaleString() : "—"}</Typography></Box>;
+              return <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}&tab=designTasks`)} sx={secondaryBtnSx}>Open</Button>;
+            }}
+          />
         ) : (
-        <Box sx={viewMode === "CARD" ? { p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 } : {}}>
-        {attention.map((row) => (
-          <Box key={row.productionFileId || row.productionFileNo} sx={{ px: 1.25, py: 0.95, display: "grid", gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", md: "1.4fr .9fr .7fr 1.3fr auto" }, gap: 0.9, alignItems: "center", borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.5 : 0, background: viewMode === "CARD" ? "var(--mf-panel-solid)" : "transparent", "&:last-child": { borderBottom: viewMode === "CARD" ? undefined : 0 } }}>
-            <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
-            <Box>
-              <Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || row.projectName || "—"}</Typography>
-              <Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography>
+          <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+            <Box sx={{ px: 1.25, py: 0.9, borderBottom: "1px solid var(--mf-border)" }}>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>My assigned tasks</Typography>
+              <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>No other Design users, products or department-wide work is included.</Typography>
             </Box>
-            <Box>
-              <Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(row.stage)}</Typography>
-              <Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography>
+            {!juniorTaskRows.length ? (
+              <Box sx={{ p: 2.5, textAlign: "center", fontSize: 10.5, color: "var(--mf-text-muted)" }}>No assigned Design tasks match the current search.</Box>
+            ) : (
+              <Box sx={{ p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
+                {juniorTaskRows.map((row) => {
+                  const task = row.task || {};
+                  return (
+                    <Card key={task.id || `${row.productionFileId}-${task.taskNo}`} sx={{ ...panelSx, p: 1.05, display: "grid", gap: 0.75, boxShadow: "none", borderTop: `3px solid ${designTaskStatusAccent(task.status)}` }}>
+                      <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                      <Box><Typography sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{task.title || "Assigned task"}</Typography><Typography sx={{ fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo || "—"} · {designTaskStatusLabel(task.status)}</Typography></Box>
+                      <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}&tab=designTasks`)} sx={secondaryBtnSx}>Open task</Button>
+                    </Card>
+                  );
+                })}
+              </Box>
+            )}
+          </Card>
+        )
+      ) : (
+        viewMode === "LIST" && attention.length ? (
+          <MatFlowListGrid
+            columns={[
+              { key: "product", label: "Product / PD", width: "300px" },
+              { key: "context", label: "Client / Project", width: "220px" },
+              { key: "workflow", label: "Stage / Owner", width: "210px" },
+              { key: "attention", label: "Attention / Due", width: "minmax(340px,1.4fr)" },
+              { key: "action", label: "", width: "130px", align: "right" },
+            ]}
+            rows={attention}
+            minWidth={1250}
+            getRowKey={(row, index) => row.productionFileId || row.productionFileNo || index}
+            rowAccent={attentionAccent}
+            renderCell={(row, column) => {
+              if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
+              if (column.key === "context") return <Box><Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>;
+              if (column.key === "workflow") return <Box><Typography sx={{ fontSize: 9.9, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{readable(row.stage)}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography></Box>;
+              if (column.key === "attention") return <Box><Typography noWrap sx={{ fontSize: 9.6, color: "var(--mf-text-secondary)" }}>{blockersForFocus(row, focus).slice(0, 2).join(" · ") || "Attention required"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{dueLabel(row)}</Typography></Box>;
+              return <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(Number(row.openQueries || 0) > 0 ? `/matflow/work?fileId=${row.productionFileId}&tab=queries` : `/matflow/work?fileId=${row.productionFileId}`)} sx={secondaryBtnSx}>{Number(row.openQueries || 0) > 0 ? "View issues" : "Open"}</Button>;
+            }}
+          />
+        ) : (
+          <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+            <Box sx={{ px: 1.25, py: 0.9, borderBottom: "1px solid var(--mf-border)" }}>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>Needs attention</Typography>
+              <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>Only records relevant to {focusLabel(focus).toLowerCase()} are listed here.</Typography>
             </Box>
-            <Box>
-              <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-secondary)" }}>{blockersForFocus(row, focus).slice(0, 2).join(" · ") || "Attention required"}</Typography>
-              <Typography sx={{ mt: 0.1, fontSize: 8.7, color: "var(--mf-text-muted)" }}>{dueLabel(row)}</Typography>
-            </Box>
-            <Button
-              size="small"
-              endIcon={<OpenInNewOutlinedIcon />}
-              onClick={() => navigate(Number(row.openQueries || 0) > 0
-                ? `/matflow/work?fileId=${row.productionFileId}&tab=queries`
-                : `/matflow/work?fileId=${row.productionFileId}`)}
-              sx={secondaryBtnSx}
-            >
-              {Number(row.openQueries || 0) > 0 ? "View issues" : "Open"}
-            </Button>
-          </Box>
-        ))}
-        </Box>
-        )}
-        </Card>
+            {!attention.length ? (
+              <Box sx={{ p: 2.5, textAlign: "center", fontSize: 10.5, color: "var(--mf-text-muted)" }}>No matching attention items.</Box>
+            ) : (
+              <Box sx={{ p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
+                {attention.map((row) => (
+                  <Card key={row.productionFileId || row.productionFileNo} sx={{ ...panelSx, p: 1.05, display: "grid", gap: 0.75, boxShadow: "none", borderTop: `3px solid ${attentionAccent(row)}` }}>
+                    <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                    <Box><Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(row.stage)} · {row.currentOwner || "Unassigned"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{dueLabel(row)}</Typography></Box>
+                    <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(Number(row.openQueries || 0) > 0 ? `/matflow/work?fileId=${row.productionFileId}&tab=queries` : `/matflow/work?fileId=${row.productionFileId}`)} sx={secondaryBtnSx}>{Number(row.openQueries || 0) > 0 ? "View issues" : "Open"}</Button>
+                  </Card>
+                ))}
+              </Box>
+            )}
+          </Card>
+        )
       )}
     </Box>
   );

@@ -13,6 +13,7 @@ import {
   PageHero,
   MATFLOW_LIST_CARD_OPTIONS,
   MatFlowViewToggle,
+  MatFlowListGrid,
   getMatFlowDepartmentAccess,
   fieldSx,
   pageSx,
@@ -160,48 +161,31 @@ export function MatFlowReleasePage() {
           })}
         </Box>
       ) : (
-        <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
-          {filteredRows.map((row) => {
+        <MatFlowListGrid
+          columns={[
+            { key: "product", label: "Product / PD", width: "300px" },
+            { key: "context", label: "Client / Project", width: "220px" },
+            { key: "stage", label: "Stage", width: "160px" },
+            { key: "owner", label: "PPC / Owner", width: "180px" },
+            { key: "issues", label: "Issue Chat", width: "220px" },
+            { key: "actions", label: "", width: "190px", align: "right" },
+          ]}
+          rows={filteredRows}
+          minWidth={1280}
+          getRowKey={(row) => row.id || row.productionFileId}
+          rowAccent={releaseAccent}
+          renderCell={(row, column) => {
             const fileId = row.id || row.productionFileId;
-            const accent = releaseAccent(row);
-            return (
-              <Box
-                key={fileId}
-                sx={{
-                  px: 1.35,
-                  py: 1,
-                  borderBottom: "1px solid var(--mf-border)",
-                  borderLeft: `3px solid ${accent}`,
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "1.55fr .75fr .9fr minmax(150px,1fr) auto" },
-                  gap: 0.9,
-                  alignItems: "center",
-                  background: "var(--mf-panel-solid)",
-                  "&:last-child": { borderBottom: 0 },
-                  "&:hover": { background: "var(--mf-table-hover)" },
-                }}
-              >
-                <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} projectName={row.projectName} showProjectName size="md" />
-                <Box>
-                  <Typography sx={{ fontSize: 9.1, color: "var(--mf-text-muted)", fontWeight: 800 }}>STAGE</Typography>
-                  <Typography sx={{ mt: 0.15, fontSize: 10.5, fontWeight: 850, color: row.stage === "PRODUCTION_RELEASED" ? "var(--mf-success-text)" : "var(--mf-text-secondary)" }}>{readable(row.stage)}</Typography>
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: 9.1, color: "var(--mf-text-muted)", fontWeight: 800 }}>PPC / OWNER</Typography>
-                  <Typography sx={{ mt: 0.15, fontSize: 10.3, color: "var(--mf-text-secondary)" }}>{row.ppcOwner || row.currentOwner || "—"}</Typography>
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: 9.1, color: "var(--mf-text-muted)", fontWeight: 800 }}>ISSUE CHAT</Typography>
-                  <Typography sx={{ mt: 0.15, fontSize: 9.7, color: Number(row.openQueries || 0) > 0 ? "var(--mf-warning-text)" : "var(--mf-text-muted)", fontWeight: Number(row.openQueries || 0) > 0 ? 850 : 650 }}>
-                    {Number(row.openQueries || 0) > 0 ? `${row.openQueries} open issue${Number(row.openQueries) === 1 ? "" : "s"}` : "Conversation history available"}
-                  </Typography>
-                </Box>
-                {renderActions(row, fileId)}
-              </Box>
-            );
-          })}
-        </Card>
+            if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
+            if (column.key === "context") return <Box><Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>;
+            if (column.key === "stage") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: row.stage === "PRODUCTION_RELEASED" ? "var(--mf-success-text)" : "var(--mf-text-secondary)" }}>{readable(row.stage)}</Typography>;
+            if (column.key === "owner") return <Typography sx={{ fontSize: 9.8, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{row.ppcOwner || row.currentOwner || "—"}</Typography>;
+            if (column.key === "issues") return <Typography sx={{ fontSize: 9.6, color: Number(row.openQueries || 0) > 0 ? "var(--mf-warning-text)" : "var(--mf-text-muted)", fontWeight: Number(row.openQueries || 0) > 0 ? 900 : 700 }}>{Number(row.openQueries || 0) > 0 ? `${row.openQueries} open issue${Number(row.openQueries) === 1 ? "" : "s"}` : "Conversation history available"}</Typography>;
+            return <Box onClick={(event) => event.stopPropagation()}>{renderActions(row, fileId)}</Box>;
+          }}
+        />
       )}
+
     </Box>
   );
 }

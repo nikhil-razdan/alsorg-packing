@@ -1589,6 +1589,121 @@ export function MatFlowViewToggle({ value, onChange, options = [] }) {
   );
 }
 
+/**
+ * Shared report-style grid used by every MatFlow LIST view.
+ * It mirrors the Reports page: compact sticky header, stable columns,
+ * horizontal overflow, subtle row separators and optional status accent.
+ */
+export function MatFlowListGrid({
+  columns = [],
+  rows = [],
+  getRowKey,
+  renderCell,
+  rowAccent,
+  onRowClick,
+  rowAriaLabel,
+  minWidth = 920,
+  sx = {},
+  rowSx,
+}) {
+  const safeColumns = Array.isArray(columns) ? columns : [];
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const template = safeColumns.map((column) => column?.width || "minmax(120px,1fr)").join(" ");
+
+  return (
+    <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none", ...sx }}>
+      <Box sx={{ overflowX: "auto" }}>
+        <Box sx={{ minWidth }}>
+          <Box
+            sx={{
+              px: 1.1,
+              py: 0.75,
+              display: "grid",
+              gridTemplateColumns: template,
+              gap: 0.9,
+              alignItems: "center",
+              background: "var(--mf-table-head)",
+              borderBottom: "1px solid var(--mf-border-strong)",
+              position: "sticky",
+              top: 0,
+              zIndex: 1,
+            }}
+          >
+            {safeColumns.map((column) => (
+              <Typography
+                key={column.key}
+                sx={{
+                  minWidth: 0,
+                  fontSize: 8.6,
+                  fontWeight: 950,
+                  letterSpacing: ".035em",
+                  textTransform: "uppercase",
+                  color: "var(--mf-text-muted)",
+                  textAlign: column.align || "left",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {column.label}
+              </Typography>
+            ))}
+          </Box>
+
+          {safeRows.map((row, index) => {
+            const key = getRowKey?.(row, index) ?? row?.id ?? index;
+            const accent = rowAccent?.(row, index) || "transparent";
+            const clickable = typeof onRowClick === "function";
+            const extraRowSx = typeof rowSx === "function" ? rowSx(row, index) : (rowSx || {});
+            const activate = () => clickable && onRowClick(row, index);
+
+            return (
+              <Box
+                key={key}
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                aria-label={clickable ? rowAriaLabel?.(row, index) : undefined}
+                onClick={clickable ? activate : undefined}
+                onKeyDown={clickable ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    activate();
+                  }
+                } : undefined}
+                sx={{
+                  px: 1.1,
+                  py: 0.85,
+                  display: "grid",
+                  gridTemplateColumns: template,
+                  gap: 0.9,
+                  alignItems: "center",
+                  borderBottom: "1px solid var(--mf-border)",
+                  borderLeft: `3px solid ${accent}`,
+                  background: "var(--mf-panel-solid)",
+                  cursor: clickable ? "pointer" : "default",
+                  outline: "none",
+                  "&:last-child": { borderBottom: 0 },
+                  "&:hover": { background: "var(--mf-table-hover)" },
+                  "&:focus-visible": {
+                    boxShadow: "inset 0 0 0 2px var(--mf-primary)",
+                    background: "var(--mf-table-hover)",
+                  },
+                  ...extraRowSx,
+                }}
+              >
+                {safeColumns.map((column) => (
+                  <Box key={column.key} sx={{ minWidth: 0, textAlign: column.align || "left", overflow: column.overflow || "hidden" }}>
+                    {renderCell?.(row, column, index)}
+                  </Box>
+                ))}
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+    </Card>
+  );
+}
+
+
 export function MatFlowKanbanBoard({
   columns = [],
   items = [],

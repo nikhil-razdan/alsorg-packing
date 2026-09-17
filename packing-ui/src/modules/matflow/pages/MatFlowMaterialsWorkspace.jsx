@@ -10,6 +10,7 @@ import {
   EmptyState,
   MATFLOW_LIST_CARD_OPTIONS,
   MatFlowViewToggle,
+  MatFlowListGrid,
   pageSx,
   panelSx,
   fieldSx,
@@ -109,17 +110,25 @@ export function MatFlowMaterialsPage() {
           ))}
         </Box>
       ) : (
-        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-          {rows.map((row) => (
-            <Box key={row.id} sx={{ px: 1.5, py: 1.15, borderBottom: "1px solid var(--mf-border)", display: "grid", gridTemplateColumns: { xs: "1fr", md: ".8fr 1.4fr 1fr 1.5fr .6fr" }, gap: 1, alignItems: "center", "&:last-child": { borderBottom: 0 } }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{row.materialCode}</Typography>
-              <Typography sx={{ fontSize: 11.5, fontWeight: 850, color: "var(--mf-text)" }}>{row.materialName}</Typography>
-              <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-secondary)" }}>{row.category}</Typography>
-              <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>{row.specification || "—"}</Typography>
-              <Typography sx={{ fontSize: 10.5, fontWeight: 850, color: "var(--mf-text)" }}>{row.uom}</Typography>
-            </Box>
-          ))}
-        </Card>
+        <MatFlowListGrid
+          columns={[
+            { key: "code", label: "Material Code", width: "210px" },
+            { key: "name", label: "Material", width: "minmax(300px,1.4fr)" },
+            { key: "category", label: "Category", width: "170px" },
+            { key: "specification", label: "Specification", width: "minmax(300px,1.5fr)" },
+            { key: "uom", label: "UOM", width: "100px" },
+          ]}
+          rows={rows}
+          minWidth={1080}
+          getRowKey={(row) => row.id}
+          renderCell={(row, column) => {
+            if (column.key === "code") return <Typography sx={{ fontSize: 10.3, fontWeight: 950, color: "var(--mf-text)" }}>{row.materialCode || "—"}</Typography>;
+            if (column.key === "name") return <Typography sx={{ fontSize: 10.6, fontWeight: 900, color: "var(--mf-text)" }}>{row.materialName || "Unnamed material"}</Typography>;
+            if (column.key === "category") return <Typography sx={{ fontSize: 9.8, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{row.category || "—"}</Typography>;
+            if (column.key === "specification") return <Typography noWrap sx={{ fontSize: 9.7, color: "var(--mf-text-secondary)" }}>{row.specification || "—"}</Typography>;
+            return <Typography sx={{ fontSize: 10, fontWeight: 900, color: "var(--mf-text)" }}>{row.uom || "—"}</Typography>;
+          }}
+        />
       )}
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
