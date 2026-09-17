@@ -30,6 +30,7 @@ import {
   LoadingBlock,
   PageHero,
   EmptyState,
+  MatFlowProductIdentity,
   MatFlowStatusChip,
   pageSx,
   panelSx,
@@ -246,7 +247,7 @@ export function MatFlowBomListPage() {
       <PageHero
         badge="ENGINEERING BOM"
         title="BOM Builder"
-        subtitle="A lean, section-wise engineering BOM linked to the Production File. MatFlow keeps material structure and release readiness here; costing and procurement remain outside this phase."
+        subtitle="Product Name + PD No. stay visible throughout BOM work so Engineering, PPC and management always know exactly which product the material structure belongs to. Costing and procurement remain outside this phase."
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
             <Button
@@ -296,7 +297,7 @@ export function MatFlowBomListPage() {
         >
           <TextField
             size="small"
-            label="Search BOM, PD, product or drawing"
+            label="Search Product Name / PD No. / BOM / File / Drawing"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             sx={fieldSx}
@@ -334,8 +335,8 @@ export function MatFlowBomListPage() {
         ) : (
           <>
             <Box sx={listHeadSx}>
-              <div>BOM / PD</div>
-              <div>Product / Drawing</div>
+              <div>Product / PD</div>
+              <div>BOM / Drawing</div>
               <div>Revision</div>
               <div>Status</div>
               <div>Updated</div>
@@ -348,16 +349,17 @@ export function MatFlowBomListPage() {
                 onClick={() => nav(`/matflow/boms/${row.id}`)}
                 sx={listRowSx}
               >
-                <Box>
-                  <Typography sx={rowPrimarySx}>{row.bomNumber}</Typography>
-                  <Typography sx={rowMutedSx}>
-                    {row.projectCode} · {row.productionFileNo}
-                  </Typography>
-                </Box>
+                <MatFlowProductIdentity
+                  productName={row.productName}
+                  projectCode={row.projectCode}
+                  productionFileNo={row.productionFileNo}
+                  drawingNo={row.drawingNo}
+                  size="sm"
+                />
 
                 <Box>
-                  <Typography sx={rowSecondarySx}>{row.productName}</Typography>
-                  <Typography sx={rowMutedSx}>{row.drawingNo}</Typography>
+                  <Typography sx={rowPrimarySx}>{row.bomNumber}</Typography>
+                  <Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography>
                 </Box>
 
                 <Typography sx={rowSecondarySx}>Rev {row.revisionNo}</Typography>
@@ -402,14 +404,13 @@ export function MatFlowBomListPage() {
                   "&:last-child": { borderBottom: 0 },
                 }}
               >
-                <Box>
-                  <Typography sx={{ fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>
-                    {file.projectCode} · {file.productName}
-                  </Typography>
-                  <Typography sx={{ mt: 0.15, fontSize: 9.5, color: "var(--mf-text-muted)" }}>
-                    {file.productionFileNo} · {file.drawingNo}
-                  </Typography>
-                </Box>
+                <MatFlowProductIdentity
+                  productName={file.productName}
+                  projectCode={file.projectCode}
+                  productionFileNo={file.productionFileNo}
+                  drawingNo={file.drawingNo}
+                  size="sm"
+                />
                 <Typography sx={{ fontSize: 10.2, fontWeight: 800, color: "var(--mf-text-secondary)" }}>
                   {readable(file.stage)}
                 </Typography>
@@ -456,7 +457,7 @@ export function MatFlowBomListPage() {
             >
               {availableFiles.map((file) => (
                 <MenuItem key={file.id} value={file.id}>
-                  {file.productionFileNo} · {file.projectCode} · {file.productName} · {file.drawingNo}
+                  {file.productName || "Unnamed Product"} — PD No. {file.projectCode || "—"} · File {file.productionFileNo || "—"} · Drawing {file.drawingNo || "—"}
                 </MenuItem>
               ))}
             </TextField>
@@ -754,7 +755,7 @@ export function MatFlowBomDetailPage() {
       <PageHero
         badge="BOM BUILDER"
         title={bom.productName || bom.bomNumber}
-        subtitle={`${bom.projectCode} · ${bom.productionFileNo} · ${bom.drawingNo} · ${bom.bomNumber}`}
+        subtitle={`PD No. ${bom.projectCode || "—"} · File ${bom.productionFileNo || "—"} · Drawing ${bom.drawingNo || "—"} · ${bom.bomNumber}`}
         actions={
           <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap" }}>
             <Button

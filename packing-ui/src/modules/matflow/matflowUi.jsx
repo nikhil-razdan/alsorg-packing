@@ -1111,6 +1111,84 @@ const purple = new Set([
   "ORDERED", "PRODUCTION_STARTED", "RECOVERY_IN_PROGRESS",
 ]);
 
+
+export function MatFlowProductIdentity({
+  productName,
+  projectCode,
+  productionFileNo,
+  drawingNo,
+  projectName,
+  size = "md",
+  noWrap = true,
+  sx = {},
+  nameSx = {},
+  metaSx = {},
+  projectSx = {},
+  showProjectName = false,
+}) {
+  const product = clean(productName) || "Unnamed Product";
+  const pdNo = clean(projectCode);
+  const fileNo = clean(productionFileNo);
+  const drawing = clean(drawingNo);
+  const project = clean(projectName);
+
+  const sizing = size === "hero"
+    ? { name: 20, meta: 10.8, project: 9.8, gap: .28 }
+    : size === "sm"
+      ? { name: 10.6, meta: 8.8, project: 8.5, gap: .14 }
+      : { name: 12.2, meta: 9.6, project: 9.1, gap: .2 };
+
+  const meta = [
+    pdNo ? `PD No. ${pdNo}` : "PD No. —",
+    fileNo ? `File ${fileNo}` : null,
+    drawing ? `Drawing ${drawing}` : null,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <Box sx={{ minWidth: 0, ...sx }}>
+      <Typography
+        noWrap={noWrap}
+        sx={{
+          fontSize: sizing.name,
+          lineHeight: 1.12,
+          fontWeight: 950,
+          color: "var(--mf-text)",
+          ...nameSx,
+        }}
+      >
+        {product}
+      </Typography>
+      <Typography
+        noWrap={noWrap}
+        sx={{
+          mt: sizing.gap,
+          fontSize: sizing.meta,
+          lineHeight: 1.25,
+          fontWeight: 820,
+          color: "var(--mf-text-secondary)",
+          ...metaSx,
+        }}
+      >
+        {meta}
+      </Typography>
+      {showProjectName && project && (
+        <Typography
+          noWrap={noWrap}
+          sx={{
+            mt: size === "hero" ? .18 : .1,
+            fontSize: sizing.project,
+            lineHeight: 1.25,
+            color: "var(--mf-text-muted)",
+            ...projectSx,
+          }}
+        >
+          {project}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 export function MatFlowStatusChip({ status }) {
   const { isDark } = useMatFlowTheme();
   const value = normalize(status) || "UNKNOWN";

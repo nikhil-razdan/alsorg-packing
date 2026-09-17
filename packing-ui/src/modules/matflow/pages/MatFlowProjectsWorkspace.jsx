@@ -32,6 +32,7 @@ import {
   ErrorBox,
   LoadingBlock,
   MATFLOW_ROLES,
+  MatFlowProductIdentity,
   PageHero,
   EmptyState,
   MatFlowStatusChip,
@@ -317,7 +318,7 @@ function ProductionFileTrackingSheet({ product }) {
             </Typography>
           </Box>
           <Typography sx={{ mt: 0.15, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
-            Digital handoff register for {product.productionFileNo || "this Production File"} · latest successful handoff is shown.
+            {product.productName || "Unnamed Product"} · File {product.productionFileNo || "—"} · latest successful handoff is shown.
           </Typography>
         </Box>
       </Box>
@@ -383,15 +384,21 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
     <Box sx={productCardSx(product.releaseHealth)}>
       <Box sx={productHeaderSx}>
         <Box sx={{ minWidth: 0 }}>
-          <Box sx={{ display: "flex", gap: 0.65, alignItems: "center", flexWrap: "wrap" }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 950, color: "var(--mf-text)" }}>
-              {product.productName}
-            </Typography>
+          <Box sx={{ display: "flex", gap: 0.65, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <MatFlowProductIdentity
+              productName={product.productName}
+              projectCode={project.projectCode}
+              productionFileNo={product.productionFileNo}
+              drawingNo={product.drawingNo}
+              size="md"
+              sx={{ minWidth: 0, flex: "1 1 260px" }}
+              projectSx={{ display: "none" }}
+            />
             {product.productType && <Chip label={product.productType} size="small" sx={softChipSx} />}
           </Box>
-          <Typography sx={{ mt: 0.25, fontSize: 9.7, color: "var(--mf-text-muted)" }}>
-            Drawing {product.drawingNo || "—"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""}
-          </Typography>
+          {product.drawingRevision && (
+            <Typography sx={{ mt: 0.2, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Drawing revision {product.drawingRevision}</Typography>
+          )}
         </Box>
 
         {canEdit && (
@@ -419,12 +426,14 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
           <Box sx={panelTopRowSx}>
             <Box>
               <Typography sx={panelEyebrowSx}>PRODUCTION FILE</Typography>
-              <Typography sx={{ mt: 0.25, fontSize: 12.2, fontWeight: 950, color: "var(--mf-text)" }}>
-                {product.productName || "Unnamed Product"}
-              </Typography>
-              <Typography sx={{ mt: 0.12, fontSize: 9.1, fontWeight: 850, color: "var(--mf-text-muted)" }}>
-                File No. {product.productionFileNo || "Identity pending"}
-              </Typography>
+              <MatFlowProductIdentity
+                productName={product.productName}
+                projectCode={project.projectCode}
+                productionFileNo={product.productionFileNo}
+                drawingNo={product.drawingNo}
+                size="md"
+                sx={{ mt: 0.25 }}
+              />
             </Box>
           </Box>
           <Box sx={{ mt: 0.9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
@@ -718,7 +727,7 @@ export function MatFlowProjectsPage() {
       <PageHero
         badge="MASTER PRODUCTION FILE"
         title="Projects"
-        subtitle="One Project card is the master production record. Every Product/Drawing, Production File and BOM revision remains attached to the same PD / Project identity—no independent departmental record."
+        subtitle="PD No. is the Project identity and Product Name is the primary working identity. Every Drawing, Production File, tracker event and BOM revision remains attached to that same Product inside the PD—no parallel departmental record."
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
             <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>
@@ -739,7 +748,7 @@ export function MatFlowProjectsPage() {
         <TextField
           size="small"
           fullWidth
-          label="Search PD No., project, client, product, drawing, Production File or BOM"
+          label="Search Product Name / PD No. / project / drawing / Production File / BOM"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           sx={fieldSx}
@@ -807,6 +816,11 @@ export function MatFlowProjectsPage() {
                     <Typography noWrap sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
                       {project.clientName || "Client not assigned"}
                     </Typography>
+                    {!!products.length && (
+                      <Typography noWrap sx={{ mt: 0.2, fontSize: 8.7, fontWeight: 800, color: "var(--mf-primary-text)" }}>
+                        Products: {products.slice(0, 2).map((item) => item.productName || "Unnamed Product").join(" · ")}{products.length > 2 ? ` +${products.length - 2}` : ""}
+                      </Typography>
+                    )}
                   </Box>
 
                   <Box sx={{ display: "grid", justifyItems: "end", gap: 0.4, flex: "0 0 auto" }}>
@@ -851,14 +865,14 @@ export function MatFlowProjectsPage() {
                           }}
                           sx={ticketFileRowSx(product.releaseHealth)}
                         >
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography noWrap sx={{ fontSize: 9.8, fontWeight: 950, color: "var(--mf-text)" }}>
-                              {product.productName || "Unnamed Product"}
-                            </Typography>
-                            <Typography noWrap sx={{ mt: 0.08, fontSize: 8.4, color: "var(--mf-text-muted)" }}>
-                              {product.productionFileNo || "File identity pending"} · Drawing {product.drawingNo || "—"}
-                            </Typography>
-                          </Box>
+                          <MatFlowProductIdentity
+                            productName={product.productName}
+                            projectCode={project.projectCode}
+                            productionFileNo={product.productionFileNo}
+                            drawingNo={product.drawingNo}
+                            size="sm"
+                            sx={{ minWidth: 0 }}
+                          />
                           <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
                             <Typography sx={{ color: ticketHealthColor(product.releaseHealth), fontSize: 8.4, fontWeight: 900 }}>
                               {healthLabel(product.releaseHealth)}

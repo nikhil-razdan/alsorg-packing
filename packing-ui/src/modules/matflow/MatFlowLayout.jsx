@@ -48,6 +48,7 @@ import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 
 const NAV = [
@@ -119,6 +120,7 @@ export default function MatFlowLayout() {
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [notificationFeed, setNotificationFeed] = useState({ unreadCount: 0, notifications: [] });
     const [notificationError, setNotificationError] = useState("");
+    const [globalProductSearch, setGlobalProductSearch] = useState("");
 
     const loadNotifications = useCallback(async ({ quiet = false } = {}) => {
         try {
@@ -172,6 +174,14 @@ export default function MatFlowLayout() {
             ["", "MatFlow", "Production control"],
         [location.pathname]
     );
+
+    const canUseGlobalProductFinder = items.some((item) => item.screen === "work") && !location.pathname.startsWith("/matflow/work");
+    const openGlobalProductFinder = () => {
+        const term = String(globalProductSearch || "").trim();
+        if (!term) return;
+        navigate(`/matflow/work?q=${encodeURIComponent(term)}`);
+        setGlobalProductSearch("");
+    };
 
     const handleLogout = async () => {
         await logout();
@@ -269,6 +279,24 @@ export default function MatFlowLayout() {
                     </Box>
 
                     <Box sx={{ display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {canUseGlobalProductFinder && (
+                            <TextField
+                                size="small"
+                                value={globalProductSearch}
+                                onChange={(event) => setGlobalProductSearch(event.target.value)}
+                                onKeyDown={(event) => event.key === "Enter" && openGlobalProductFinder()}
+                                placeholder="Find Product / PD No."
+                                inputProps={{ "aria-label": "Find Product Name or PD No. anywhere in MatFlow" }}
+                                InputProps={{
+                                    startAdornment: <SearchOutlinedIcon sx={{ mr: .7, fontSize: 17, color: "var(--mf-text-muted)" }} />,
+                                }}
+                                sx={{
+                                    display: { xs: "none", md: "block" },
+                                    width: 220,
+                                    "& .MuiOutlinedInput-root": { height: 36 },
+                                }}
+                            />
+                        )}
                         {(canViewAllPlants || availablePlants.length > 1) && (
                             <TextField
                                 select
@@ -390,19 +418,20 @@ export default function MatFlowLayout() {
                             }}
                         >
                             <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7 }}>
-                                <Typography sx={{ fontSize: 9, fontWeight: 950, color: "var(--mf-text-muted)", letterSpacing: ".04em" }}>
-                                    {notification.referenceNumber || "TASK"}
+                                <Typography sx={{ fontSize: 9, fontWeight: 950, color: "var(--mf-primary-text)", letterSpacing: ".025em" }}>
+                                    {notification.projectCode ? `PD No. ${notification.projectCode}` : "PD No. —"}
+                                    {notification.referenceNumber ? ` · File ${notification.referenceNumber}` : ""}
                                 </Typography>
                                 {!notification.read && <Box sx={{ mt: .25, width: 7, height: 7, borderRadius: 99, bgcolor: "var(--mf-primary)" }} />}
                             </Box>
-                            <Typography sx={{ mt: .25, fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>
-                                {notification.title || notification.productName || "Engineering task"}
+                            <Typography sx={{ mt: .3, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
+                                {notification.productName || notification.title || "Product"}
                             </Typography>
-                            <Typography sx={{ mt: .25, fontSize: 9.5, lineHeight: 1.45, fontWeight: 700, color: "var(--mf-text-secondary)" }}>
+                            <Typography sx={{ mt: .22, fontSize: 9.5, lineHeight: 1.45, fontWeight: 700, color: "var(--mf-text-secondary)" }}>
                                 {notification.message}
                             </Typography>
-                            <Typography sx={{ mt: .55, fontSize: 8.7, fontWeight: 700, color: "var(--mf-text-muted)" }}>
-                                {[notification.projectCode, notification.productName, readableNotificationStatus(notification.status)].filter(Boolean).join(" · ")}
+                            <Typography sx={{ mt: .5, fontSize: 8.7, fontWeight: 700, color: "var(--mf-text-muted)" }}>
+                                {readableNotificationStatus(notification.status)}
                             </Typography>
                         </Box>
                     ))}

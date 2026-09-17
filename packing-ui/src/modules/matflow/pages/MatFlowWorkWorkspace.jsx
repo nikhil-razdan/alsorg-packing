@@ -28,6 +28,7 @@ import {
   ErrorBox,
   LoadingBlock,
   MATFLOW_ROLES,
+  MatFlowProductIdentity,
   PageHero,
   SummaryCard,
   clean,
@@ -219,7 +220,7 @@ export function MatFlowWorkWorkspacePage() {
   const [files, setFiles] = useState([]);
   const [detail, setDetail] = useState(null);
   const [selectedId, setSelectedId] = useState(searchParams.get("fileId") || "");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("q") || "");
   const [health, setHealth] = useState("");
   const [stage, setStage] = useState("");
   const [tab, setTab] = useState(0);
@@ -526,7 +527,7 @@ export function MatFlowWorkWorkspacePage() {
       <PageHero
         badge="PRODUCTION CONTROL"
         title="Products"
-        subtitle="Design Department work is controlled here first: Designer-1 input, Design Head delegation, Designer-2 execution, checklist, drawing revisions and approved handoff."
+        subtitle="Product Name + PD No. are the primary MatFlow identity. Design work, tasks, checklists, revisions, Engineering and PPC gates stay attached to that same controlled Production File."
         actions={<Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}><Button onClick={() => setWorkspaceView("FILES")} sx={workspaceView === "FILES" ? primaryBtnSx : secondaryBtnSx}>Production Files</Button><Button onClick={() => setWorkspaceView("TASKS")} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>Design Task Desk</Button><Button startIcon={<RefreshOutlinedIcon />} onClick={workspaceView === "FILES" ? refresh : undefined} sx={secondaryBtnSx}>Refresh</Button></Box>}
       />
       {error && <ErrorBox>{error}</ErrorBox>}
@@ -537,7 +538,7 @@ export function MatFlowWorkWorkspacePage() {
       <>
       <Card sx={{ ...panelSx, p: 1.35 }}>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 1.3fr auto" }, gap: 1 }}>
-          <TextField size="small" label="Search PD / File / Product / Drawing" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadList()} sx={fieldSx} />
+          <TextField size="small" label="Search Product Name / PD No. / File / Drawing" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadList()} sx={fieldSx} />
           <TextField select size="small" label="Health" value={health} onChange={(e) => setHealth(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
             {HEALTH_FILTERS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
@@ -558,17 +559,23 @@ export function MatFlowWorkWorkspacePage() {
             <Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No Production Files found.</Box>
           ) : files.map((row) => (
             <Box key={row.id} onClick={() => setSelectedId(row.id)} sx={productionFileListRowSx(row.releaseHealth, selectedId === row.id)}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
-                <Typography sx={{ color: "var(--mf-text)", fontWeight: 950, fontSize: 12 }}>{row.productionFileNo}</Typography>
+              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
+                <MatFlowProductIdentity
+                  productName={row.productName}
+                  projectCode={row.projectCode}
+                  productionFileNo={row.productionFileNo}
+                  drawingNo={row.drawingNo}
+                  size="md"
+                  sx={{ flex: 1 }}
+                />
                 {healthVisual(row.releaseHealth).label && (
-                  <Typography sx={{ color: healthVisual(row.releaseHealth).accent, fontWeight: 900, fontSize: 9.4 }}>
+                  <Typography sx={{ color: healthVisual(row.releaseHealth).accent, fontWeight: 900, fontSize: 9.4, whiteSpace: "nowrap" }}>
                     {healthVisual(row.releaseHealth).label}
                   </Typography>
                 )}
               </Box>
-              <Typography sx={{ mt: 0.45, color: "var(--mf-text-secondary)", fontSize: 11, fontWeight: 800 }}>{row.projectCode} · {row.productName}</Typography>
-              <Typography sx={{ mt: 0.2, color: "var(--mf-text-muted)", fontSize: 10 }}>{row.drawingNo} · {readable(row.stage)}</Typography>
-              {row.currentOwner && <Typography sx={{ mt: 0.4, color: "var(--mf-text-muted)", fontSize: 10 }}>Owner: {row.currentOwner}</Typography>}
+              <Typography sx={{ mt: 0.28, color: "var(--mf-text-muted)", fontSize: 9.7 }}>{readable(row.stage)}</Typography>
+              {row.currentOwner && <Typography sx={{ mt: 0.28, color: "var(--mf-text-muted)", fontSize: 9.7 }}>Owner: {row.currentOwner}</Typography>}
             </Box>
           ))}
         </Card>
@@ -579,10 +586,15 @@ export function MatFlowWorkWorkspacePage() {
           <Box sx={{ minWidth: 0 }}>
             <Card sx={productionFileHeaderSx(file.releaseHealth)}>
               <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1.2 }}>
-                <Box>
-                  <Typography sx={{ fontSize: 19, fontWeight: 950, color: "var(--mf-text)" }}>{file.productionFileNo}</Typography>
-                  <Typography sx={{ mt: 0.2, color: "var(--mf-text-muted)", fontSize: 11 }}>{file.projectCode} · {file.projectName} · {file.productName} · {file.drawingNo}</Typography>
-                </Box>
+                <MatFlowProductIdentity
+                  productName={file.productName}
+                  projectCode={file.projectCode}
+                  productionFileNo={file.productionFileNo}
+                  drawingNo={file.drawingNo}
+                  projectName={file.projectName}
+                  showProjectName
+                  size="hero"
+                />
                 <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
                   {healthVisual(file.releaseHealth).label && (
                     <Typography sx={{ color: healthVisual(file.releaseHealth).accent, fontSize: 10, fontWeight: 900 }}>
@@ -701,7 +713,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
 
       <Card sx={{ ...panelSx, p: 1.2 }}>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 170px auto" }, gap: 0.8 }}>
-          <TextField size="small" label="Search client, PD, product, drawing or task" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
+          <TextField size="small" label="Search Product Name, PD No., drawing, client or task" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
           <TextField size="small" label="Designer-2 / team member" value={assignee} onChange={(e) => setAssignee(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
           <TextField select size="small" label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
@@ -712,15 +724,15 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
       </Card>
 
       <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-        <Box sx={{ display: { xs: "none", lg: "grid" }, gridTemplateColumns: "1.15fr .9fr 1.35fr .95fr 1fr .8fr auto", gap: 1, px: 1.3, py: 0.9, background: "var(--mf-table-head)", borderBottom: "1px solid var(--mf-border)" }}>
-          {["Client / Project", "Product", "Task", "Received / Due", "Designer-1 → Designer-2", "Status", ""].map((label, index) => <Typography key={`${label}-${index}`} sx={{ fontSize: 9, fontWeight: 900, color: "var(--mf-text-muted)" }}>{label}</Typography>)}
+        <Box sx={{ display: { xs: "none", lg: "grid" }, gridTemplateColumns: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto", gap: 1, px: 1.3, py: 0.9, background: "var(--mf-table-head)", borderBottom: "1px solid var(--mf-border)" }}>
+          {["Product / PD", "Project / Client", "Task", "Received / Due", "Designer → Team", "Status", ""].map((label, index) => <Typography key={`${label}-${index}`} sx={{ fontSize: 9, fontWeight: 900, color: "var(--mf-text-muted)" }}>{label}</Typography>)}
         </Box>
         {loading ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Design tasks…</Box> : rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Design tasks match the current filters.</Box> : rows.map((row) => {
           const task = row.task || {};
           return (
-            <Box key={task.id} sx={{ px: 1.3, py: 1.05, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.15fr .9fr 1.35fr .95fr 1fr .8fr auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}>
-              <Box><Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{row.clientName || "—"}</Typography><Typography sx={{ fontSize: 9.4, color: "var(--mf-text-muted)" }}>{row.projectCode} · {row.projectName}</Typography></Box>
-              <Box><Typography sx={{ fontSize: 10.5, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.productName}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{row.drawingNo}</Typography></Box>
+            <Box key={task.id} sx={{ px: 1.3, py: 1.05, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}>
+              <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+              <Box><Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{row.clientName || "Client not assigned"}</Typography></Box>
               <Box><Typography sx={{ fontSize: 10.8, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>
               <Box><Typography sx={{ fontSize: 9.8, color: "var(--mf-text-secondary)" }}>{toDateTime(task.receivedAt)}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Due {toDateTime(task.dueAt)}</Typography></Box>
               <Box><Typography sx={{ fontSize: 9.8, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{task.designer1 || "—"}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>→ {(task.assignees || []).join(", ") || "Unassigned"}</Typography></Box>

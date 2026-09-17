@@ -274,6 +274,7 @@ public class MatFlowBomService {
                         || contains(b.getBomNumber(), term)
                         || contains(b.getProductionFile().getProjectCode(), term)
                         || contains(b.getProductionFile().getProductName(), term)
+                        || contains(b.getProductionFile().getProductionFileNo(), term)
                         || contains(b.getProductionFile().getDrawingNo(), term))
                 .map(this::toResponse)
                 .filter(response -> statusFilter.isBlank() || statusFilter.equalsIgnoreCase(response.status()))

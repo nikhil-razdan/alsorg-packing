@@ -15,6 +15,7 @@ import { matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
   ErrorBox,
   LoadingBlock,
+  MatFlowProductIdentity,
   pageSx,
   secondaryBtnSx,
   useMatFlow,
@@ -25,6 +26,13 @@ const tone = (health) => {
   if (health === "RED") return "danger";
   if (health === "AMBER") return "warning";
   return "success";
+};
+
+const healthLabel = (health) => {
+  if (health === "RED") return "Critical attention";
+  if (health === "AMBER") return "Needs attention";
+  if (health === "GREEN") return "On track";
+  return "";
 };
 
 const toneColor = (value) => ({
@@ -233,7 +241,7 @@ export function MatFlowDashboardPage() {
       <KpiRail items={[
         { label: "Active projects", value: data?.activeProjects || 0, helper: "Distinct PD / Project identities", onClick: () => navigate("/matflow/projects") },
         { label: "Production files", value: files, helper: "One file per Product / Drawing", onClick: () => navigate("/matflow/work") },
-        { label: "Need action", value: data?.needsAttention || 0, helper: "Red / amber / query / overdue", color: Number(data?.needsAttention || 0) ? "var(--mf-danger-text)" : "var(--mf-success-text)", onClick: () => navigate("/matflow/work") },
+        { label: "Need action", value: data?.needsAttention || 0, helper: "Attention, query or overdue work", color: Number(data?.needsAttention || 0) ? "var(--mf-danger-text)" : "var(--mf-success-text)", onClick: () => navigate("/matflow/work") },
         { label: "Released", value: data?.productionReleased || 0, helper: "Validated PPC Gate 2 handoff", color: "var(--mf-success-text)", onClick: () => navigate("/matflow/release") },
       ]} />
 
@@ -252,16 +260,16 @@ export function MatFlowDashboardPage() {
                   size="small"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Find PD, file or product"
-                  inputProps={{ "aria-label": "Find PD, file or product" }}
+                  placeholder="Find Product Name or PD No."
+                  inputProps={{ "aria-label": "Find Product Name or PD No." }}
                   sx={{ "& .MuiOutlinedInput-root": { height: 38, pl: 3.2, borderRadius: 1.2 } }}
                 />
               </Box>
               <TextField select size="small" value={health} onChange={(event) => setHealth(event.target.value)} sx={{ "& .MuiOutlinedInput-root": { height: 38, borderRadius: 1.2 } }}>
                 <MenuItem value="ALL">All status</MenuItem>
-                <MenuItem value="RED">Red</MenuItem>
-                <MenuItem value="AMBER">Amber</MenuItem>
-                <MenuItem value="GREEN">Green</MenuItem>
+                <MenuItem value="RED">Critical attention</MenuItem>
+                <MenuItem value="AMBER">Needs attention</MenuItem>
+                <MenuItem value="GREEN">On track</MenuItem>
               </TextField>
             </Box>
           </Box>
@@ -269,7 +277,7 @@ export function MatFlowDashboardPage() {
           <Box sx={{ overflowX: "auto" }}>
             <Box sx={{ minWidth: 860 }}>
               <Box sx={{ display: "grid", gridTemplateColumns: "minmax(285px,1.35fr) 165px 170px 130px minmax(170px,.75fr)", minHeight: 42, alignItems: "center", background: "var(--mf-table-head)", borderBottom: border }}>
-                {["Project / product", "Stage", "Owner", "Release due", "Next action"].map((heading) => (
+                {["Product / PD", "Stage", "Owner", "Release due", "Next action"].map((heading) => (
                   <Typography key={heading} sx={{ px: 1.4, fontSize: 9.8, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{heading}</Typography>
                 ))}
               </Box>
@@ -277,7 +285,7 @@ export function MatFlowDashboardPage() {
               {attention.length === 0 ? (
                 <Box sx={{ px: 2, py: 4.3, textAlign: "center" }}>
                   <Typography sx={{ fontSize: 11.5, fontWeight: 800, color: "var(--mf-text-secondary)" }}>No active control exceptions.</Typography>
-                  <Typography sx={{ mt: .3, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Red, amber, query and overdue files will appear here.</Typography>
+                  <Typography sx={{ mt: .3, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Files requiring attention, query response or overdue action will appear here.</Typography>
                 </Box>
               ) : attention.slice(0, 12).map((row) => {
                 const due = releaseDue(row);
@@ -296,19 +304,23 @@ export function MatFlowDashboardPage() {
                     }}
                   >
                     <Box sx={{ px: 1.4, minWidth: 0 }}>
-                      <Box sx={{ display: "flex", gap: .7, alignItems: "center", minWidth: 0 }}>
-                        <Box sx={dotSx(row.health)} />
-                        <Typography noWrap sx={{ fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>
-                          {row.projectCode || "—"} · {row.projectName || row.productionFileNo}
-                        </Typography>
+                      <Box sx={{ display: "flex", gap: .7, alignItems: "flex-start", minWidth: 0 }}>
+                        <Box sx={{ ...dotSx(row.health), mt: .45 }} />
+                        <MatFlowProductIdentity
+                          productName={row.productName}
+                          projectCode={row.projectCode}
+                          productionFileNo={row.productionFileNo}
+                          drawingNo={row.drawingNo}
+                          projectName={row.projectName}
+                          showProjectName
+                          size="sm"
+                          sx={{ minWidth: 0, flex: 1 }}
+                        />
                       </Box>
-                      <Typography noWrap sx={{ mt: .25, pl: 1.8, fontSize: 9.8, color: "var(--mf-text-muted)" }}>
-                        {row.productName || "Product"}{row.drawingNo ? ` · ${row.drawingNo}` : ""} · {row.productionFileNo}
-                      </Typography>
                     </Box>
                     <Box sx={{ px: 1.4 }}>
                       <Typography sx={{ fontSize: 10.5, fontWeight: 780, color: "var(--mf-text-secondary)" }}>{readable(row.stage)}</Typography>
-                      <Typography sx={{ mt: .15, fontSize: 8.9, color: toneColor(tone(row.health)), fontWeight: 850 }}>{row.health}</Typography>
+                      <Typography sx={{ mt: .15, fontSize: 8.9, color: toneColor(tone(row.health)), fontWeight: 850 }}>{healthLabel(row.health)}</Typography>
                     </Box>
                     <Box sx={{ px: 1.4 }}>
                       <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 780, color: "var(--mf-text-secondary)" }}>{row.currentOwner || "Unassigned"}</Typography>

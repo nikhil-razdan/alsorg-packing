@@ -706,8 +706,12 @@ public class MatFlowWorkspaceService {
         accessService.requireRead(); String actor=accessService.actor(); int max=limit==null?30:Math.max(1,Math.min(100,limit));
         List<WorkItemStatus> open=List.of(WorkItemStatus.OPEN,WorkItemStatus.RESPONDED,WorkItemStatus.TODO,WorkItemStatus.ASSIGNED,WorkItemStatus.IN_PROGRESS,WorkItemStatus.BLOCKED);
         List<NotificationResponse> rows=workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor,open).stream().filter(w->accessService.canAccessPlant(w.getProductionFile().getPlantCode())).limit(max).map(w->{
-            MatFlowProductionFile f=w.getProductionFile(); String message=w.getItemType()==WorkItemType.ENGINEERING_QUERY?"Engineering query requires attention":w.getTitle()+" is pending";
-            return new NotificationResponse(w.getItemType().name(),w.getId(),w.getTitle(),message,w.getPriority(),w.getDueAt(),f.getProjectCode(),f.getProductionFileNo(),"/matflow/work?fileId="+f.getId(),w.getReadAt()!=null); }).toList();
+            MatFlowProductionFile f=w.getProductionFile();
+            String productTitle = clean(f.getProductName()) == null ? w.getTitle() : f.getProductName();
+            String message = w.getItemType()==WorkItemType.ENGINEERING_QUERY
+                    ? w.getTitle()+" · Engineering query requires attention"
+                    : w.getTitle()+" · Pending action";
+            return new NotificationResponse(w.getItemType().name(),w.getId(),productTitle,message,w.getPriority(),w.getDueAt(),f.getProjectCode(),f.getProductionFileNo(),"/matflow/work?fileId="+f.getId(),w.getReadAt()!=null); }).toList();
         int unread=(int)rows.stream().filter(r->!r.read()).count(); return new NotificationFeedResponse(unread,rows,now());
     }
 
