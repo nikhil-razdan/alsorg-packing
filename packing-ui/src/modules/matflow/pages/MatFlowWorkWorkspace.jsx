@@ -525,7 +525,7 @@ export function MatFlowWorkWorkspacePage() {
     <Box sx={pageSx}>
       <PageHero
         badge="PRODUCTION CONTROL"
-        title="Projects"
+        title="Products"
         subtitle="Design Department work is controlled here first: Designer-1 input, Design Head delegation, Designer-2 execution, checklist, drawing revisions and approved handoff."
         actions={<Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}><Button onClick={() => setWorkspaceView("FILES")} sx={workspaceView === "FILES" ? primaryBtnSx : secondaryBtnSx}>Production Files</Button><Button onClick={() => setWorkspaceView("TASKS")} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>Design Task Desk</Button><Button startIcon={<RefreshOutlinedIcon />} onClick={workspaceView === "FILES" ? refresh : undefined} sx={secondaryBtnSx}>Refresh</Button></Box>}
       />
