@@ -129,6 +129,7 @@ export function MatFlowBomListPage() {
 
   const [rows, setRows] = useState([]);
   const [files, setFiles] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
@@ -136,20 +137,20 @@ export function MatFlowBomListPage() {
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [fileId, setFileId] = useState("");
+  const [productId, setProductId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [bomsResponse, filesResponse] = await Promise.all([
+      const [bomsResponse, filesResponse, projectsResponse] = await Promise.all([
         matflowApi.listBoms(),
-        matflowApi.listProductionFiles({
-          plantCode: selectedPlantParam,
-        }),
+        matflowApi.listProductionFiles({ plantCode: selectedPlantParam }),
+        matflowApi.listProjects({ active: true, plantCode: selectedPlantParam }),
       ]);
-
       setRows(Array.isArray(bomsResponse?.data) ? bomsResponse.data : []);
       setFiles(Array.isArray(filesResponse?.data) ? filesResponse.data : []);
+      setProjects(Array.isArray(projectsResponse?.data) ? projectsResponse.data : []);
     } catch (requestError) {
       setError(readMatFlowError(requestError, "Unable to load Engineering BOMs."));
     } finally {
@@ -157,92 +158,109 @@ export function MatFlowBomListPage() {
     }
   }, [selectedPlantParam]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+
+  const projectsById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project])),
+    [projects]
+  );
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [
-          row.bomNumber,
-          row.projectCode,
-          row.productionFileNo,
-          row.productName,
-          row.drawingNo,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(q);
-
-      const matchesStatus = !status || row.status === status;
-      return matchesSearch && matchesStatus;
+      const matchesSearch = !q || [
+        row.bomNumber,
+        row.projectCode,
+        row.projectName,
+        row.productionFileNo,
+        row.productName,
+        row.drawingNo,
+      ].filter(Boolean).join(" ").toLowerCase().includes(q);
+      return matchesSearch && (!status || row.status === status);
     });
   }, [rows, search, status]);
 
-  const activeBomFileIds = useMemo(
-    () =>
-      new Set(
-        rows
-          .filter((row) => row.status !== "SUPERSEDED")
-          .map((row) => row.productionFileId)
-          .filter(Boolean)
-      ),
-    [rows]
+  const activeBomKeys = useMemo(() => new Set(
+    rows
+      .filter((row) => row.status !== "SUPERSEDED" && row.productionFileId && row.productId)
+      .map((row) => `${row.productionFileId}:${row.productId}`)
+  ), [rows]);
+
+  const productReadiness = useMemo(() => {
+    const result = [];
+    for (const file of files) {
+      const project = projectsById.get(file.projectId);
+      const products = (project?.products || []).filter((product) => product.active !== false);
+      if (!products.length) {
+        result.push({ file, project, product: null, hasActiveBom: false, eligible: false });
+        continue;
+      }
+      for (const product of products) {
+        const hasActiveBom = activeBomKeys.has(`${file.id}:${product.id}`);
+        const eligible = !hasActiveBom
+          && file.stage === "ENGINEERING_WORK"
+          && file.engineeringDecision === "APPROVED";
+        result.push({ file, project, product, hasActiveBom, eligible });
+      }
+    }
+    return result;
+  }, [files, projectsById, activeBomKeys]);
+
+  const pendingBomItems = useMemo(
+    () => productReadiness.filter((item) => !item.hasActiveBom),
+    [productReadiness]
   );
 
-  const bomEligibleFiles = useMemo(
-    () =>
-      files.filter(
-        (file) =>
-          file.stage === "ENGINEERING_WORK" &&
-          file.engineeringDecision === "APPROVED" &&
-          !activeBomFileIds.has(file.id)
-      ),
-    [files, activeBomFileIds]
+  const eligibleItems = useMemo(
+    () => productReadiness.filter((item) => item.eligible && item.product),
+    [productReadiness]
   );
 
-  const availableFiles = bomEligibleFiles;
+  const availableFiles = useMemo(() => {
+    const map = new Map();
+    for (const item of eligibleItems) map.set(item.file.id, item.file);
+    return Array.from(map.values());
+  }, [eligibleItems]);
 
-  const pendingBomFiles = useMemo(
-    () => files.filter((file) => !activeBomFileIds.has(file.id)),
-    [files, activeBomFileIds]
+  const availableProducts = useMemo(
+    () => eligibleItems.filter((item) => item.file.id === fileId).map((item) => item.product),
+    [eligibleItems, fileId]
   );
 
-  const stats = useMemo(() => {
-    const latest = rows.filter((row) => row.latestRevision).length;
-    const drafts = rows.filter((row) => row.status === "DRAFT").length;
-    const ready = rows.filter((row) => row.status === "READY_FOR_RELEASE").length;
-    return {
-      total: rows.length,
-      latest,
-      drafts,
-      ready,
-      productionFiles: files.length,
-      eligible: bomEligibleFiles.length,
-    };
-  }, [rows, files.length, bomEligibleFiles.length]);
+  const stats = useMemo(() => ({
+    total: rows.length,
+    ready: rows.filter((row) => row.status === "READY_FOR_RELEASE").length,
+    productionFiles: files.length,
+    eligible: eligibleItems.length,
+  }), [rows, files.length, eligibleItems.length]);
 
   const create = async () => {
-    if (!fileId) return;
+    if (!fileId || !productId) return;
     setWorking(true);
     setError("");
     try {
       const response = await matflowApi.createBom({
         productionFileId: fileId,
+        productId,
         remarks: null,
       });
       setOpen(false);
       setFileId("");
+      setProductId("");
       nav(`/matflow/boms/${response.data.id}`);
     } catch (requestError) {
       setError(readMatFlowError(requestError, "Unable to create BOM."));
     } finally {
       setWorking(false);
     }
+  };
+
+  const readinessText = (item) => {
+    if (!item.product) return "Add at least one Product to this PD / Project first";
+    if (item.eligible) return "Ready to start this Product BOM";
+    if (item.file.engineeringDecision !== "APPROVED") return "Awaiting Engineering approval of the Project";
+    if (item.file.stage !== "ENGINEERING_WORK") return `Project is at ${readable(item.file.stage)}`;
+    return "Not yet BOM eligible";
   };
 
   if (loading && !rows.length) return <LoadingBlock />;
@@ -252,103 +270,47 @@ export function MatFlowBomListPage() {
       <PageHero
         badge="ENGINEERING BOM"
         title="BOM Builder"
-        subtitle="Engineering BOMs linked to the same Product Name + PD No. Production File."
-        actions={
+        subtitle="The PD / Project owns one Production File and one departmental handoff. Engineering BOMs remain Product-specific inside that shared Project workflow."
+        actions={(
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
-            <Button
-              startIcon={<RefreshOutlinedIcon />}
-              onClick={load}
-              disabled={loading}
-              sx={secondaryBtnSx}
-            >
-              Refresh
-            </Button>
-            <Button
-              startIcon={<AddOutlinedIcon />}
-              onClick={() => {
-                setFileId("");
-                setOpen(true);
-              }}
-              sx={primaryBtnSx}
-            >
-              New BOM
-            </Button>
+            <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>Refresh</Button>
+            <Button startIcon={<AddOutlinedIcon />} onClick={() => { setFileId(""); setProductId(""); setOpen(true); }} sx={primaryBtnSx}>New BOM</Button>
           </Box>
-        }
+        )}
       />
 
       {error && <ErrorBox>{error}</ErrorBox>}
 
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" },
-          gap: 1,
-        }}
-      >
-        <MiniMetric label="Production Files" value={stats.productionFiles} />
-        <MiniMetric label="BOMs" value={stats.total} />
-        <MiniMetric label="BOM Eligible" value={stats.eligible} />
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1 }}>
+        <MiniMetric label="PD / Project Files" value={stats.productionFiles} />
+        <MiniMetric label="Product BOMs" value={stats.total} />
+        <MiniMetric label="Products BOM Eligible" value={stats.eligible} />
         <MiniMetric label="Ready for Release" value={stats.ready} />
       </Box>
 
       <Card sx={{ ...panelSx, p: 1.25 }}>
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "minmax(0,1fr) 190px" },
-            gap: 1,
-          }}
-        >
-          <TextField
-            size="small"
-            label="Search Product Name / PD No. / BOM / File / Drawing"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            sx={fieldSx}
-          />
-          <TextField
-            select
-            size="small"
-            label="Status"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-            sx={fieldSx}
-          >
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0,1fr) 190px" }, gap: 1 }}>
+          <TextField size="small" label="Search Product / PD / Project / BOM / Drawing" value={search} onChange={(event) => setSearch(event.target.value)} sx={fieldSx} />
+          <TextField select size="small" label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={fieldSx}>
             <MenuItem value="">All statuses</MenuItem>
-            {[
-              "DRAFT",
-              "SUBMITTED",
-              "PRODUCTION_REVIEW_PENDING",
-              "RETURNED",
-              "APPROVED",
-              "READY_FOR_RELEASE",
-              "RELEASED",
-              "SUPERSEDED",
-            ].map((value) => (
-              <MenuItem key={value} value={value}>
-                {readable(value)}
-              </MenuItem>
+            {["DRAFT", "SUBMITTED", "PRODUCTION_REVIEW_PENDING", "RETURNED", "APPROVED", "READY_FOR_RELEASE", "RELEASED", "SUPERSEDED"].map((value) => (
+              <MenuItem key={value} value={value}>{readable(value)}</MenuItem>
             ))}
           </TextField>
         </Box>
       </Card>
 
       {!filteredRows.length ? (
-        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}><EmptyState>No BOMs found.</EmptyState></Card>
+        <Card sx={{ ...panelSx, p: 0 }}><EmptyState>No BOMs found.</EmptyState></Card>
       ) : viewMode === "CARD" ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" }, gap: 1 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
           {filteredRows.map((row) => (
-            <Card key={row.id} component="button" type="button" onClick={() => nav(`/matflow/boms/${row.id}`)} sx={{ ...panelSx, p: 1.2, textAlign: "left", cursor: "pointer", display: "grid", gap: 0.8, boxShadow: "none", '&:hover': { background: 'var(--mf-table-hover)' } }}>
+            <Card key={row.id} onClick={() => nav(`/matflow/boms/${row.id}`)} sx={{ ...panelSx, p: 1.15, cursor: "pointer" }}>
               <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
-              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
-                <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography></Box>
+              <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>Revision {row.revisionNo}</Typography></Box>
                 <MatFlowStatusChip status={row.status} />
-              </Box>
-              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                <Typography sx={rowSecondarySx}>Revision {row.revisionNo}</Typography>
-                <Typography sx={rowMutedSx}>{row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}</Typography>
               </Box>
             </Card>
           ))}
@@ -369,7 +331,7 @@ export function MatFlowBomListPage() {
           rowAriaLabel={(row) => `Open BOM ${row.bomNumber || ""}`}
           renderCell={(row, column) => {
             if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
-            if (column.key === "bom") return <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography></Box>;
+            if (column.key === "bom") return <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing not assigned"}</Typography></Box>;
             if (column.key === "revision") return <Typography sx={rowSecondarySx}>Rev {row.revisionNo}</Typography>;
             if (column.key === "status") return <MatFlowStatusChip status={row.status} />;
             return <Typography sx={rowMutedSx}>{row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}</Typography>;
@@ -379,121 +341,92 @@ export function MatFlowBomListPage() {
 
       <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
         <Box sx={{ px: 1.5, py: 1.25, borderBottom: "1px solid var(--mf-border)" }}>
-          <Typography sx={{ fontSize: 12.5, fontWeight: 950, color: "var(--mf-text)" }}>
-            Production File BOM Readiness
-          </Typography>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 950, color: "var(--mf-text)" }}>Product BOM Readiness inside each PD / Project</Typography>
           <Typography sx={{ mt: 0.2, fontSize: 9.8, color: "var(--mf-text-muted)" }}>
-            Every migrated/new Product appears here. BOM creation becomes available only after Engineering approval reaches Engineering Work.
+            The whole PD / Project is handed to Engineering once. Each active child Product then gets its own BOM inside that same Production File.
           </Typography>
         </Box>
 
-        {!pendingBomFiles.length ? (
-          <EmptyState>Every active Production File already has a current BOM.</EmptyState>
+        {!pendingBomItems.length ? (
+          <EmptyState>Every active Product already has a current BOM.</EmptyState>
         ) : viewMode === "CARD" ? (
           <Box sx={{ p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
-            {pendingBomFiles.slice(0, 40).map((file) => {
-              const eligible = file.stage === "ENGINEERING_WORK" && file.engineeringDecision === "APPROVED";
-              return (
-                <Box key={file.id} sx={{ p: 1.1, border: "1px solid var(--mf-border)", borderRadius: 1.5, display: "grid", gap: 0.75, background: "var(--mf-panel-solid)" }}>
-                  <MatFlowProductIdentity productName={file.productName} projectCode={file.projectCode} productionFileNo={file.productionFileNo} drawingNo={file.drawingNo} size="sm" />
-                  <Box sx={{ display: "flex", gap: 0.7, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(file.stage)}</Typography>
-                    <MatFlowStatusChip status={file.releaseHealth} />
-                  </Box>
-                  <Typography sx={{ fontSize: 9.7, fontWeight: 800, color: eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)" }}>{eligible ? "Ready to start BOM" : "Not yet BOM eligible"}</Typography>
-                  <Button size="small" onClick={() => nav(`/matflow/work?fileId=${file.id}`)} sx={secondaryBtnSx}>Open File</Button>
+            {pendingBomItems.slice(0, 50).map((item) => (
+              <Box key={`${item.file.id}:${item.product?.id || "NO_PRODUCT"}`} sx={{ p: 1.1, border: "1px solid var(--mf-border)", borderRadius: 1.5, display: "grid", gap: 0.75, background: "var(--mf-panel-solid)" }}>
+                <MatFlowProductIdentity productName={item.product?.productName || item.project?.projectName || "No Product yet"} projectCode={item.file.projectCode} productionFileNo={item.file.productionFileNo} drawingNo={item.product?.drawingNo} size="sm" />
+                <Box sx={{ display: "flex", gap: 0.7, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+                  <Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(item.file.stage)}</Typography>
+                  <MatFlowStatusChip status={item.file.releaseHealth} />
                 </Box>
-              );
-            })}
+                <Typography sx={{ fontSize: 9.7, fontWeight: 800, color: item.eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)" }}>{readinessText(item)}</Typography>
+                <Button size="small" onClick={() => nav(`/matflow/work?fileId=${item.file.id}`)} sx={secondaryBtnSx}>Open PD / Project File</Button>
+              </Box>
+            ))}
           </Box>
         ) : (
           <Box sx={{ p: 1 }}>
             <MatFlowListGrid
               columns={[
                 { key: "product", label: "Product / PD", width: "300px" },
-                { key: "stage", label: "Stage", width: "180px" },
+                { key: "stage", label: "Project Stage", width: "180px" },
                 { key: "health", label: "Health", width: "150px" },
-                { key: "readiness", label: "BOM Readiness", width: "minmax(260px,1fr)" },
-                { key: "action", label: "", width: "120px", align: "right" },
+                { key: "readiness", label: "Product BOM Readiness", width: "minmax(300px,1fr)" },
+                { key: "action", label: "", width: "160px", align: "right" },
               ]}
-              rows={pendingBomFiles.slice(0, 40)}
-              minWidth={1040}
-              getRowKey={(file) => file.id}
-              rowAccent={(file) => String(file.releaseHealth || "").toUpperCase() === "RED" ? "var(--mf-danger-text)" : String(file.releaseHealth || "").toUpperCase() === "AMBER" ? "var(--mf-warning-text)" : String(file.releaseHealth || "").toUpperCase() === "GREEN" ? "var(--mf-success-text)" : "transparent"}
-              renderCell={(file, column) => {
-                const eligible = file.stage === "ENGINEERING_WORK" && file.engineeringDecision === "APPROVED";
-                if (column.key === "product") return <MatFlowProductIdentity productName={file.productName} projectCode={file.projectCode} productionFileNo={file.productionFileNo} drawingNo={file.drawingNo} size="sm" />;
-                if (column.key === "stage") return <Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(file.stage)}</Typography>;
-                if (column.key === "health") return <MatFlowStatusChip status={file.releaseHealth} />;
-                if (column.key === "readiness") return <Typography sx={{ fontSize: 9.7, fontWeight: 850, color: eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)" }}>{eligible ? "Ready to start BOM" : "Not yet BOM eligible"}</Typography>;
-                return <Button size="small" onClick={() => nav(`/matflow/work?fileId=${file.id}`)} sx={secondaryBtnSx}>Open File</Button>;
+              rows={pendingBomItems.slice(0, 50)}
+              minWidth={1090}
+              getRowKey={(item) => `${item.file.id}:${item.product?.id || "NO_PRODUCT"}`}
+              rowAccent={(item) => String(item.file.releaseHealth || "").toUpperCase() === "RED" ? "var(--mf-danger-text)" : String(item.file.releaseHealth || "").toUpperCase() === "AMBER" ? "var(--mf-warning-text)" : String(item.file.releaseHealth || "").toUpperCase() === "GREEN" ? "var(--mf-success-text)" : "transparent"}
+              renderCell={(item, column) => {
+                if (column.key === "product") return <MatFlowProductIdentity productName={item.product?.productName || item.project?.projectName || "No Product yet"} projectCode={item.file.projectCode} productionFileNo={item.file.productionFileNo} drawingNo={item.product?.drawingNo} size="sm" />;
+                if (column.key === "stage") return <Typography sx={{ fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(item.file.stage)}</Typography>;
+                if (column.key === "health") return <MatFlowStatusChip status={item.file.releaseHealth} />;
+                if (column.key === "readiness") return <Typography sx={{ fontSize: 9.7, fontWeight: 850, color: item.eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)" }}>{readinessText(item)}</Typography>;
+                return <Button size="small" onClick={() => nav(`/matflow/work?fileId=${item.file.id}`)} sx={secondaryBtnSx}>Open Project File</Button>;
               }}
             />
           </Box>
         )}
       </Card>
 
-      <Dialog
-        open={open}
-        onClose={() => !working && setOpen(false)}
-        fullWidth
-        maxWidth="sm"
-        PaperProps={{ sx: dialogPaperSx }}
-      >
-        <DialogTitle sx={dialogTitleSx}>Start Engineering BOM</DialogTitle>
+      <Dialog open={open} onClose={() => !working && setOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+        <DialogTitle sx={dialogTitleSx}>Start Product BOM inside PD / Project</DialogTitle>
         <DialogContent sx={dialogContentSx}>
-          <Box sx={{ pt: 0.7 }}>
+          <Box sx={{ pt: 0.7, display: "grid", gap: 1 }}>
             <TextField
               select
               fullWidth
-              label="Production File"
+              label="PD / Project Production File"
               value={fileId}
-              onChange={(event) => setFileId(event.target.value)}
+              onChange={(event) => { setFileId(event.target.value); setProductId(""); }}
               sx={fieldSx}
             >
-              {availableFiles.map((file) => (
-                <MenuItem key={file.id} value={file.id}>
-                  {file.productName || "Unnamed Product"} — PD No. {file.projectCode || "—"} · File {file.productionFileNo || "—"} · Drawing {file.drawingNo || "—"}
-                </MenuItem>
+              {availableFiles.map((file) => {
+                const project = projectsById.get(file.projectId);
+                return <MenuItem key={file.id} value={file.id}>{project?.projectName || file.projectName || "Unnamed Project"} — PD No. {file.projectCode || "not assigned"} · {file.productionFileNo}</MenuItem>;
+              })}
+            </TextField>
+
+            <TextField select fullWidth disabled={!fileId} label="Product" value={productId} onChange={(event) => setProductId(event.target.value)} sx={fieldSx}>
+              {availableProducts.map((product) => (
+                <MenuItem key={product.id} value={product.id}>{product.productName || "Unnamed Product"}{product.drawingNo ? ` · Drawing ${product.drawingNo}` : " · Drawing not assigned"}</MenuItem>
               ))}
             </TextField>
 
-            <Typography
-              sx={{
-                mt: 1,
-                fontSize: 10.5,
-                lineHeight: 1.5,
-                color: "var(--mf-text-muted)",
-              }}
-            >
-              Only Engineering-approved files currently in Engineering Work and without an active BOM are selectable. Earlier-stage Production Files remain visible in the BOM Readiness list above.
+            <Typography sx={{ fontSize: 10.5, lineHeight: 1.5, color: "var(--mf-text-muted)" }}>
+              Engineering receives the whole PD / Project. Select the child Product whose BOM you are authoring; this does not create another Production File or another handoff.
             </Typography>
 
             {!availableFiles.length && (
-              <Box
-                sx={{
-                  mt: 1.2,
-                  p: 1.2,
-                  borderRadius: 1.5,
-                  border: "1px solid var(--mf-border)",
-                  background: "var(--mf-surface)",
-                  color: "var(--mf-text-muted)",
-                  fontSize: 10.5,
-                  fontWeight: 750,
-                }}
-              >
-                No Production File is currently ready to start a new BOM.
+              <Box sx={{ p: 1.2, borderRadius: 1.5, border: "1px solid var(--mf-border)", background: "var(--mf-surface)", color: "var(--mf-text-muted)", fontSize: 10.5, fontWeight: 750 }}>
+                No Product is currently ready to start a BOM. The PD / Project must first reach Engineering Work with Engineering approval.
               </Box>
             )}
           </Box>
         </DialogContent>
         <DialogActions sx={dialogActionsSx}>
-          <Button onClick={() => setOpen(false)} disabled={working} sx={secondaryBtnSx}>
-            Cancel
-          </Button>
-          <Button disabled={!fileId || working} onClick={create} sx={primaryBtnSx}>
-            {working ? "Creating..." : "Create BOM"}
-          </Button>
+          <Button onClick={() => setOpen(false)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+          <Button disabled={!fileId || !productId || working} onClick={create} sx={primaryBtnSx}>{working ? "Creating..." : "Create Product BOM"}</Button>
         </DialogActions>
       </Dialog>
     </Box>
@@ -752,7 +685,7 @@ export function MatFlowBomDetailPage() {
       <PageHero
         badge="BOM BUILDER"
         title={bom.productName || bom.bomNumber}
-        subtitle={`PD No. ${bom.projectCode || "—"} · File ${bom.productionFileNo || "—"} · Drawing ${bom.drawingNo || "—"} · ${bom.bomNumber}`}
+        subtitle={`${bom.projectCode ? `PD No. ${bom.projectCode}` : "PD No. not assigned"} · Project File ${bom.productionFileNo || "—"} · Product ${bom.productName || "—"}${bom.drawingNo ? ` · Drawing ${bom.drawingNo}` : ""} · ${bom.bomNumber}`}
         actions={
           <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
@@ -837,7 +770,7 @@ export function MatFlowBomDetailPage() {
             {bom.legacyImported
               ? canCreateRevision
                 ? "Historical BOM preserved exactly · Engineering is approved, so a current editable revision can now be created"
-                : "Historical BOM preserved exactly · Read-only until this Production File reaches approved Engineering Work"
+                : "Historical Product BOM preserved exactly · Read-only until the shared PD / Project Production File reaches approved Engineering Work"
               : "Engineering material structure only · No costing/procurement workflow in this phase"}
           </Typography>
         </Box>

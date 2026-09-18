@@ -80,6 +80,14 @@ public class MatFlowAccessService {
         requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
     }
 
+    /**
+     * Project/PD Design execution. Ownership is checked by MatFlowDesignProjectService
+     * after this role-level gate.
+     */
+    public void requireDesignProjectContributorWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
+    }
+
     public void requireEngineeringReviewWrite() {
         requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
     }
@@ -129,6 +137,18 @@ public class MatFlowAccessService {
 
     public void requireProjectWrite() {
         requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+    }
+
+    /**
+     * Product children are Design work/subtasks inside the Project Production File.
+     * A Junior Designer may create/update Product children only for the PD actually
+     * assigned to them; MatFlowProjectService enforces that ownership + Design-stage
+     * boundary after this role-level gate. Parent Project/PD mutation remains under
+     * requireProjectWrite().
+     */
+    public void requireProjectProductWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER",
+                "MATFLOW_DESIGNER_JUNIOR", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
     }
 
     public void requireMasterWrite() {

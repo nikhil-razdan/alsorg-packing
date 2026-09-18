@@ -12,10 +12,12 @@ import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemStatus;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemType;
 import com.alsorg.packing.domain.matflow.MatFlowMaterial;
 import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
+import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.repository.matflow.MatFlowBomLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProductionFileRepository;
+import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
 import com.alsorg.packing.repository.matflow.MatFlowWorkItemRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -50,6 +52,7 @@ public class MatFlowBomService {
     private final MatFlowBomLineRepository lineRepository;
     private final MatFlowMaterialRepository materialRepository;
     private final MatFlowProductionFileRepository fileRepository;
+    private final MatFlowProjectDrawingRepository productRepository;
     private final MatFlowWorkItemRepository workRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
@@ -61,6 +64,7 @@ public class MatFlowBomService {
             MatFlowBomLineRepository lineRepository,
             MatFlowMaterialRepository materialRepository,
             MatFlowProductionFileRepository fileRepository,
+            MatFlowProjectDrawingRepository productRepository,
             MatFlowWorkItemRepository workRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
@@ -70,6 +74,7 @@ public class MatFlowBomService {
         this.lineRepository = lineRepository;
         this.materialRepository = materialRepository;
         this.fileRepository = fileRepository;
+        this.productRepository = productRepository;
         this.workRepository = workRepository;
         this.accessService = accessService;
         this.auditService = auditService;
@@ -96,8 +101,8 @@ public class MatFlowBomService {
      *   retained in the control copy whenever there is no conflicting control BOM;
      * - the historical status stays authoritative in mf_boms and is surfaced in API
      *   responses without violating the new mf_control_boms status constraint;
-     * - a migrated Project/Product must already have its Production File before the BOM
-     *   is copied, so the existing Project migration remains the source of identity;
+     * - the migrated Project / PD must already have its canonical Production File before a Product BOM
+     *   is copied, so the Project migration remains the source of workflow identity;
      * - rerunning this method is safe.
      */
     /**
@@ -121,6 +126,35 @@ public class MatFlowBomService {
         if (!legacyTableExists(LEGACY_BOM_TABLE) || !legacyTableExists(LEGACY_BOM_LINE_TABLE)) {
             return 0;
         }
+
+        /*
+         * Project/PD is now the canonical Production File. Older control copies may
+         * still point at the historical Product-level Production File that was used
+         * before this model changed. Re-home only the control-copy FK; the original
+         * legacy mf_boms row and the historical Product-level Production File stay
+         * untouched for audit/history. This runs after ProjectService creates the
+         * canonical product_id IS NULL file (startup order 100 -> BOM order 200).
+         */
+        int rehomedBoms = jdbcTemplate.update("""
+                update mf_control_boms current_bom
+                   set production_file_id = canonical.id,
+                       updated_at = coalesce(current_bom.updated_at, current_timestamp)
+                  from mf_production_files legacy_file
+                  join mf_production_files canonical
+                    on canonical.project_id = legacy_file.project_id
+                   and canonical.product_id is null
+                 where current_bom.production_file_id = legacy_file.id
+                   and legacy_file.product_id is not null
+                   and current_bom.project_drawing_id = legacy_file.product_id
+                   and not exists (
+                       select 1
+                         from mf_control_boms duplicate_bom
+                        where duplicate_bom.id <> current_bom.id
+                          and duplicate_bom.production_file_id = canonical.id
+                          and duplicate_bom.project_drawing_id = current_bom.project_drawing_id
+                          and duplicate_bom.revision_no = current_bom.revision_no
+                   )
+                """);
 
         /*
          * IMPORTANT: mf_control_boms is the NEW workflow table and its database
@@ -174,8 +208,11 @@ public class MatFlowBomService {
                     b.updated_at,
                     coalesce(nullif(b.updated_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION')
                 from mf_boms b
+                join mf_project_drawings product
+                  on product.id = b.project_drawing_id
                 join mf_production_files pf
-                  on pf.product_id = b.project_drawing_id
+                  on pf.project_id = product.project_id
+                 and pf.product_id is null
                 where not exists (
                     select 1
                     from mf_control_boms current_bom
@@ -185,6 +222,7 @@ public class MatFlowBomService {
                     select 1
                     from mf_control_boms current_bom
                     where current_bom.production_file_id = pf.id
+                      and current_bom.project_drawing_id = b.project_drawing_id
                       and current_bom.revision_no = b.revision_no
                 )
                 on conflict do nothing
@@ -252,10 +290,11 @@ public class MatFlowBomService {
                 on conflict do nothing
                 """);
 
-        if (importedBoms > 0 || importedLines > 0) {
-            log.info("MatFlow legacy BOM bridge imported {} BOM(s) and {} BOM line(s)", importedBoms, importedLines);
+        if (rehomedBoms > 0 || importedBoms > 0 || importedLines > 0) {
+            log.info("MatFlow legacy BOM bridge re-homed {} control BOM(s), imported {} BOM(s) and {} BOM line(s)",
+                    rehomedBoms, importedBoms, importedLines);
         }
-        return importedBoms;
+        return rehomedBoms + importedBoms;
     }
 
     @Transactional
@@ -268,14 +307,19 @@ public class MatFlowBomService {
         String requestedStatus = clean(status);
         final String statusFilter = requestedStatus == null ? "" : requestedStatus.toUpperCase(Locale.ROOT);
         return bomRepository.findAllByOrderByUpdatedAtDesc().stream()
+                // Live Engineering/BOM views expose only the canonical Project-level
+                // Production File. Historical Product-level files remain readable by
+                // direct audit references but must never re-enter the active queue.
+                .filter(b -> b.getProductionFile() != null && b.getProductionFile().getProduct() == null)
                 .filter(b -> accessService.canAccessPlant(b.getProductionFile().getPlantCode()))
                 .filter(b -> productionFileId == null || productionFileId.equals(b.getProductionFile().getId()))
                 .filter(b -> term.isBlank()
                         || contains(b.getBomNumber(), term)
                         || contains(b.getProductionFile().getProjectCode(), term)
-                        || contains(b.getProductionFile().getProductName(), term)
+                        || contains(b.getProductionFile().getProjectName(), term)
                         || contains(b.getProductionFile().getProductionFileNo(), term)
-                        || contains(b.getProductionFile().getDrawingNo(), term))
+                        || (b.getProjectDrawing() != null && contains(b.getProjectDrawing().getProductName(), term))
+                        || (b.getProjectDrawing() != null && contains(b.getProjectDrawing().getDrawingNo(), term)))
                 .map(this::toResponse)
                 .filter(response -> statusFilter.isBlank() || statusFilter.equalsIgnoreCase(response.status()))
                 .toList();
@@ -293,20 +337,31 @@ public class MatFlowBomService {
     public BomResponse create(BomCreateRequest request) {
         accessService.requireEngineeringWrite();
         reconcileLegacyBoms();
+        if (request == null || request.productionFileId() == null) throw badRequest("Production File is required");
+        if (request.productId() == null) throw badRequest("Product is required for a BOM");
+
         MatFlowProductionFile file = requireFile(request.productionFileId());
+        if (file.getProduct() != null) {
+            throw conflict("New BOMs must use the Project-level Production File, not a legacy Product-level file");
+        }
         if (file.getEngineeringDecision() != EngineeringDecision.APPROVED) {
             throw conflict("Engineering approval is required before BOM creation");
         }
-        MatFlowBom latest = bomRepository.findFirstByProductionFile_IdAndLatestRevisionTrue(file.getId()).orElse(null);
+        MatFlowProjectDrawing product = requireProjectProduct(file, request.productId());
+
+        MatFlowBom latest = bomRepository
+                .findFirstByProductionFile_IdAndProjectDrawing_IdAndLatestRevisionTrue(file.getId(), product.getId())
+                .orElse(null);
         if (latest != null && latest.getStatus() != BomStatus.SUPERSEDED) {
-            throw conflict("An active BOM already exists. Open that BOM or create a current revision instead.");
+            throw conflict("This Product already has an active BOM. Open that BOM or create a current revision instead.");
         }
-        int revision = nextRevisionNo(file.getId());
+
+        int revision = nextRevisionNo(file.getId(), product.getId());
         MatFlowBom row = new MatFlowBom();
         row.setProductionFile(file);
-        row.setProjectDrawing(file.getProduct());
+        row.setProjectDrawing(product);
         row.setRevisionNo(revision);
-        row.setBomNumber(buildBomNo(file, revision));
+        row.setBomNumber(buildBomNo(file, product, revision));
         row.setStatus(BomStatus.DRAFT);
         row.setLatestRevision(true);
         row.setRemarks(request.remarks());
@@ -314,7 +369,9 @@ public class MatFlowBomService {
         row.setUpdatedBy(accessService.actor());
         row = bomRepository.save(row);
         auditService.log("BOM", row.getId(), "BOM_CREATED", file,
-                auditService.details("bomNumber", row.getBomNumber(), "revision", revision));
+                auditService.details("bomNumber", row.getBomNumber(), "revision", revision,
+                        "productId", product.getId(), "productName", product.getProductName(),
+                        "scope", "PRODUCT_INSIDE_PROJECT_PRODUCTION_FILE"));
         return toResponse(row);
     }
 
@@ -395,15 +452,8 @@ public class MatFlowBomService {
         if (request.remarks() != null) bom.setRemarks(request.remarks());
         bom.setUpdatedBy(accessService.actor());
         bomRepository.save(bom);
-        workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(
-                bom.getProductionFile().getId(), WorkItemType.ENGINEERING_TASK, "BOM").ifPresent(task -> {
-                    task.setStatus(WorkItemStatus.COMPLETE);
-                    task.setCompletedBy(accessService.actor());
-                    task.setCompletedAt(now());
-                    task.setCompletionNote("BOM " + bom.getBomNumber() + " submitted Ready for Release");
-                    task.setUpdatedBy(accessService.actor());
-                    workRepository.save(task);
-                });
+        refreshProjectBomTask(bom.getProductionFile(),
+                "BOM " + bom.getBomNumber() + " submitted Ready for Release");
         auditService.log("BOM", bom.getId(), "BOM_READY_FOR_RELEASE", bom.getProductionFile(),
                 auditService.details("bomNumber", bom.getBomNumber(), "revision", bom.getRevisionNo()));
         return toResponse(bom);
@@ -421,16 +471,18 @@ public class MatFlowBomService {
             throw conflict("A revision can only be created from the current Ready for Release / Released BOM.");
         }
 
+        MatFlowProductionFile workflowFile = workflowFileForBom(source);
+
         source.setLatestRevision(false);
         source.setStatus(BomStatus.SUPERSEDED);
         source.setUpdatedBy(accessService.actor());
         bomRepository.save(source);
 
         MatFlowBom next = new MatFlowBom();
-        next.setProductionFile(source.getProductionFile());
+        next.setProductionFile(workflowFile);
         next.setProjectDrawing(source.getProjectDrawing());
-        next.setRevisionNo(nextRevisionNo(source.getProductionFile().getId()));
-        next.setBomNumber(buildBomNo(source.getProductionFile(), next.getRevisionNo()));
+        next.setRevisionNo(nextRevisionNo(workflowFile.getId(), source.getProjectDrawing().getId()));
+        next.setBomNumber(buildBomNo(workflowFile, source.getProjectDrawing(), next.getRevisionNo()));
         next.setStatus(BomStatus.DRAFT);
         next.setLatestRevision(true);
         next.setRemarks(request.remarks());
@@ -459,14 +511,14 @@ public class MatFlowBomService {
         }
 
         workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(
-                source.getProductionFile().getId(), WorkItemType.ENGINEERING_TASK, "BOM").ifPresent(task -> {
+                workflowFile.getId(), WorkItemType.ENGINEERING_TASK, "BOM").ifPresent(task -> {
                     task.setStatus(WorkItemStatus.IN_PROGRESS);
                     task.setCompletedAt(null);
                     task.setCompletedBy(null);
                     task.setUpdatedBy(accessService.actor());
                     workRepository.save(task);
                 });
-        auditService.log("BOM", next.getId(), "BOM_REVISION_CREATED", source.getProductionFile(),
+        auditService.log("BOM", next.getId(), "BOM_REVISION_CREATED", workflowFile,
                 auditService.details("fromRevision", source.getRevisionNo(), "toRevision", next.getRevisionNo(),
                         "sourceLegacy", isLegacyBom(source.getId())));
         return toResponse(next);
@@ -504,8 +556,9 @@ public class MatFlowBomService {
                 f.getProductionFileNo(),
                 f.getProjectCode(),
                 f.getProjectName(),
-                f.getProductName(),
-                f.getDrawingNo(),
+                bom.getProjectDrawing() == null ? null : bom.getProjectDrawing().getId(),
+                bom.getProjectDrawing() == null ? null : bom.getProjectDrawing().getProductName(),
+                bom.getProjectDrawing() == null ? null : bom.getProjectDrawing().getDrawingNo(),
                 bom.getCreatedBy(),
                 bom.getRevisionNo(),
                 responseStatus,
@@ -549,8 +602,8 @@ public class MatFlowBomService {
         }
     }
 
-    private int nextRevisionNo(UUID productionFileId) {
-        return bomRepository.findByProductionFile_IdOrderByRevisionNoDesc(productionFileId).stream()
+    private int nextRevisionNo(UUID productionFileId, UUID productId) {
+        return bomRepository.findByProductionFile_IdAndProjectDrawing_IdOrderByRevisionNoDesc(productionFileId, productId).stream()
                 .map(MatFlowBom::getRevisionNo)
                 .filter(java.util.Objects::nonNull)
                 .max(Integer::compareTo)
@@ -575,6 +628,17 @@ public class MatFlowBomService {
         MatFlowProductionFile f = fileRepository.findById(id).orElseThrow(() -> notFound("Production File not found"));
         accessService.requirePlantAccess(f.getPlantCode());
         return f;
+    }
+
+    private MatFlowProjectDrawing requireProjectProduct(MatFlowProductionFile file, UUID productId) {
+        MatFlowProjectDrawing product = productRepository.findById(productId)
+                .orElseThrow(() -> notFound("Product not found"));
+        if (product.getProject() == null || file.getProject() == null
+                || !file.getProject().getId().equals(product.getProject().getId())) {
+            throw conflict("Selected Product does not belong to this PD / Project Production File");
+        }
+        if (!product.isActive()) throw conflict("Selected Product is inactive");
+        return product;
     }
 
     private MatFlowBomLine requireLine(UUID bomId, UUID id) {
@@ -604,11 +668,24 @@ public class MatFlowBomService {
     private boolean canCreateRevision(MatFlowBom bom, boolean legacy) {
         if (!bom.isLatestRevision()) return false;
         if (legacy) {
-            MatFlowProductionFile file = bom.getProductionFile();
-            return file.getEngineeringDecision() == EngineeringDecision.APPROVED
+            MatFlowProductionFile file = workflowFileForBom(bom);
+            return file != null
+                    && file.getEngineeringDecision() == EngineeringDecision.APPROVED
                     && file.getStage() == ProductionFileStage.ENGINEERING_WORK;
         }
         return Set.of(BomStatus.READY_FOR_RELEASE, BomStatus.RELEASED).contains(bom.getStatus());
+    }
+
+    private MatFlowProductionFile workflowFileForBom(MatFlowBom bom) {
+        if (bom == null) return null;
+        MatFlowProjectDrawing product = bom.getProjectDrawing();
+        if (product != null && product.getProject() != null) {
+            MatFlowProductionFile canonical = fileRepository
+                    .findFirstByProject_IdAndProductIsNullOrderByCreatedAtAsc(product.getProject().getId())
+                    .orElse(null);
+            if (canonical != null) return canonical;
+        }
+        return bom.getProductionFile();
     }
 
     private boolean isLegacyBom(UUID bomId) {
@@ -652,10 +729,46 @@ public class MatFlowBomService {
         }
     }
 
-    private String buildBomNo(MatFlowProductionFile f, int revision) {
-        return ("BOM-" + f.getProductionFileNo() + "-R" + String.format("%02d", revision))
+    private String buildBomNo(MatFlowProductionFile file, MatFlowProjectDrawing product, int revision) {
+        String projectRef = clean(file.getProjectCode());
+        if (projectRef == null) projectRef = file.getProductionFileNo();
+        String productRef = clean(product.getDrawingNo());
+        if (productRef == null) productRef = clean(product.getProductName());
+        if (productRef == null) productRef = product.getId().toString().substring(0, 8);
+        return ("BOM-" + projectRef + "-" + productRef + "-R" + String.format("%02d", revision))
+                .toUpperCase(Locale.ROOT)
                 .replaceAll("[^A-Z0-9._-]+", "-");
     }
+
+    private void refreshProjectBomTask(MatFlowProductionFile file, String completionNote) {
+        if (file == null || file.getProject() == null) return;
+        List<MatFlowProjectDrawing> activeProducts = productRepository
+                .findByProject_IdOrderByCreatedAtAsc(file.getProject().getId()).stream()
+                .filter(MatFlowProjectDrawing::isActive)
+                .toList();
+        boolean allReady = !activeProducts.isEmpty() && activeProducts.stream().allMatch(product ->
+                bomRepository.findFirstByProductionFile_IdAndProjectDrawing_IdAndLatestRevisionTrue(file.getId(), product.getId())
+                        .map(current -> current.getStatus() == BomStatus.READY_FOR_RELEASE || current.getStatus() == BomStatus.RELEASED)
+                        .orElse(false));
+
+        workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(
+                file.getId(), WorkItemType.ENGINEERING_TASK, "BOM").ifPresent(task -> {
+            if (allReady) {
+                task.setStatus(WorkItemStatus.COMPLETE);
+                task.setCompletedBy(accessService.actor());
+                task.setCompletedAt(now());
+                task.setCompletionNote(completionNote + "; all active Products have Ready for Release BOMs");
+            } else {
+                task.setStatus(WorkItemStatus.IN_PROGRESS);
+                task.setCompletedBy(null);
+                task.setCompletedAt(null);
+                task.setCompletionNote(null);
+            }
+            task.setUpdatedBy(accessService.actor());
+            workRepository.save(task);
+        });
+    }
+
 
 
     private void requireVersion(Long actual, Long supplied) {

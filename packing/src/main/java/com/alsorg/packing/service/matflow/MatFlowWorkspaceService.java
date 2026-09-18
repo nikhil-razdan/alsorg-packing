@@ -18,11 +18,13 @@ import com.alsorg.packing.domain.matflow.MatFlowControlTypes.RevisionType;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemStatus;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemType;
 import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
+import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.domain.matflow.MatFlowRevision;
 import com.alsorg.packing.domain.matflow.MatFlowWorkItem;
 import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowDesignTaskRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProductionFileRepository;
+import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
 import com.alsorg.packing.repository.matflow.MatFlowRevisionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowWorkItemRepository;
 import java.io.IOException;
@@ -67,6 +69,8 @@ public class MatFlowWorkspaceService {
     private final MatFlowRevisionRepository revisionRepository;
     private final MatFlowBomRepository bomRepository;
     private final MatFlowDesignTaskRepository designTaskRepository;
+    private final MatFlowProjectDrawingRepository productRepository;
+    private final MatFlowDesignProjectService designProjectService;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
     private final MatFlowWorkflowTemplateService templateService;
@@ -78,6 +82,8 @@ public class MatFlowWorkspaceService {
             MatFlowRevisionRepository revisionRepository,
             MatFlowBomRepository bomRepository,
             MatFlowDesignTaskRepository designTaskRepository,
+            MatFlowProjectDrawingRepository productRepository,
+            MatFlowDesignProjectService designProjectService,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
             MatFlowWorkflowTemplateService templateService,
@@ -87,6 +93,8 @@ public class MatFlowWorkspaceService {
         this.revisionRepository = revisionRepository;
         this.bomRepository = bomRepository;
         this.designTaskRepository = designTaskRepository;
+        this.productRepository = productRepository;
+        this.designProjectService = designProjectService;
         this.accessService = accessService;
         this.auditService = auditService;
         this.templateService = templateService;
@@ -108,15 +116,12 @@ public class MatFlowWorkspaceService {
         boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         Set<UUID> juniorVisibleFiles = juniorDesignerOnly ? juniorDesignerVisibleFileIds() : Set.of();
         return fileRepository.findAllByOrderByUpdatedAtDesc().stream()
-                .filter(f -> f.isActive() && accessService.canAccessPlant(f.getPlantCode()))
+                .filter(f -> f.isActive() && f.getProduct() == null && accessService.canAccessPlant(f.getPlantCode()))
                 .filter(f -> plant == null || plant.equalsIgnoreCase(f.getPlantCode()))
                 .filter(f -> !juniorDesignerOnly || juniorVisibleFiles.contains(f.getId()))
                 .filter(f -> stageFilter == null || f.getStage() == stageFilter)
                 .filter(f -> healthFilter == null || f.getReleaseHealth() == healthFilter)
-                .filter(f -> term.isBlank() || contains(f.getProductionFileNo(), term) || contains(f.getProjectCode(), term)
-                        || contains(f.getProjectName(), term) || contains(f.getClientName(), term)
-                        || contains(f.getProductName(), term) || contains(f.getDrawingNo(), term)
-                        || contains(f.getCurrentOwner(), term))
+                .filter(f -> term.isBlank() || productionFileContains(f, term))
                 .map(this::toFileResponse).toList();
     }
 
@@ -200,6 +205,9 @@ public class MatFlowWorkspaceService {
         if (type == WorkItemType.DESIGN_CHECK) {
             accessService.requireDesignerWrite();
             requireStage(file, ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION);
+            if (isPdDesignWorkflow(file)) {
+                throw conflict("Design checklist is owned by the PD / Project Design workspace. Update and lock it there instead of the legacy file checklist.");
+            }
         } else {
             accessService.requireEngineeringReviewWrite();
             requireStage(file, ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY);
@@ -280,6 +288,9 @@ public class MatFlowWorkspaceService {
         accessService.requireDesignHeadWrite();
         MatFlowProductionFile file = requireFile(fileId);
         requireDesignStage(file);
+        if (isPdDesignWorkflow(file)) {
+            throw conflict("This Project / PD uses Project-level Design assignment. Products are the Design subtasks; legacy per-file Design tasks are disabled.");
+        }
         if (clean(file.getDesigner()) == null) throw conflict("Assign Designer-1 before delegating Design tasks");
         if (clean(file.getDesignHead()) == null) throw conflict("Assign the Design Head before delegating Design tasks");
 
@@ -326,6 +337,9 @@ public class MatFlowWorkspaceService {
         accessService.requireDesignHeadWrite();
         MatFlowProductionFile file = requireFile(fileId);
         requireDesignStage(file);
+        if (isPdDesignWorkflow(file)) {
+            throw conflict("This Project / PD uses Project-level Design assignment. Products are the Design subtasks; legacy per-file Design tasks are disabled.");
+        }
         MatFlowDesignTask row = requireDesignTask(fileId, taskId);
         requireVersion(row.getRowVersion(), request.rowVersion());
         if (Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(row.getStatus())) {
@@ -369,6 +383,9 @@ public class MatFlowWorkspaceService {
         accessService.requireDesignTaskWrite();
         MatFlowProductionFile file = requireFile(fileId);
         requireDesignStage(file);
+        if (isPdDesignWorkflow(file)) {
+            throw conflict("This Project / PD uses Project-level Design assignment. Products are the Design subtasks; legacy per-file Design tasks are disabled.");
+        }
         MatFlowDesignTask row = requireDesignTask(fileId, taskId);
         requireVersion(row.getRowVersion(), request.rowVersion());
         boolean juniorDesignerOnly = accessService.hasAnyRole("MATFLOW_DESIGNER_JUNIOR")
@@ -431,7 +448,9 @@ public class MatFlowWorkspaceService {
             List<String> blockers = designReviewBlockers(file);
             if (!blockers.isEmpty()) throw conflict("Design Head approval is blocked: " + String.join("; ", blockers));
             ChecklistProgress checklist = progress(fileId, WorkItemType.DESIGN_CHECK);
-            if (checklist.requiredPending() > 0 && clean(request.remarks()) == null) {
+            boolean pdDesignWorkflow = file.getProject() != null
+                    && designProjectService.isWorkflowEnabled(file.getProject().getId());
+            if (!pdDesignWorkflow && checklist.requiredPending() > 0 && clean(request.remarks()) == null) {
                 throw badRequest("Review remarks are required when Design checklist items remain pending");
             }
             file.setDesignHeadDecision("APPROVED");
@@ -459,7 +478,11 @@ public class MatFlowWorkspaceService {
         if (!handoffBlockers.isEmpty()) throw conflict("Design handoff is blocked: " + String.join("; ", handoffBlockers));
 
         ChecklistProgress progress = progress(fileId, WorkItemType.DESIGN_CHECK);
-        ReleaseHealth health = releaseHealth(progress);
+        boolean pdDesignWorkflow = file.getProject() != null
+                && designProjectService.isWorkflowEnabled(file.getProject().getId());
+        ReleaseHealth health = pdDesignWorkflow
+                ? designProjectService.releaseHealth(file.getProject().getId())
+                : releaseHealth(progress);
         if (health == ReleaseHealth.RED) throw conflict("Design cannot be submitted: critical information is still pending");
         if (health == ReleaseHealth.AMBER && clean(request.controlledReleaseReason()) == null) {
             throw badRequest("Controlled Release reason is mandatory for AMBER submission");
@@ -538,7 +561,7 @@ public class MatFlowWorkspaceService {
         MatFlowProductionFile file = requireFile(fileId);
         if (!Set.of(ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY,
                 ProductionFileStage.ENGINEERING_WORK, ProductionFileStage.REVISION_REVIEW).contains(file.getStage())) {
-            throw conflict("Design / Engineering issues can be raised after PPC Gate 1 while the Product is in Engineering");
+            throw conflict("Design / Engineering issues can be raised after PPC Gate 1 while the Project / PD is in Engineering");
         }
 
         String title = clean(request.title());
@@ -852,7 +875,15 @@ public class MatFlowWorkspaceService {
             List<String> blockers=gate2Blockers(file); if(!blockers.isEmpty())throw conflict("Production Release is blocked: "+String.join("; ",blockers));
             file.setPpcGate2Decision("RELEASE"); file.setPpcGate2By(accessService.actor()); file.setPpcGate2At(now()); file.setPpcGate2Remarks(request.remarks()); file.setStage(ProductionFileStage.PRODUCTION_RELEASED); file.setCurrentDepartment("PRODUCTION RELEASE"); file.setCurrentOwner(null); file.setProductionReleasedBy(accessService.actor()); file.setProductionReleasedAt(now());
             file.setDownstreamWorkflowKey("PENDING_VALIDATED_PRODUCTION_WORKFLOW"); file.setDownstreamWorkflowStatus("NOT_CONFIGURED"); file.setReleaseHealth(ReleaseHealth.GREEN);
-            MatFlowBom bom=latestBom(file.getId()); if(bom!=null && bom.getStatus()==BomStatus.READY_FOR_RELEASE){ bom.setStatus(BomStatus.RELEASED); bom.setReleasedBy(accessService.actor()); bom.setReleasedAt(now()); bom.setUpdatedBy(accessService.actor()); bomRepository.save(bom); }
+            for (MatFlowBom bom : bomRepository.findByProductionFile_IdAndLatestRevisionTrueOrderByUpdatedAtDesc(file.getId())) {
+                if (bom.getStatus() == BomStatus.READY_FOR_RELEASE) {
+                    bom.setStatus(BomStatus.RELEASED);
+                    bom.setReleasedBy(accessService.actor());
+                    bom.setReleasedAt(now());
+                    bom.setUpdatedBy(accessService.actor());
+                    bomRepository.save(bom);
+                }
+            }
         }
         file.setUpdatedBy(accessService.actor()); fileRepository.save(file); auditService.log("PRODUCTION_FILE",file.getId(),"PPC_GATE_2_"+decision,file,auditService.details("remarks",request.remarks(),"downstreamWorkflowStatus",file.getDownstreamWorkflowStatus())); return toDetail(file);
     }
@@ -1012,7 +1043,12 @@ public class MatFlowWorkspaceService {
         file.setEngineeringDecision(EngineeringDecision.PENDING); file.setEngineeringDecisionBy(null); file.setEngineeringDecisionAt(null); file.setEngineeringDecisionRemarks(null); file.setStage(ProductionFileStage.ENGINEERING_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer());
         for(MatFlowWorkItem item:items(file.getId(),WorkItemType.ENGINEERING_CHECK)){ item.setStatus(WorkItemStatus.PENDING); item.setCompletedAt(null); item.setCompletedBy(null); item.setUpdatedBy(accessService.actor()); workRepository.save(item); }
         for(MatFlowWorkItem item:items(file.getId(),WorkItemType.ENGINEERING_TASK)){ if(item.getStatus()!=WorkItemStatus.CANCELLED){ item.setStatus(clean(item.getAssignedTo()) == null ? WorkItemStatus.TODO : WorkItemStatus.ASSIGNED); item.setStartedAt(null); item.setRevisionContext(null); item.setCompletedAt(null); item.setCompletedBy(null); item.setUpdatedBy(accessService.actor()); workRepository.save(item); } }
-        MatFlowBom bom=latestBom(file.getId()); if(bom!=null){ bom.setStatus(BomStatus.SUPERSEDED); bom.setLatestRevision(false); bom.setUpdatedBy(accessService.actor()); bomRepository.save(bom); }
+        for (MatFlowBom bom : bomRepository.findByProductionFile_IdAndLatestRevisionTrueOrderByUpdatedAtDesc(file.getId())) {
+            bom.setStatus(BomStatus.SUPERSEDED);
+            bom.setLatestRevision(false);
+            bom.setUpdatedBy(accessService.actor());
+            bomRepository.save(bom);
+        }
     }
 
     private void restoreAfterRejectedRevision(MatFlowProductionFile file){
@@ -1026,7 +1062,13 @@ public class MatFlowWorkspaceService {
         MatFlowRevision active=activeRevision(file.getId(),row.getRevisionType());
         if(active!=null && !Objects.equals(active.getId(),row.getId())){ active.setRevisionStatus(RevisionStatus.SUPERSEDED); active.setSupersededAt(now()); active.setUpdatedBy(accessService.actor()); revisionRepository.save(active); }
         if(!keepRowStatus){ row.setRevisionStatus(RevisionStatus.ACTIVE); row.setActivatedAt(now()); revisionRepository.save(row); }
-        if(row.getRevisionType()==RevisionType.DESIGN_DRAWING){ file.getProduct().setDrawingRevision(row.getRevisionNo()); file.getProduct().setUpdatedBy(accessService.actor()); }
+        if(row.getRevisionType()==RevisionType.DESIGN_DRAWING && file.getProduct()!=null){
+            // Historical Product-level file compatibility only. Canonical Project-level
+            // Design revisions represent the whole PD package and do not overwrite a
+            // single child Product drawing revision.
+            file.getProduct().setDrawingRevision(row.getRevisionNo());
+            file.getProduct().setUpdatedBy(accessService.actor());
+        }
     }
 
     private boolean requiresImpactReview(MatFlowProductionFile file, RevisionType type){
@@ -1035,10 +1077,18 @@ public class MatFlowWorkspaceService {
     }
 
     private List<String> gate2Blockers(MatFlowProductionFile file){
-        List<String> blockers=new ArrayList<>(); if(file.isRevisionReviewRequired())blockers.add("Revision impact review is pending"); if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED)blockers.add("Engineering is not approved");
-        ChecklistProgress ep=progress(file.getId(),WorkItemType.ENGINEERING_CHECK); if(ep.criticalPending()>0||ep.requiredPending()>0)blockers.add("Engineering checklist is incomplete"); if(openQueryCount(file.getId())>0)blockers.add("Design ↔ Engineering issues are still open");
-        List<MatFlowWorkItem> pending=items(file.getId(),WorkItemType.ENGINEERING_TASK).stream().filter(MatFlowWorkItem::isBlocking).filter(x->!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).toList(); if(!pending.isEmpty())blockers.add("Engineering documentation tasks pending: "+pending.stream().map(MatFlowWorkItem::getTitle).limit(4).reduce((a,b)->a+", "+b).orElse("pending"));
-        MatFlowBom bom=latestBom(file.getId()); if(bom==null||bom.getStatus()!=BomStatus.READY_FOR_RELEASE)blockers.add("BOM is not Ready for Release"); return blockers;
+        List<String> blockers = new ArrayList<>();
+        if(file.isRevisionReviewRequired()) blockers.add("Revision impact review is pending");
+        if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED) blockers.add("Engineering is not approved");
+        ChecklistProgress ep=progress(file.getId(),WorkItemType.ENGINEERING_CHECK);
+        if(ep.criticalPending()>0||ep.requiredPending()>0) blockers.add("Engineering checklist is incomplete");
+        if(openQueryCount(file.getId())>0) blockers.add("Design ↔ Engineering issues are still open");
+        List<MatFlowWorkItem> pending=items(file.getId(),WorkItemType.ENGINEERING_TASK).stream()
+                .filter(MatFlowWorkItem::isBlocking)
+                .filter(x->!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).toList();
+        if(!pending.isEmpty()) blockers.add("Engineering documentation tasks pending: "+pending.stream().map(MatFlowWorkItem::getTitle).limit(4).reduce((a,b)->a+", "+b).orElse("pending"));
+        blockers.addAll(projectBomBlockers(file));
+        return blockers;
     }
 
     private boolean allBlockingTasksDone(UUID fileId){
@@ -1126,7 +1176,9 @@ public class MatFlowWorkspaceService {
 
     private void refreshHealth(MatFlowProductionFile file){
         ChecklistProgress dp = progress(file.getId(), WorkItemType.DESIGN_CHECK);
-        ReleaseHealth health = releaseHealth(dp);
+        ReleaseHealth health = file.getProject() != null && designProjectService.isWorkflowEnabled(file.getProject().getId())
+                ? designProjectService.releaseHealth(file.getProject().getId())
+                : releaseHealth(dp);
         if (isDesignStage(file) && !designHandoffBlockers(file).isEmpty()) {
             health = ReleaseHealth.RED;
         } else if(file.isRevisionReviewRequired()||openQueryCount(file.getId())>0) {
@@ -1139,6 +1191,11 @@ public class MatFlowWorkspaceService {
     }
 
     private List<String> designReviewBlockers(MatFlowProductionFile file) {
+        if (file != null && file.getProject() != null
+                && designProjectService.isWorkflowEnabled(file.getProject().getId())) {
+            return designProjectService.reviewBlockers(file.getProject().getId());
+        }
+        /* Legacy fallback for Projects created before the PD-level Design workspace. */
         List<String> blockers = new ArrayList<>();
         if (clean(file.getDesigner()) == null) blockers.add("Designer-1 is not assigned");
         if (clean(file.getDesignHead()) == null) blockers.add("Design Head is not assigned");
@@ -1160,9 +1217,14 @@ public class MatFlowWorkspaceService {
     }
 
     private List<String> gate2BlockersWithoutRecursion(MatFlowProductionFile file){
-        List<String>b=new ArrayList<>(); if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED)b.add("engineering"); if(openQueryCount(file.getId())>0)b.add("query");
-        if(file.getEngineeringDecision()==EngineeringDecision.APPROVED&&!allBlockingTasksDone(file.getId()))b.add("tasks"); MatFlowBom bom=latestBom(file.getId()); if(file.getEngineeringDecision()==EngineeringDecision.APPROVED&&(bom==null||bom.getStatus()!=BomStatus.READY_FOR_RELEASE))b.add("bom"); return b;
+        List<String> blockers=new ArrayList<>();
+        if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED) blockers.add("engineering");
+        if(openQueryCount(file.getId())>0) blockers.add("query");
+        if(file.getEngineeringDecision()==EngineeringDecision.APPROVED&&!allBlockingTasksDone(file.getId())) blockers.add("tasks");
+        if(file.getEngineeringDecision()==EngineeringDecision.APPROVED&&!projectBomBlockers(file).isEmpty()) blockers.add("bom");
+        return blockers;
     }
+
 
     private ReleaseHealth releaseHealth(ChecklistProgress p){ if(p.criticalPending()>0)return ReleaseHealth.RED; if(p.requiredPending()>0)return ReleaseHealth.AMBER; return ReleaseHealth.GREEN; }
     private ChecklistProgress progress(UUID fileId, WorkItemType type){
@@ -1177,16 +1239,17 @@ public class MatFlowWorkspaceService {
         boolean engineering = management || accessService.hasAnyRole("MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
         boolean ppc = management || accessService.hasAnyRole("MATFLOW_PPC");
         String actor = accessService.actor();
+        boolean pdDesignWorkflow = isPdDesignWorkflow(file);
 
         // Junior Designer sees only their assignment context, never department-wide
         // checklist, reference, timeline or unrelated Design-task information.
         List<String> designBlockers = (!juniorDesignerOnly && (design || ppc)) ? designHandoffBlockers(file) : List.of();
         List<String> gate2 = (engineering || ppc) ? gate2Blockers(file) : List.of();
 
-        List<WorkItemResponse> designChecklist = (design && !juniorDesignerOnly)
+        List<WorkItemResponse> designChecklist = (design && !juniorDesignerOnly && !pdDesignWorkflow)
                 ? mapItems(items(file.getId(),WorkItemType.DESIGN_CHECK).stream().filter(x->x.getStatus()!=WorkItemStatus.CANCELLED).toList())
                 : List.of();
-        List<DesignTaskResponse> designTaskRows = design
+        List<DesignTaskResponse> designTaskRows = (design && !pdDesignWorkflow)
                 ? designTasks(file.getId()).stream()
                         .filter(task -> !juniorDesignerOnly || isDesignTaskAssignedTo(task, actor))
                         .map(this::toDesignTask).toList()
@@ -1245,7 +1308,9 @@ public class MatFlowWorkspaceService {
         List<MatFlowWorkItem> tasks=items(file.getId(),WorkItemType.ENGINEERING_TASK);
         int completed=juniorDesignerOnly ? 0 : (int)tasks.stream().filter(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count();
         int pending=juniorDesignerOnly ? 0 : tasks.size()-completed;
-        MatFlowBom bom=juniorDesignerOnly ? null : latestBom(file.getId());
+        // A Project Production File can have many Product BOMs, so the historical
+        // single latestBomId/latestBomStatus response fields are intentionally null.
+        MatFlowBom bom=null;
         DesignTaskProgress designProgress = juniorDesignerOnly
                 ? designTaskProgress(file.getId(), actor)
                 : designTaskProgress(file.getId());
@@ -1256,8 +1321,12 @@ public class MatFlowWorkspaceService {
                         .count()
                 : (int) openQueryCount(file.getId());
 
+        ChecklistProgress visibleDesignChecklistProgress = (!juniorDesignerOnly && !isPdDesignWorkflow(file))
+                ? progress(file.getId(), WorkItemType.DESIGN_CHECK)
+                : null;
+
         return new ProductionFileResponse(
-                file.getId(),file.getProductionFileNo(),file.getProject().getId(),file.getProduct().getId(),file.getProjectCode(),file.getProjectName(),file.getClientName(),file.getProductName(),file.getDrawingNo(),file.getPlantCode(),
+                file.getId(),file.getProductionFileNo(),file.getProject().getId(),null,file.getProjectCode(),file.getProjectName(),file.getClientName(),file.getProjectName(),null,file.getPlantCode(),
                 file.getStage().name(),juniorDesignerOnly?null:file.getReleaseHealth().name(),juniorDesignerOnly?null:file.getEngineeringDecision().name(),
                 juniorDesignerOnly?"DESIGN":file.getCurrentDepartment(),juniorDesignerOnly?actor:file.getCurrentOwner(),
                 juniorDesignerOnly?null:file.getDesigner(),juniorDesignerOnly?null:file.getDesignHead(),juniorDesignerOnly?null:file.getDesignHeadDecision(),
@@ -1266,7 +1335,7 @@ public class MatFlowWorkspaceService {
                 juniorDesignerOnly?null:file.getControlledReleaseReason(),juniorDesignerOnly?null:file.getPlannedProductionReleaseDate(),juniorDesignerOnly?null:file.getPlannedDispatchDate(),
                 juniorDesignerOnly?null:file.getPpcGate1Decision(),juniorDesignerOnly?null:file.getPpcGate2Decision(),juniorDesignerOnly?false:file.isRevisionReviewRequired(),
                 juniorDesignerOnly?null:file.getDownstreamWorkflowKey(),juniorDesignerOnly?null:file.getDownstreamWorkflowStatus(),juniorDesignerOnly?null:file.getProductionReleasedAt(),file.getProjectCode(),
-                juniorDesignerOnly?null:progress(file.getId(),WorkItemType.DESIGN_CHECK),designProgress,juniorDesignerOnly?null:progress(file.getId(),WorkItemType.ENGINEERING_CHECK),
+                visibleDesignChecklistProgress,designProgress,juniorDesignerOnly?null:progress(file.getId(),WorkItemType.ENGINEERING_CHECK),
                 visibleQueries,pending,completed,bom==null?null:bom.getId(),bom==null?null:bom.getStatus().name(),file.getRowVersion(),file.getUpdatedAt());
     }
 
@@ -1284,8 +1353,8 @@ public class MatFlowWorkspaceService {
         MatFlowProductionFile file = task.getProductionFile();
         boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         return new DesignTaskQueueResponse(toDesignTask(task), file.getId(), file.getProductionFileNo(),
-                file.getProjectCode(), file.getProjectName(), file.getClientName(), file.getProductName(),
-                file.getDrawingNo(), file.getStage().name(), juniorDesignerOnly ? null : file.getReleaseHealth().name(),
+                file.getProjectCode(), file.getProjectName(), file.getClientName(), file.getProjectName(),
+                null, file.getStage().name(), juniorDesignerOnly ? null : file.getReleaseHealth().name(),
                 juniorDesignerOnly ? null : file.getDesignHead());
     }
 
@@ -1294,7 +1363,8 @@ public class MatFlowWorkspaceService {
         return contains(task.getTaskNo(), q) || contains(task.getTitle(), q) || contains(task.getDescription(), q)
                 || contains(task.getDesigner1(), q) || task.getAssignees().stream().anyMatch(value -> contains(value, q))
                 || contains(file.getProjectCode(), q) || contains(file.getProjectName(), q) || contains(file.getClientName(), q)
-                || contains(file.getProductName(), q) || contains(file.getDrawingNo(), q);
+                || projectProducts(file).stream().anyMatch(product -> contains(product.getProductName(), q)
+                        || contains(product.getDrawingNo(), q) || contains(product.getProductType(), q));
     }
 
     private DesignTaskProgress designTaskProgress(UUID fileId) {
@@ -1335,17 +1405,27 @@ public class MatFlowWorkspaceService {
     private boolean juniorDesignerCanAccessFile(UUID fileId) {
         if (!accessService.isJuniorDesignerOnly()) return true;
         String actor = accessService.actor();
+        MatFlowProductionFile file = fileRepository.findById(fileId).orElse(null);
+        if (file != null && file.getProject() != null
+                && designProjectService.isAssignedTo(file.getProject().getId(), actor)) return true;
         return designTasks(fileId).stream().anyMatch(task -> isDesignTaskAssignedTo(task, actor));
     }
 
     private Set<UUID> juniorDesignerVisibleFileIds() {
         if (!accessService.isJuniorDesignerOnly()) return Set.of();
         String actor = accessService.actor();
-        return designTaskRepository.findAllForQueue().stream()
+        Set<UUID> visible = new java.util.LinkedHashSet<>();
+        designTaskRepository.findAllForQueue().stream()
                 .filter(task -> task.getProductionFile() != null)
                 .filter(task -> isDesignTaskAssignedTo(task, actor))
                 .map(task -> task.getProductionFile().getId())
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .forEach(visible::add);
+        fileRepository.findAllByOrderByUpdatedAtDesc().stream()
+                .filter(file -> file.getProduct() == null && file.getProject() != null)
+                .filter(file -> designProjectService.isAssignedTo(file.getProject().getId(), actor))
+                .map(MatFlowProductionFile::getId)
+                .forEach(visible::add);
+        return java.util.Collections.unmodifiableSet(visible);
     }
 
     private boolean isQueryRelatedToActor(MatFlowWorkItem item, String username) {
@@ -1381,6 +1461,46 @@ public class MatFlowWorkspaceService {
             if (result.size() >= 12) break;
         }
         return List.copyOf(result);
+    }
+
+    private List<MatFlowProjectDrawing> projectProducts(MatFlowProductionFile file) {
+        if (file == null || file.getProject() == null) return List.of();
+        return productRepository.findByProject_IdOrderByCreatedAtAsc(file.getProject().getId());
+    }
+
+    private boolean productionFileContains(MatFlowProductionFile file, String term) {
+        return contains(file.getProductionFileNo(), term)
+                || contains(file.getProjectCode(), term)
+                || contains(file.getProjectName(), term)
+                || contains(file.getClientName(), term)
+                || contains(file.getCurrentOwner(), term)
+                || projectProducts(file).stream().anyMatch(product ->
+                        contains(product.getProductName(), term)
+                                || contains(product.getDrawingNo(), term)
+                                || contains(product.getProductType(), term));
+    }
+
+    private List<String> projectBomBlockers(MatFlowProductionFile file) {
+        List<MatFlowProjectDrawing> products = projectProducts(file).stream()
+                .filter(MatFlowProjectDrawing::isActive)
+                .toList();
+        if (products.isEmpty()) return List.of("No active Products exist inside this PD / Project");
+
+        List<String> missing = new ArrayList<>();
+        for (MatFlowProjectDrawing product : products) {
+            MatFlowBom bom = bomRepository
+                    .findFirstByProductionFile_IdAndProjectDrawing_IdAndLatestRevisionTrue(file.getId(), product.getId())
+                    .orElse(null);
+            if (bom == null || !Set.of(BomStatus.READY_FOR_RELEASE, BomStatus.RELEASED).contains(bom.getStatus())) {
+                String label = clean(product.getProductName());
+                if (label == null) label = product.getId().toString().substring(0, 8);
+                if (clean(product.getDrawingNo()) != null) label += " (" + product.getDrawingNo() + ")";
+                missing.add(label);
+            }
+        }
+        if (missing.isEmpty()) return List.of();
+        return List.of("Product BOMs not Ready for Release: " + String.join(", ", missing.stream().limit(6).toList())
+                + (missing.size() > 6 ? " +" + (missing.size() - 6) + " more" : ""));
     }
 
     private String nextDesignTaskNo(MatFlowProductionFile file) {
@@ -1462,11 +1582,18 @@ public class MatFlowWorkspaceService {
         }
     }
 
+    private boolean isPdDesignWorkflow(MatFlowProductionFile file) {
+        return file != null
+                && file.getProject() != null
+                && file.getProduct() == null
+                && designProjectService.isWorkflowEnabled(file.getProject().getId());
+    }
+
     private MatFlowProductionFile requireFile(UUID id){
         MatFlowProductionFile file=fileRepository.findById(id).orElseThrow(()->notFound("Production File not found"));
         accessService.requirePlantAccess(file.getPlantCode());
         if (accessService.isJuniorDesignerOnly() && !juniorDesignerCanAccessFile(file.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This Product / PD is not assigned to your Junior Designer task queue");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This PD / Project is not assigned to your Junior Designer task queue");
         }
         return file;
     }

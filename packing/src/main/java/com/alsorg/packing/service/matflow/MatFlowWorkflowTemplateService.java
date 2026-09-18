@@ -25,6 +25,9 @@ public class MatFlowWorkflowTemplateService {
 
     private record Seed(String key, String section, String title, Criticality criticality, boolean blocking) {}
 
+    /** Stable PD-level view of the approved Designer checklist template. */
+    public record DesignChecklistSeed(String key, String section, String title, String criticality, boolean blocking) {}
+
     /** Exact 32-point Designer Checklist supplied by the Design Department. */
     private static final List<Seed> DESIGN = List.of(
             new Seed("DESIGN_01_SITE_MEASUREMENT", "Site / Drawing Control", "Production drawings must be as per site measurements.", Criticality.REQUIRED, true),
@@ -97,16 +100,34 @@ public class MatFlowWorkflowTemplateService {
             new Seed("ASSEMBLY_DRAWING", "Engineering documentation", "Assembly Drawing", Criticality.REQUIRED, true),
             new Seed("SHUTTER_DRAWING", "Engineering documentation", "Shutter Drawing", Criticality.REQUIRED, true));
 
+    /** PD / Project Design workspace uses the same approved Design checklist content. */
+    public List<DesignChecklistSeed> designProjectChecklistTemplate() {
+        return DESIGN.stream()
+                .map(seed -> new DesignChecklistSeed(seed.key(), seed.section(), seed.title(),
+                        seed.criticality().name(), seed.blocking()))
+                .toList();
+    }
+
     public void seedDesignChecklist(MatFlowProductionFile file) {
         reconcileDesignChecklist(file, accessService.actor());
     }
 
     public void seedEngineeringChecklist(MatFlowProductionFile file) {
-        seed(file, WorkItemType.ENGINEERING_CHECK, ENGINEERING, WorkItemStatus.PENDING, accessService.actor());
+        seedEngineeringChecklist(file, accessService.actor());
     }
 
     public void seedEngineeringTasks(MatFlowProductionFile file) {
-        seed(file, WorkItemType.ENGINEERING_TASK, TASKS, WorkItemStatus.TODO, accessService.actor());
+        seedEngineeringTasks(file, accessService.actor());
+    }
+
+    /** Startup/cut-over safe Engineering template seeding before an authenticated user exists. */
+    public void seedEngineeringChecklist(MatFlowProductionFile file, String actor) {
+        seed(file, WorkItemType.ENGINEERING_CHECK, ENGINEERING, WorkItemStatus.PENDING, actor);
+    }
+
+    /** Startup/cut-over safe Engineering task seeding before an authenticated user exists. */
+    public void seedEngineeringTasks(MatFlowProductionFile file, String actor) {
+        seed(file, WorkItemType.ENGINEERING_TASK, TASKS, WorkItemStatus.TODO, actor);
     }
 
     /**

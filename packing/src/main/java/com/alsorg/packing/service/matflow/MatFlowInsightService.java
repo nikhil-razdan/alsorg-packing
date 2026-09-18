@@ -1,6 +1,7 @@
 package com.alsorg.packing.service.matflow;
 
 import static com.alsorg.packing.controller.dto.matflow.MatFlowInsightDtos.*;
+import com.alsorg.packing.controller.dto.matflow.MatFlowDesignProjectDtos.DesignProjectResponse;
 
 import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.DesignTaskStatus;
@@ -39,6 +40,7 @@ public class MatFlowInsightService {
     private final MatFlowProductionFileRepository fileRepository;
     private final MatFlowDesignTaskRepository designTaskRepository;
     private final MatFlowWorkItemRepository workRepository;
+    private final MatFlowDesignProjectService designProjectService;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
 
@@ -46,11 +48,13 @@ public class MatFlowInsightService {
             MatFlowProductionFileRepository fileRepository,
             MatFlowDesignTaskRepository designTaskRepository,
             MatFlowWorkItemRepository workRepository,
+            MatFlowDesignProjectService designProjectService,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService) {
         this.fileRepository = fileRepository;
         this.designTaskRepository = designTaskRepository;
         this.workRepository = workRepository;
+        this.designProjectService = designProjectService;
         this.accessService = accessService;
         this.auditService = auditService;
     }
@@ -88,23 +92,35 @@ public class MatFlowInsightService {
                     .filter(item -> item.getDueAt() != null && item.getDueAt().isBefore(now()))
                     .filter(item -> !CLOSED_WORK_STATUSES.contains(item.getStatus()))
                     .count();
-            List<MatFlowDesignTask> designTasks = designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(file.getId()).stream()
-                    .filter(task -> !juniorDesignerOnly || isDesignTaskAssignedTo(task, actor))
-                    .toList();
-            long pendingDesignTasks = designTasks.stream()
-                    .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
-                    .count();
-            long overdueDesignTasks = designTasks.stream()
-                    .filter(task -> task.getDueAt() != null && task.getDueAt().isBefore(now()))
-                    .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
-                    .count();
+
+            DesignProjectResponse pdDesign = file.getProject() == null
+                    ? null
+                    : designProjectService.findExisting(file.getProject().getId());
+            long pendingDesignTasks;
+            long overdueDesignTasks;
+            if (pdDesign != null) {
+                pendingDesignTasks = Math.max(0, pdDesign.productCount() - pdDesign.productDone());
+                overdueDesignTasks = pdDesign.overdue() ? 1 : 0;
+            } else {
+                /* Historical fallback for pre-cut-over Design-task Projects only. */
+                List<MatFlowDesignTask> designTasks = designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(file.getId()).stream()
+                        .filter(task -> !juniorDesignerOnly || isDesignTaskAssignedTo(task, actor))
+                        .toList();
+                pendingDesignTasks = designTasks.stream()
+                        .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
+                        .count();
+                overdueDesignTasks = designTasks.stream()
+                        .filter(task -> task.getDueAt() != null && task.getDueAt().isBefore(now()))
+                        .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
+                        .count();
+            }
             long totalOverdue = overdueItems + overdueDesignTasks;
 
             openQueries += queries;
             overdue += totalOverdue;
 
             boolean needsAttention = juniorDesignerOnly
-                    ? queries > 0 || overdueDesignTasks > 0
+                    ? queries > 0 || overdueDesignTasks > 0 || pendingDesignTasks > 0
                     : file.getReleaseHealth() != ReleaseHealth.GREEN
                             || file.isRevisionReviewRequired()
                             || queries > 0
@@ -113,10 +129,10 @@ public class MatFlowInsightService {
 
             List<String> blockers = new ArrayList<>();
             if (!juniorDesignerOnly && file.isRevisionReviewRequired()) blockers.add("Revision review");
-            if (pendingDesignTasks > 0) blockers.add(pendingDesignTasks + " assigned task" + (pendingDesignTasks == 1 ? "" : "s") + " not completed");
+            if (pendingDesignTasks > 0) blockers.add(pendingDesignTasks + " Design Product subtask" + (pendingDesignTasks == 1 ? "" : "s") + " not completed");
             if (queries > 0) blockers.add(queries + " related open issue" + (queries == 1 ? "" : "s"));
             if (!juniorDesignerOnly && pendingTasks > 0) blockers.add(pendingTasks + " engineering task" + (pendingTasks == 1 ? "" : "s"));
-            if (juniorDesignerOnly && overdueDesignTasks > 0) blockers.add(overdueDesignTasks + " assigned task" + (overdueDesignTasks == 1 ? "" : "s") + " overdue");
+            if (juniorDesignerOnly && overdueDesignTasks > 0) blockers.add("PD / Project Design assignment overdue");
             if (!juniorDesignerOnly && totalOverdue > 0) blockers.add(totalOverdue + " overdue work item" + (totalOverdue == 1 ? "" : "s"));
             if (!juniorDesignerOnly && blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.RED) blockers.add("Critical release information pending");
             if (!juniorDesignerOnly && blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.AMBER) blockers.add("Controlled release limitation");
@@ -146,9 +162,8 @@ public class MatFlowInsightService {
                 .thenComparing(ProductionRiskRow::updatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
 
         long activeProjects = files.stream()
-                .map(MatFlowProductionFile::getProjectCode)
-                .filter(value -> value != null && !value.isBlank())
-                .map(value -> value.trim().toUpperCase(Locale.ROOT))
+                .filter(file -> file.getProject() != null && file.getProject().getId() != null)
+                .map(file -> file.getProject().getId())
                 .distinct()
                 .count();
 
@@ -231,14 +246,25 @@ public class MatFlowInsightService {
     private List<MatFlowProductionFile> readableFiles(String plant, boolean activeOnly) {
         boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         String actor = juniorDesignerOnly ? accessService.actor() : null;
-        Set<java.util.UUID> juniorVisibleFiles = juniorDesignerOnly
-                ? designTaskRepository.findAllForQueue().stream()
-                        .filter(task -> task.getProductionFile() != null)
-                        .filter(task -> isDesignTaskAssignedTo(task, actor))
-                        .map(task -> task.getProductionFile().getId())
-                        .collect(java.util.stream.Collectors.toUnmodifiableSet())
-                : Set.of();
+        Set<java.util.UUID> juniorVisibleFiles;
+        if (juniorDesignerOnly) {
+            Set<java.util.UUID> visible = new java.util.LinkedHashSet<>();
+            designTaskRepository.findAllForQueue().stream()
+                    .filter(task -> task.getProductionFile() != null)
+                    .filter(task -> isDesignTaskAssignedTo(task, actor))
+                    .map(task -> task.getProductionFile().getId())
+                    .forEach(visible::add);
+            fileRepository.findAllByOrderByUpdatedAtDesc().stream()
+                    .filter(file -> file.getProduct() == null && file.getProject() != null)
+                    .filter(file -> designProjectService.isAssignedTo(file.getProject().getId(), actor))
+                    .map(MatFlowProductionFile::getId)
+                    .forEach(visible::add);
+            juniorVisibleFiles = java.util.Collections.unmodifiableSet(visible);
+        } else {
+            juniorVisibleFiles = Set.of();
+        }
         return fileRepository.findAllByOrderByUpdatedAtDesc().stream()
+                .filter(file -> file.getProduct() == null) // canonical PD / Project files only
                 .filter(file -> !activeOnly || file.isActive())
                 .filter(file -> accessService.canAccessPlant(file.getPlantCode()))
                 .filter(file -> plant == null || plant.equalsIgnoreCase(file.getPlantCode()))

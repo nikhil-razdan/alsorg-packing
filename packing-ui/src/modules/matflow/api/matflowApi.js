@@ -38,6 +38,15 @@ export const matflowApi = {
   productImageUrl: (projectId, productId) => `${API.defaults?.baseURL || ""}${BASE}/projects/${id(projectId)}/products/${id(productId)}/image`,
   deleteProductImage: (projectId, productId) => API.delete(`${BASE}/projects/${id(projectId)}/products/${id(productId)}/image`),
 
+  // Design Department · Project/PD-level assignment workspace
+  listDesignProjects: (params = {}) => API.get(`${BASE}/design-projects`, { params: cleanParams(params) }),
+  getDesignProject: (projectId) => API.get(`${BASE}/design-projects/${id(projectId, "Project ID")}`),
+  assignDesignProject: (projectId, body) => API.put(`${BASE}/design-projects/${id(projectId, "Project ID")}/assignment`, body),
+  updateDesignProjectChecklist: (projectId, itemKey, body) => API.put(`${BASE}/design-projects/${id(projectId, "Project ID")}/checklist/${encodeURIComponent(String(itemKey || ""))}`, body),
+  setDesignProjectChecklistLock: (projectId, body) => API.post(`${BASE}/design-projects/${id(projectId, "Project ID")}/checklist/lock`, body),
+  updateDesignProductProgress: (projectId, productId, body) => API.put(`${BASE}/design-projects/${id(projectId, "Project ID")}/products/${id(productId, "Product ID")}/progress`, body),
+  addDesignProjectLog: (projectId, body) => API.post(`${BASE}/design-projects/${id(projectId, "Project ID")}/logs`, body),
+
   // Production control workspace
   listProductionFiles: (params = {}) => API.get(`${BASE}/workspace/files`, { params: cleanParams(params) }),
   listDesignTasks: (params = {}) => API.get(`${BASE}/workspace/design-tasks`, { params: cleanParams(params) }),

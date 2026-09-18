@@ -64,7 +64,7 @@ const projectBlank = {
   plantCode: "",
   requiredDate: "",
   priority: "NORMAL",
-  projectManager: "",
+  projectManager: "Director Reference",
   designer1: "",
   designHead: "",
   remarks: "",
@@ -153,10 +153,10 @@ const auditDetails = (event) => {
   }
 };
 
-const buildTrackingRows = (detail, product) => {
+const buildTrackingRows = (detail, record) => {
   const timeline = Array.isArray(detail?.timeline) ? detail.timeline : [];
   const file = detail?.productionFile || {};
-  const currentRank = FILE_TRACK_STAGE_RANK[String(file.stage || product.stage || "").toUpperCase()] ?? 0;
+  const currentRank = FILE_TRACK_STAGE_RANK[String(file.stage || record.stage || "").toUpperCase()] ?? 0;
 
   const row = ({ key, label, actions, targetRank, fallbackAt = null, fallbackActor = "" }) => {
     const event = latestAudit(timeline, actions);
@@ -177,11 +177,11 @@ const buildTrackingRows = (detail, product) => {
   return [
     row({
       key: "DESIGN_OPENED",
-      label: "Design file opened",
+      label: "PD / Project file opened",
       actions: ["PRODUCTION_FILE_CREATED", "LEGACY_PRODUCTION_FILE_BACKFILLED"],
       targetRank: 0,
-      fallbackAt: product.createdAt || null,
-      fallbackActor: product.createdAt ? "Project record" : "",
+      fallbackAt: record.createdAt || null,
+      fallbackActor: record.createdAt ? "PD / Project record" : "",
     }),
     row({
       key: "DESIGN_TO_PPC",
@@ -224,7 +224,7 @@ function ProductFields({ value, onChange, compact = false }) {
     >
       <TextField size={compact ? "small" : "medium"} label="Product Name" value={value.productName} onChange={(e) => set("productName", e.target.value)} sx={fieldSx} />
       <TextField size={compact ? "small" : "medium"} label="Product Type" value={value.productType || ""} onChange={(e) => set("productType", e.target.value)} sx={fieldSx} />
-      <TextField size={compact ? "small" : "medium"} label="Drawing No." value={value.drawingNo} onChange={(e) => set("drawingNo", e.target.value)} sx={fieldSx} />
+      <TextField size={compact ? "small" : "medium"} label="Drawing No. (Optional)" value={value.drawingNo} onChange={(e) => set("drawingNo", e.target.value)} sx={fieldSx} />
       <TextField size={compact ? "small" : "medium"} label="Current Drawing Revision" value={value.drawingRevision || ""} onChange={(e) => set("drawingRevision", e.target.value)} sx={fieldSx} />
       <TextField size={compact ? "small" : "medium"} type="number" inputProps={{ min: 1 }} label="Units" value={value.unitQuantity} onChange={(e) => set("unitQuantity", e.target.value)} sx={fieldSx} />
       <TextField size={compact ? "small" : "medium"} type="date" InputLabelProps={{ shrink: true }} label="Required Date" value={value.requiredDate || ""} onChange={(e) => set("requiredDate", e.target.value)} sx={fieldSx} />
@@ -281,14 +281,14 @@ function BomRevisionRow({ bom, onOpen }) {
   );
 }
 
-function ProductionFileTrackingSheet({ product }) {
+function ProductionFileTrackingSheet({ record }) {
   const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(Boolean(product.productionFileId));
+  const [loading, setLoading] = useState(Boolean(record.productionFileId));
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
-    if (!product.productionFileId) {
+    if (!record.productionFileId) {
       setLoading(false);
       setDetail(null);
       return undefined;
@@ -297,7 +297,7 @@ function ProductionFileTrackingSheet({ product }) {
     setLoading(true);
     setError("");
     matflowApi
-      .getProductionFile(product.productionFileId)
+      .getProductionFile(record.productionFileId)
       .then((response) => {
         if (active) setDetail(response?.data || null);
       })
@@ -311,9 +311,9 @@ function ProductionFileTrackingSheet({ product }) {
     return () => {
       active = false;
     };
-  }, [product.productionFileId, product.stage, product.updatedAt]);
+  }, [record.productionFileId, record.stage, record.updatedAt]);
 
-  const trackingRows = useMemo(() => buildTrackingRows(detail, product), [detail, product]);
+  const trackingRows = useMemo(() => buildTrackingRows(detail, record), [detail, record]);
 
   return (
     <Box sx={trackingSheetSx}>
@@ -379,56 +379,75 @@ function ProductionFileTrackingSheet({ product }) {
       )}
 
       <Typography sx={trackingFootnoteSx}>
-        File tracking ends at Production Release.
+        PD / Project Production File tracking ends at Production Release.
       </Typography>
     </Box>
   );
 }
 
-function ProductMasterRow({ project, product, boms, canEdit, showEngineering, onEdit, onImage, onOpenFile, onOpenBom }) {
+function ProjectProductionFilePanel({ project, onOpen }) {
+  const [trackingOpen, setTrackingOpen] = useState(false);
+  const health = String(project?.releaseHealth || "").toUpperCase();
+  const hasFile = Boolean(project?.productionFileId);
+  return (
+    <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
+      <Box sx={{ px: 1, py: 0.8, display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto" }, gap: 0.75, alignItems: "center" }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 8, fontWeight: 950, letterSpacing: ".055em", textTransform: "uppercase", color: "var(--mf-primary-text)" }}>PROJECT PRODUCTION FILE</Typography>
+          <Box sx={{ mt: 0.18, display: "flex", gap: 0.55, alignItems: "center", flexWrap: "wrap" }}>
+            <Typography sx={{ fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>{project?.productionFileNo || "Initializing…"}</Typography>
+            {hasFile && <Chip size="small" label={readable(project.stage || "DESIGN_DRAFT")} sx={{ ...softChipSx, height: 20, fontSize: 8.3 }} />}
+            {healthLabel(health) && <Typography sx={{ fontSize: 8.5, fontWeight: 900, color: ticketHealthColor(health) }}>{healthLabel(health)}</Typography>}
+          </Box>
+          <Typography sx={{ mt: 0.12, fontSize: 8.6, color: "var(--mf-text-muted)" }}>One workflow identity for the whole PD / Project. Products and Product BOMs remain children inside this file.</Typography>
+        </Box>
+        <Box sx={{ display: "flex", gap: 0.45, flexWrap: "wrap", justifyContent: { xs: "flex-start", sm: "flex-end" } }}>
+          <Button size="small" disabled={!hasFile} onClick={() => setTrackingOpen((value) => !value)} startIcon={<HistoryOutlinedIcon />} sx={secondaryBtnSx}>{trackingOpen ? "Hide tracking" : "Tracking"}</Button>
+          <Button size="small" disabled={!hasFile} endIcon={<OpenInNewOutlinedIcon />} onClick={() => onOpen(project)} sx={primaryBtnSx}>Open Workflow</Button>
+        </Box>
+      </Box>
+      <Collapse in={trackingOpen && hasFile} unmountOnExit>
+        <Box sx={{ p: 0.7, pt: 0, borderTop: "1px solid var(--mf-border)" }}>
+          <ProductionFileTrackingSheet record={project} />
+        </Box>
+      </Collapse>
+    </Card>
+  );
+}
+
+function ProductMasterRow({ project, product, boms, canEdit, showEngineering, onEdit, onImage, onOpenBom }) {
   const [expanded, setExpanded] = useState(false);
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
-  const health = String(product.releaseHealth || "").toUpperCase();
-  const healthText = healthLabel(health) || "Status pending";
 
   return (
-    <Box sx={productCardSx(product.releaseHealth)}>
+    <Box sx={{ border: "1px solid var(--mf-border)", borderRadius: 1.05, background: "var(--mf-panel-solid)", overflow: "hidden" }}>
       <Box sx={productHeaderSx}>
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, minWidth: 0 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: "50%", flex: "0 0 auto", background: ticketHealthColor(product.releaseHealth) }} />
-            <Typography noWrap sx={{ fontSize: 11.4, fontWeight: 950, color: "var(--mf-text)", minWidth: 0 }}>
-              {product.productName || "Unnamed Product"}
-            </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.55, minWidth: 0, flexWrap: "wrap" }}>
+            <Typography sx={{ fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
             {product.productType && <Chip label={product.productType} size="small" sx={{ ...softChipSx, height: 19, fontSize: 8.2 }} />}
+            {showEngineering && currentBom && <MatFlowStatusChip status={currentBom.status} />}
           </Box>
-          <Typography noWrap sx={{ mt: 0.18, fontSize: 8.7, color: "var(--mf-text-muted)" }}>
-            {product.productionFileNo ? `File ${product.productionFileNo}` : "Production File pending"} · Drawing {product.drawingNo || "—"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""}
+          <Typography sx={{ mt: 0.14, fontSize: 8.6, color: "var(--mf-text-muted)" }}>
+            Drawing {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""} · {product.unitQuantity || 1} unit{Number(product.unitQuantity || 1) === 1 ? "" : "s"}{product.dimensions ? ` · ${product.dimensions}` : ""}
           </Typography>
         </Box>
-
-        <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", flex: "0 0 auto" }}>
-          <Typography sx={{ fontSize: 8.5, fontWeight: 900, color: ticketHealthColor(product.releaseHealth), whiteSpace: "nowrap" }}>
-            {healthText}
-          </Typography>
-          <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={{ ...softChipSx, height: 20, fontSize: 8.4 }} />
-          <Button
-            size="small"
-            endIcon={expanded ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
-            onClick={() => setExpanded((value) => !value)}
-            sx={{ ...secondaryBtnSx, minWidth: 0, px: 0.8, py: 0.35, fontSize: 9 }}
-          >
-            {expanded ? "Less" : "Details"}
-          </Button>
-        </Box>
+        <Button
+          size="small"
+          endIcon={expanded ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+          onClick={() => setExpanded((value) => !value)}
+          sx={{ ...secondaryBtnSx, minWidth: 0, px: 0.8, py: 0.35, fontSize: 9 }}
+        >
+          {expanded ? "Less" : "Details"}
+        </Button>
       </Box>
 
       <Collapse in={expanded} unmountOnExit>
         <Box sx={productExpandedSx}>
           <Box sx={productInfoGridSx}>
+            <Meta label="Required" value={formatDate(product.requiredDate || project.requiredDate)} />
             <Meta label="Dimensions" value={product.dimensions || "Pending"} />
             <Meta label="Units" value={product.unitQuantity || 1} />
-            <Meta label="Required" value={formatDate(product.requiredDate || project.requiredDate)} />
             <Meta label="Remarks" value={product.remarks || "—"} />
           </Box>
 
@@ -442,58 +461,23 @@ function ProductMasterRow({ project, product, boms, canEdit, showEngineering, on
             </Box>
           )}
 
-          <Box sx={{ ...identityGridSx, gridTemplateColumns: showEngineering ? { xs: "1fr", md: "1fr 1fr" } : "1fr" }}>
-            <Box sx={productionFilePanelSx(product.releaseHealth)}>
+          {showEngineering && (
+            <Box sx={bomPanelSx}>
               <Box sx={panelTopRowSx}>
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={panelEyebrowSx}>PRODUCTION FILE</Typography>
-                  <Typography noWrap sx={{ mt: 0.18, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
-                    {product.productionFileNo || "Not created"}
-                  </Typography>
-                  <Typography noWrap sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>
-                    {readable(product.stage || "NOT_STARTED")} · Drawing {product.drawingNo || "—"}
+                  <Typography sx={panelEyebrowSx}>PRODUCT ENGINEERING BOM</Typography>
+                  <Typography sx={{ mt: 0.18, fontSize: 10.8, fontWeight: 950, color: "var(--mf-text)" }}>{currentBom ? currentBom.bomNumber : "No BOM yet"}</Typography>
+                  <Typography sx={{ mt: 0.08, fontSize: 8.6, color: "var(--mf-text-muted)" }}>
+                    {currentBom ? `Rev ${currentBom.revisionNo} · ${boms.length} revision${boms.length === 1 ? "" : "s"}` : "Created by Engineering for this Product inside the shared Project file."}
                   </Typography>
                 </Box>
-                <Typography sx={{ fontSize: 8.3, fontWeight: 900, color: ticketHealthColor(product.releaseHealth), whiteSpace: "nowrap" }}>{healthText}</Typography>
+                {currentBom ? <MatFlowStatusChip status={currentBom.status} /> : null}
               </Box>
-              <Button
-                fullWidth
-                size="small"
-                disabled={!product.productionFileId}
-                endIcon={<OpenInNewOutlinedIcon />}
-                onClick={() => onOpenFile(product)}
-                sx={{ ...secondaryBtnSx, mt: 0.65 }}
-              >
-                Open Production File
-              </Button>
+              {currentBom ? (
+                <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => onOpenBom(currentBom)} sx={{ ...secondaryBtnSx, mt: 0.55 }}>Open BOM</Button>
+              ) : null}
             </Box>
-
-            {showEngineering && (
-              <Box sx={bomPanelSx}>
-                <Box sx={panelTopRowSx}>
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={panelEyebrowSx}>ENGINEERING BOM</Typography>
-                    <Typography noWrap sx={{ mt: 0.18, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
-                      {currentBom ? currentBom.bomNumber : "No BOM yet"}
-                    </Typography>
-                    <Typography noWrap sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>
-                      {currentBom ? `Rev ${currentBom.revisionNo} · ${boms.length} revision${boms.length === 1 ? "" : "s"}` : "Engineering reference not created"}
-                    </Typography>
-                  </Box>
-                  {currentBom ? <MatFlowStatusChip status={currentBom.status} /> : null}
-                </Box>
-                {currentBom ? (
-                  <Button fullWidth size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => onOpenBom(currentBom)} sx={{ ...secondaryBtnSx, mt: 0.65 }}>
-                    Open BOM
-                  </Button>
-                ) : (
-                  <Box sx={{ ...emptyBomSx, mt: 0.65 }}>No Engineering BOM yet.</Box>
-                )}
-              </Box>
-            )}
-          </Box>
-
-          <ProductionFileTrackingSheet product={product} />
+          )}
 
           {showEngineering && boms.length > 1 && (
             <Box sx={bomHistorySx}>
@@ -567,12 +551,12 @@ export function MatFlowProjectsPage() {
     load();
   }, [load]);
 
-  const bomsByFile = useMemo(() => {
+  const bomsByProduct = useMemo(() => {
     const result = new Map();
     for (const bom of boms) {
-      if (!bom.productionFileId) continue;
-      if (!result.has(bom.productionFileId)) result.set(bom.productionFileId, []);
-      result.get(bom.productionFileId).push(bom);
+      if (!bom.productId) continue;
+      if (!result.has(bom.productId)) result.set(bom.productId, []);
+      result.get(bom.productId).push(bom);
     }
     for (const list of result.values()) {
       list.sort((a, b) => {
@@ -596,42 +580,47 @@ export function MatFlowProjectsPage() {
         project.projectManager,
         project.designer1,
         project.designHead,
+        project.productionFileNo,
+        project.stage,
+        project.releaseHealth,
       ];
       if (projectValues.some((value) => String(value || "").toLowerCase().includes(query))) return true;
 
       return (project.products || []).some((product) => {
-        const productBoms = bomsByFile.get(product.productionFileId) || [];
+        const productBoms = bomsByProduct.get(product.id) || [];
         const values = [
           product.productName,
           product.productType,
           product.drawingNo,
           product.drawingRevision,
-          product.productionFileNo,
-          product.stage,
-          product.releaseHealth,
           ...(canSeeEngineeringReference ? productBoms.flatMap((bom) => [bom.bomNumber, bom.status, bom.revisionNo]) : []),
         ];
         return values.some((value) => String(value || "").toLowerCase().includes(query));
       });
     });
-  }, [rows, search, bomsByFile, canSeeEngineeringReference]);
+  }, [rows, search, bomsByProduct, canSeeEngineeringReference]);
 
   const summary = useMemo(() => {
     const products = filteredRows.flatMap((project) => project.products || []);
-    const productionFiles = products.filter((product) => product.productionFileId).length;
+    const sharedFiles = new Map();
+    for (const project of filteredRows) {
+      if (project.productionFileId) sharedFiles.set(project.productionFileId, project);
+    }
     const productsWithBom = canSeeEngineeringReference
-      ? products.filter((product) => (bomsByFile.get(product.productionFileId) || []).length > 0).length
+      ? products.filter((product) => (bomsByProduct.get(product.id) || []).length > 0).length
       : 0;
-    const inDesign = products.filter((product) => ["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED"].includes(product.stage)).length;
+    const inDesign = Array.from(sharedFiles.values()).filter((file) =>
+      ["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED"].includes(file.stage)
+    ).length;
     return {
       projects: filteredRows.length,
       products: products.length,
-      productionFiles,
+      productionFiles: sharedFiles.size,
       productsWithBom,
       inDesign,
       clients: new Set(filteredRows.map((project) => project.clientName).filter(Boolean)).size,
     };
-  }, [filteredRows, bomsByFile, canSeeEngineeringReference]);
+  }, [filteredRows, bomsByProduct, canSeeEngineeringReference]);
 
   const selectedProject = useMemo(
     () => rows.find((project) => project.id === selectedProjectId) || null,
@@ -657,7 +646,7 @@ export function MatFlowProjectsPage() {
 
   const openNewProject = () => {
     setActiveProject(null);
-    setProjectForm({ ...projectBlank, plantCode: selectedPlantParam || availablePlants?.[0] || "" });
+    setProjectForm({ ...projectBlank, projectManager: "Director Reference", plantCode: selectedPlantParam || availablePlants?.[0] || "" });
     setDialog("project-new");
   };
 
@@ -703,10 +692,10 @@ export function MatFlowProjectsPage() {
   const saveProducts = async () => {
     if (!activeProject) return;
     const valid = productForms.filter(
-      (product) => String(product.productName || "").trim() && String(product.drawingNo || "").trim()
+      (product) => String(product.productName || "").trim()
     );
     if (!valid.length) {
-      setError("Add at least one Product Name and Drawing No.");
+      setError("Add at least one Product Name.");
       return;
     }
     const ok = await run(() => matflowApi.addProjectProducts(activeProject.id, valid.map(cleanProductBody)));
@@ -744,9 +733,14 @@ export function MatFlowProjectsPage() {
     if (ok) await load();
   };
 
-  const openProductionFile = (product) => {
-    if (!product.productionFileId) return;
-    navigate(`/matflow/work?fileId=${product.productionFileId}`);
+  const openProjectProductionFile = (project) => {
+    if (!project?.productionFileId) return;
+    navigate(`/matflow/work?fileId=${project.productionFileId}`);
+  };
+
+  const openDesignPd = (project) => {
+    if (!project?.id) return;
+    navigate(`/matflow/work?designPd=1&projectId=${project.id}`);
   };
 
   const openBom = (bom) => navigate(`/matflow/boms/${bom.id}`);
@@ -756,9 +750,9 @@ export function MatFlowProjectsPage() {
   return (
     <Box sx={pageSx}>
       <PageHero
-        badge="MASTER PRODUCTION FILE"
-        title={juniorDesignerOnly ? "My Assigned Products" : "Projects"}
-        subtitle={juniorDesignerOnly ? "Only PDs and Products connected to your assigned Design tasks are visible." : (canSeeEngineeringReference ? "Product Name + PD No. with one Production File per Product / Drawing." : "Product Name + PD No., drawing ownership and file tracking.")}
+        badge="MASTER PD / PROJECT PRODUCTION FILE"
+        title={juniorDesignerOnly ? "My Assigned PDs" : "Projects"}
+        subtitle={juniorDesignerOnly ? "Your assigned PD / Projects with Product subtasks inside each shared Project Production File." : (canSeeEngineeringReference ? "One Production File per PD / Project. Products and drawings are child work inside the same departmental handoff." : "PD / Project workflow with child Product / Drawing context and one shared Production File.")}
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
@@ -780,7 +774,7 @@ export function MatFlowProjectsPage() {
         <TextField
           size="small"
           fullWidth
-          label={canSeeEngineeringReference ? "Search Product Name / PD No. / project / drawing / Production File / BOM" : "Search Product Name / PD No. / client / project / drawing"}
+          label={canSeeEngineeringReference ? "Search Product / PD No. / project / drawing / Project File / BOM" : "Search Product Name / PD No. / client / project / drawing"}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           sx={fieldSx}
@@ -790,7 +784,7 @@ export function MatFlowProjectsPage() {
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1 }}>
         <Summary label={juniorDesignerOnly ? "Assigned PDs" : "Projects"} value={summary.projects} />
         <Summary label={juniorDesignerOnly ? "Assigned Products" : "Products / Drawings"} value={summary.products} />
-        <Summary label="Production Files" value={summary.productionFiles} />
+        <Summary label="Project Files" value={summary.productionFiles} />
         {juniorDesignerOnly
           ? <Summary label="Clients" value={summary.clients} />
           : canSeeEngineeringReference
@@ -808,10 +802,10 @@ export function MatFlowProjectsPage() {
             columns={[
               { key: "pd", label: "PD No.", width: "125px" },
               { key: "project", label: "Project / Client", width: "minmax(220px,1.08fr)" },
-              { key: "products", label: "Products / Files", width: "140px" },
+              { key: "products", label: "Products / Project File", width: "160px" },
               { key: "workflow", label: "Workflow / Health", width: "minmax(230px,1fr)" },
               { key: "completion", label: "Tentative Completion", width: "145px" },
-              { key: "owner", label: "Manager / Designer", width: "170px" },
+              { key: "owner", label: "Source / Designer", width: "170px" },
               { key: "actions", label: "", width: "100px", align: "right" },
             ]}
             rows={filteredRows}
@@ -821,28 +815,25 @@ export function MatFlowProjectsPage() {
             rowAriaLabel={(project) => `Open PD ${project.projectCode || "Project"} details`}
             rowSx={(project) => selectedProjectId === project.id ? { background: "var(--mf-primary-soft)", "&:hover": { background: "var(--mf-primary-soft)" } } : {}}
             rowAccent={(project) => {
-              const values = (project.products || []).filter((product) => product.productionFileId).map((product) => String(product.releaseHealth || "").toUpperCase());
-              if (values.includes("RED")) return "var(--mf-danger-text)";
-              if (values.includes("AMBER")) return "var(--mf-warning-text)";
-              if (values.includes("GREEN")) return "var(--mf-success-text)";
+              const health = String(project.releaseHealth || "").toUpperCase();
+              if (health === "RED") return "var(--mf-danger-text)";
+              if (health === "AMBER") return "var(--mf-warning-text)";
+              if (health === "GREEN") return "var(--mf-success-text)";
               return "transparent";
             }}
             renderCell={(project, column) => {
               const products = project.products || [];
-              const productionFiles = products.filter((product) => product.productionFileId);
-              const stageCounts = productionFiles.reduce((map, product) => {
-                const key = product.stage || "NOT_STARTED";
-                map.set(key, (map.get(key) || 0) + 1);
-                return map;
-              }, new Map());
-              const healthValues = productionFiles.map((product) => String(product.releaseHealth || "").toUpperCase());
+              const sharedFile = project.productionFileId ? project : null;
+              const productionFiles = sharedFile ? [sharedFile] : [];
+              const stageCounts = new Map(sharedFile ? [[sharedFile.stage || "NOT_STARTED", 1]] : []);
+              const healthValues = sharedFile ? [String(sharedFile.releaseHealth || "").toUpperCase()] : [];
               const projectHealth = healthValues.includes("RED") ? "RED" : healthValues.includes("AMBER") ? "AMBER" : healthValues.includes("GREEN") && healthValues.length ? "GREEN" : "PENDING";
-              const bomCount = products.reduce((total, product) => total + (bomsByFile.get(product.productionFileId) || []).length, 0);
-              const productsWithBom = products.filter((product) => (bomsByFile.get(product.productionFileId) || []).length > 0).length;
-              if (column.key === "pd") return <Box><Typography sx={{ fontSize: 10.7, fontWeight: 950, color: "var(--mf-text)" }}>{project.projectCode || "—"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>{project.plantCode || "No plant"}</Typography></Box>;
+              const bomCount = products.reduce((total, product) => total + (bomsByProduct.get(product.id) || []).length, 0);
+              const productsWithBom = products.filter((product) => (bomsByProduct.get(product.id) || []).length > 0).length;
+              if (column.key === "pd") return <Box><Typography sx={{ fontSize: 10.7, fontWeight: 950, color: "var(--mf-text)" }}>{project.projectCode || "Not assigned"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>{project.plantCode || "No plant"}</Typography></Box>;
               if (column.key === "project") return <Box><Typography noWrap sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{project.projectName || "Unnamed Project"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 9, color: "var(--mf-text-secondary)" }}>{project.clientName || "Client not assigned"}</Typography></Box>;
-              if (column.key === "products") return <Box><Typography sx={{ fontSize: 10.2, fontWeight: 900, color: "var(--mf-text)" }}>{products.length} product{products.length === 1 ? "" : "s"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{productionFiles.length} file{productionFiles.length === 1 ? "" : "s"}{canSeeEngineeringReference ? ` · ${productsWithBom}/${products.length || 0} with BOM · ${bomCount} rev` : ""}</Typography></Box>;
-              if (column.key === "workflow") return <Box><Box sx={{ display: "flex", gap: 0.35, flexWrap: "wrap" }}>{Array.from(stageCounts.entries()).slice(0, 2).map(([stageName, count]) => <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />)}{!stageCounts.size && <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>No Production File yet</Typography>}</Box><Typography sx={{ mt: 0.25, fontSize: 8.7, fontWeight: 900, color: ticketHealthColor(projectHealth) }}>{healthLabel(projectHealth)}</Typography></Box>;
+              if (column.key === "products") return <Box><Typography sx={{ fontSize: 10.2, fontWeight: 900, color: "var(--mf-text)" }}>{products.length} product{products.length === 1 ? "" : "s"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{productionFiles.length ? "Project file active" : "Project file pending"}{canSeeEngineeringReference ? ` · ${productsWithBom}/${products.length || 0} with BOM · ${bomCount} rev` : ""}</Typography></Box>;
+              if (column.key === "workflow") return <Box><Box sx={{ display: "flex", gap: 0.35, flexWrap: "wrap" }}>{Array.from(stageCounts.entries()).slice(0, 2).map(([stageName, count]) => <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />)}{!stageCounts.size && <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>Project file pending</Typography>}</Box><Typography sx={{ mt: 0.25, fontSize: 8.7, fontWeight: 900, color: ticketHealthColor(projectHealth) }}>{healthLabel(projectHealth)}</Typography></Box>;
               if (column.key === "completion") return <Typography sx={{ fontSize: 9.7, fontWeight: 800, color: project.requiredDate ? "var(--mf-text-secondary)" : "var(--mf-text-muted)" }}>{project.requiredDate ? formatDate(project.requiredDate) : "Not set"}</Typography>;
               if (column.key === "owner") return <Box><Typography noWrap sx={{ fontSize: 9.7, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{project.projectManager || "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{project.designer1 || "Designer not assigned"}</Typography></Box>;
               return <Box onClick={(event) => event.stopPropagation()} sx={{ display: "flex", justifyContent: "flex-end" }}>
@@ -861,9 +852,10 @@ export function MatFlowProjectsPage() {
         }}>
           {filteredRows.map((project) => {
             const products = project.products || [];
-            const productionFiles = products.filter((product) => product.productionFileId);
-            const productsWithBom = products.filter((product) => (bomsByFile.get(product.productionFileId) || []).length > 0).length;
-            const healthValues = productionFiles.map((product) => String(product.releaseHealth || "").toUpperCase());
+            const sharedFile = project.productionFileId ? project : null;
+            const productionFiles = sharedFile ? [sharedFile] : [];
+            const productsWithBom = products.filter((product) => (bomsByProduct.get(product.id) || []).length > 0).length;
+            const healthValues = sharedFile ? [String(sharedFile.releaseHealth || "").toUpperCase()] : [];
             const projectHealth = healthValues.includes("RED")
               ? "RED"
               : healthValues.includes("AMBER")
@@ -880,7 +872,7 @@ export function MatFlowProjectsPage() {
                   <Box sx={{ minWidth: 0, flex: 1 }}>
                     <Box sx={{ display: "flex", gap: 0.55, alignItems: "center", minWidth: 0 }}>
                       <Typography sx={{ fontSize: 8, fontWeight: 950, letterSpacing: ".07em", color: "var(--mf-primary-text)", whiteSpace: "nowrap" }}>
-                        PD {project.projectCode || "—"}
+                        PD {project.projectCode || "Not assigned"}
                       </Typography>
                       <Typography sx={{ fontSize: 8, color: "var(--mf-text-muted)" }}>·</Typography>
                       <Typography noWrap sx={{ fontSize: 8.3, fontWeight: 800, color: "var(--mf-text-muted)" }}>{project.plantCode || "No plant"}</Typography>
@@ -902,38 +894,37 @@ export function MatFlowProjectsPage() {
 
                 <Box sx={ticketMetaGridSx}>
                   <TicketMeta label="Products" value={products.length} />
-                  <TicketMeta label="Files" value={productionFiles.length} />
+                  <TicketMeta label="Project File" value={productionFiles.length ? readable(project.stage || "Active") : "Pending"} />
                   <TicketMeta label="Tentative" value={project.requiredDate ? formatDate(project.requiredDate) : "Not set"} />
                   <TicketMeta label="Owner" value={owner} />
                 </Box>
 
                 <Box sx={{ px: 0.85, pb: 0.7, display: "grid", gap: 0.38, flex: 1 }}>
                   {!visibleProducts.length ? (
-                    <Box sx={ticketEmptyFileSx}>No Product / Production File yet.</Box>
+                    <Box sx={ticketEmptyFileSx}>No Products yet. The PD / Project Production File still remains the workflow identity.</Box>
                   ) : (
-                    visibleProducts.map((product) => (
-                      <Box
-                        key={product.id}
-                        role={product.productionFileId ? "button" : undefined}
-                        tabIndex={product.productionFileId ? 0 : undefined}
-                        onClick={() => product.productionFileId && openProductionFile(product)}
-                        onKeyDown={(event) => {
-                          if (product.productionFileId && (event.key === "Enter" || event.key === " ")) openProductionFile(product);
-                        }}
-                        sx={ticketFileRowSx(product.releaseHealth)}
-                      >
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography noWrap sx={{ fontSize: 9.6, fontWeight: 900, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
-                          <Typography noWrap sx={{ mt: 0.05, fontSize: 7.9, color: "var(--mf-text-muted)" }}>
-                            {product.productionFileNo ? `File ${product.productionFileNo}` : "File pending"} · DWG {product.drawingNo || "—"}
-                          </Typography>
+                    visibleProducts.map((product) => {
+                      const productBoms = bomsByProduct.get(product.id) || [];
+                      const currentBom = productBoms.find((bom) => bom.latestRevision) || productBoms[0] || null;
+                      return (
+                        <Box
+                          key={product.id}
+                          sx={{
+                            px: 0.62, py: 0.5, display: "grid", gridTemplateColumns: "minmax(0,1fr) auto",
+                            gap: 0.55, minHeight: 38, alignItems: "center", border: "1px solid var(--mf-border)",
+                            borderRadius: 0.9, background: "var(--mf-surface)",
+                          }}
+                        >
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography noWrap sx={{ fontSize: 9.6, fontWeight: 900, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
+                            <Typography noWrap sx={{ mt: 0.05, fontSize: 7.9, color: "var(--mf-text-muted)" }}>
+                              DWG {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""}
+                            </Typography>
+                          </Box>
+                          {canSeeEngineeringReference && currentBom ? <MatFlowStatusChip status={currentBom.status} /> : <Typography sx={{ fontSize: 7.9, color: "var(--mf-text-muted)" }}>{product.dimensions || "Product"}</Typography>}
                         </Box>
-                        <Box sx={{ display: "flex", gap: 0.35, alignItems: "center", justifyContent: "flex-end", flex: "0 0 auto" }}>
-                          <Box sx={{ width: 7, height: 7, borderRadius: "50%", background: ticketHealthColor(product.releaseHealth) }} />
-                          <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={{ ...softChipSx, height: 19, fontSize: 8 }} />
-                        </Box>
-                      </Box>
-                    ))
+                      );
+                    })
                   )}
                   {products.length > visibleProducts.length && (
                     <Typography sx={{ px: 0.15, pt: 0.05, fontSize: 8, fontWeight: 850, color: "var(--mf-primary-text)" }}>
@@ -948,6 +939,7 @@ export function MatFlowProjectsPage() {
                   </Typography>
                   {canProjectWrite && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(project)} sx={{ ...secondaryBtnSx, px: 0.75 }}>Edit</Button>}
                   {canProjectWrite && <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={{ ...primaryBtnSx, px: 0.75 }}>Add</Button>}
+                  <Button size="small" disabled={!project.productionFileId} endIcon={<OpenInNewOutlinedIcon />} onClick={() => openProjectProductionFile(project)} sx={{ ...secondaryBtnSx, px: 0.8 }}>Workflow</Button>
                   <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => openProjectDetails(project)} sx={{ ...secondaryBtnSx, px: 0.8 }}>Details</Button>
                 </Box>
               </Card>
@@ -979,7 +971,7 @@ export function MatFlowProjectsPage() {
               <Box sx={{ minWidth: 0 }}>
                 <Typography sx={{ fontSize: 8.8, fontWeight: 950, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--mf-primary-text)" }}>PD / PROJECT DETAIL</Typography>
                 <Typography noWrap sx={{ mt: 0.12, fontSize: 14.5, fontWeight: 950, color: "var(--mf-text)" }}>
-                  {selectedProject.projectCode || "PD"} · {selectedProject.projectName || "Unnamed Project"}
+                  {selectedProject.projectCode ? `PD ${selectedProject.projectCode}` : "PD No. not assigned"} · {selectedProject.projectName || "Unnamed Project"}
                 </Typography>
                 <Typography noWrap sx={{ mt: 0.08, fontSize: 9, color: "var(--mf-text-muted)" }}>
                   {selectedProject.clientName || "Client not assigned"} · {selectedProject.plantCode || "No plant"}
@@ -988,6 +980,7 @@ export function MatFlowProjectsPage() {
               <Box sx={{ display: "flex", gap: 0.55, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                 {canProjectWrite && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(selectedProject)} sx={secondaryBtnSx}>Edit PD</Button>}
                 {canProjectWrite && <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(selectedProject)} sx={primaryBtnSx}>Add Product</Button>}
+                <Button size="small" disabled={!selectedProject.productionFileId} endIcon={<OpenInNewOutlinedIcon />} onClick={() => openProjectProductionFile(selectedProject)} sx={secondaryBtnSx}>Open PD / Project File</Button>
                 <IconButton aria-label="Close project details" onClick={closeProjectDetails} sx={{ color: "var(--mf-text-secondary)", border: "1px solid var(--mf-border)" }}>
                   <CloseOutlinedIcon fontSize="small" />
                 </IconButton>
@@ -999,7 +992,7 @@ export function MatFlowProjectsPage() {
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(118px,1fr))", gap: 0.5 }}>
                   <Meta label="Priority" value={selectedProject.priority || "NORMAL"} />
                   <Meta label="Tentative Completion" value={selectedProject.requiredDate ? formatDate(selectedProject.requiredDate) : "Not set"} />
-                  {juniorDesignerOnly ? <Meta label="Client" value={selectedProject.clientName || "—"} /> : <Meta label="Project Manager" value={selectedProject.projectManager || "—"} />}
+                  {juniorDesignerOnly ? <Meta label="Client" value={selectedProject.clientName || "—"} /> : <Meta label="Project Manager / Source" value={selectedProject.projectManager || "—"} />}
                   {!juniorDesignerOnly && <Meta label="Designer" value={selectedProject.designer1 || "—"} />}
                   {!juniorDesignerOnly && <Meta label="Design Head" value={selectedProject.designHead || "—"} />}
                 </Box>
@@ -1008,11 +1001,13 @@ export function MatFlowProjectsPage() {
                 )}
               </Card>
 
+              <ProjectProductionFilePanel project={selectedProject} onOpen={openProjectProductionFile} />
+
               <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
                 <Box sx={{ px: 1.15, py: 0.9, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Box>
                     <Typography sx={{ fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>Products</Typography>
-                    <Typography sx={{ mt: 0.06, fontSize: 8.5, color: "var(--mf-text-muted)" }}>Open only the Product you need; file, BOM and workflow history stay inside it.</Typography>
+                    <Typography sx={{ mt: 0.06, fontSize: 8.5, color: "var(--mf-text-muted)" }}>Products are child work inside this PD / Project. The Production File and departmental handoff belong to the whole Project; BOMs remain Product-specific.</Typography>
                   </Box>
                   <Typography sx={{ fontSize: 9, fontWeight: 850, color: "var(--mf-text-muted)" }}>{(selectedProject.products || []).length} product{(selectedProject.products || []).length === 1 ? "" : "s"}</Typography>
                 </Box>
@@ -1022,25 +1017,24 @@ export function MatFlowProjectsPage() {
                   ) : (
                     <Box sx={{ display: "grid", gap: 0.55 }}>
                       {(selectedProject.products || []).map((product) => juniorDesignerOnly ? (
-                        <Box key={product.id} sx={{ p: 0.75, border: "1px solid var(--mf-border)", borderLeft: `3px solid ${ticketHealthColor(product.releaseHealth)}`, borderRadius: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto auto" }, gap: 0.65, alignItems: "center", background: ticketHealthSoft(product.releaseHealth) }}>
+                        <Box key={product.id} sx={{ p: 0.75, border: "1px solid var(--mf-border)", borderRadius: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto auto" }, gap: 0.65, alignItems: "center", background: "var(--mf-panel-solid)" }}>
                           <Box sx={{ minWidth: 0 }}>
                             <Typography noWrap sx={{ fontSize: 10.3, fontWeight: 950, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
-                            <Typography noWrap sx={{ mt: 0.06, fontSize: 8.3, color: "var(--mf-text-muted)" }}>{product.productionFileNo ? `File ${product.productionFileNo}` : "File pending"} · DWG {product.drawingNo || "—"}</Typography>
+                            <Typography noWrap sx={{ mt: 0.06, fontSize: 8.3, color: "var(--mf-text-muted)" }}>DWG {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""}</Typography>
                           </Box>
                           <Typography sx={{ fontSize: 8.8, color: "var(--mf-text-secondary)" }}>{product.dimensions || "Dimensions pending"} · Due {formatDate(product.requiredDate || selectedProject.requiredDate)}</Typography>
-                          <Button size="small" onClick={() => openProductionFile(product)} sx={primaryBtnSx}>Open task</Button>
+                          <Button size="small" onClick={() => openDesignPd(selectedProject)} sx={primaryBtnSx}>Open PD Work</Button>
                         </Box>
                       ) : (
                         <ProductMasterRow
                           key={product.id}
                           project={selectedProject}
                           product={product}
-                          boms={bomsByFile.get(product.productionFileId) || []}
+                          boms={bomsByProduct.get(product.id) || []}
                           canEdit={canProjectWrite}
                           showEngineering={canSeeEngineeringReference}
                           onEdit={openProductEdit}
                           onImage={uploadImage}
-                          onOpenFile={openProductionFile}
                           onOpenBom={openBom}
                         />
                       ))}
@@ -1068,7 +1062,7 @@ export function MatFlowProjectsPage() {
         </DialogTitle>
         <DialogContent sx={dialogContentSx}>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.2, pt: 0.5 }}>
-            <TextField label="PD No. / Project Code" value={projectForm.projectCode} onChange={(e) => setProjectForm({ ...projectForm, projectCode: e.target.value })} sx={fieldSx} />
+            <TextField label="PD No. / Project Code (Optional)" value={projectForm.projectCode} onChange={(e) => setProjectForm({ ...projectForm, projectCode: e.target.value })} sx={fieldSx} />
             <TextField label="Project Name" value={projectForm.projectName} onChange={(e) => setProjectForm({ ...projectForm, projectName: e.target.value })} sx={fieldSx} />
             <TextField label="Client Name" value={projectForm.clientName} onChange={(e) => setProjectForm({ ...projectForm, clientName: e.target.value })} sx={fieldSx} />
             <TextField select label="Plant" value={projectForm.plantCode} onChange={(e) => setProjectForm({ ...projectForm, plantCode: e.target.value })} sx={fieldSx}>
@@ -1085,7 +1079,7 @@ export function MatFlowProjectsPage() {
               helperText="Optional — leave blank if the Project completion date is not yet committed."
               sx={fieldSx}
             />
-            <TextField label="Project Manager" value={projectForm.projectManager || ""} onChange={(e) => setProjectForm({ ...projectForm, projectManager: e.target.value })} sx={fieldSx} />
+            <TextField label="Project Manager / Source" value={projectForm.projectManager || ""} onChange={(e) => setProjectForm({ ...projectForm, projectManager: e.target.value })} sx={fieldSx} />
             <TextField label="Designer-1 / Client Project Designer" value={projectForm.designer1 || ""} onChange={(e) => setProjectForm({ ...projectForm, designer1: e.target.value })} sx={fieldSx} />
             <TextField label="Design Head" value={projectForm.designHead || ""} onChange={(e) => setProjectForm({ ...projectForm, designHead: e.target.value })} sx={fieldSx} />
             <TextField label="Remarks" multiline minRows={2} value={projectForm.remarks || ""} onChange={(e) => setProjectForm({ ...projectForm, remarks: e.target.value })} sx={{ ...fieldSx, gridColumn: { md: "1/-1" } }} />
@@ -1105,11 +1099,11 @@ export function MatFlowProjectsPage() {
         PaperProps={{ sx: dialogPaperSx }}
       >
         <DialogTitle sx={dialogTitleSx}>
-          Add Multiple Products · {activeProject?.projectCode || "Project"}
+          Add Multiple Products · {activeProject?.projectCode || activeProject?.projectName || "Project"}
         </DialogTitle>
         <DialogContent sx={dialogContentSx}>
           <Typography sx={{ mb: 1.2, fontSize: 10.5, color: "var(--mf-text-muted)" }}>
-            Each Product / Drawing creates its own Production File automatically and remains inside this one Project master record. File identity follows PD sequence automatically — for example {activeProject?.projectCode || "PD-54"}/01, /02 … /09, /10.
+            All Products remain children of this one PD / Project Production File. Adding Products does not create additional Production Files or additional departmental handoffs. PD No. may also be assigned later.
           </Typography>
           <Box sx={{ display: "grid", gap: 1 }}>
             {productForms.map((row, index) => (

@@ -37,6 +37,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../auth/AuthContext";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
 import { downloadMatFlowExcel } from "../api/matflowReportsExcel";
+import MatFlowDesignWorkspace from "./MatFlowDesignWorkspace";
 import {
   ErrorBox,
   LoadingBlock,
@@ -253,13 +254,9 @@ const JUNIOR_DESIGN_TABS = Object.freeze([
 ]);
 
 /*
- * Design oversight is PD-based, not only Product-stage based.
- *
- * A Design Head / Admin / Director must not lose the PD context as individual
- * Products cross PPC Gate 1 and move into Engineering. While at least one Product
- * under a PD is still actively inside Engineering, the Design workspace keeps the
- * complete PD visible and shows every Product with its own real workflow state.
- * Ordinary Designer / Junior Designer queues remain task/stage focused.
+ * The PD / Project itself is the Production File and the departmental handoff unit.
+ * Products are child work context inside this one workflow record; they do not own
+ * separate Production Files or separate Design/PPC/Engineering handoffs.
  */
 const DESIGN_PD_ENGINEERING_STAGES = new Set([
   "ENGINEERING_REVIEW",
@@ -356,11 +353,8 @@ const scopeDesignOversightRows = (rows, { search, health, stage, selectedId }) =
       .map(productionFilePdKey)
   );
 
-  /*
-   * Start from the normal Design queue, then expand only Engineering-active PDs
-   * to every Product in that PD. This is deliberately narrower than making all
-   * historical PDs permanent in Design Work.
-   */
+  /* Keep the whole Project Production File visible to Design while it is active
+   * in Engineering. There are no sibling Product Production Files in this model. */
   const candidateRows = source.filter((row) => {
     const directSearchMatch = clean(search) && productionFileMatchesSearch(row, search);
     return visibleInFocus(row, "DESIGN")
@@ -618,6 +612,19 @@ const EMPTY_DESIGN_TASK = {
 };
 
 export function MatFlowWorkWorkspacePage() {
+  const [searchParams] = useSearchParams();
+  const { roles } = useMatFlow();
+  const access = useMemo(() => getMatFlowDepartmentAccess(roles), [roles]);
+  const designDepartmentOnly = access.design && !access.engineering && !access.ppc && !access.management;
+  const explicitPdDesign = searchParams.get("designPd") === "1";
+
+  // Design works on one Project/PD Production File with Products as subtasks.
+  // PPC, Engineering and Management keep the established control workspace.
+  if (designDepartmentOnly || explicitPdDesign) return <MatFlowDesignWorkspace />;
+  return <MatFlowOperationalWorkWorkspace />;
+}
+
+function MatFlowOperationalWorkWorkspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const currentUsername = clean(user?.username || user?.email || "");
@@ -703,6 +710,8 @@ export function MatFlowWorkWorkspacePage() {
 
   const [files, setFiles] = useState([]);
   const [detail, setDetail] = useState(null);
+  const [projectContext, setProjectContext] = useState(null);
+  const [projectBoms, setProjectBoms] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(searchParams.get("fileId") || "");
   const [search, setSearch] = useState(searchParams.get("q") || "");
@@ -784,8 +793,7 @@ export function MatFlowWorkWorkspacePage() {
         const response = await matflowApi.listProductionFiles({
           plantCode: selectedPlantParam,
           /*
-           * PD continuity needs the sibling Products before local filtering. Do not
-           * let server-side search / health / stage filters remove those siblings.
+           * Project-level continuity is the workflow identity. Keep broad Design oversight filters local when management needs continuity.
            */
           search: designPdOversight ? undefined : (clean(search) || undefined),
           health: designPdOversight ? undefined : (health || undefined),
@@ -811,15 +819,25 @@ export function MatFlowWorkWorkspacePage() {
   const loadDetail = useCallback(async (id, { quiet = false } = {}) => {
     if (!id) {
       setDetail(null);
+      setProjectContext(null);
+      setProjectBoms([]);
       setDetailLoading(false);
       return;
     }
     if (!quiet) setDetailLoading(true);
     try {
       const response = await matflowApi.getProductionFile(id);
-      setDetail(response?.data || null);
+      const nextDetail = response?.data || null;
+      setDetail(nextDetail);
+      const projectId = nextDetail?.productionFile?.projectId;
+      const [projectResponse, bomsResponse] = await Promise.all([
+        projectId ? matflowApi.getProject(projectId) : Promise.resolve({ data: null }),
+        matflowApi.listBoms({ productionFileId: id }),
+      ]);
+      setProjectContext(projectResponse?.data || null);
+      setProjectBoms(Array.isArray(bomsResponse?.data) ? bomsResponse.data : []);
     } catch (requestError) {
-      if (!quiet) setError(readMatFlowError(requestError, "Unable to load Production File."));
+      if (!quiet) setError(readMatFlowError(requestError, "Unable to load PD / Project Production File."));
     } finally {
       if (!quiet) setDetailLoading(false);
     }
@@ -1178,27 +1196,48 @@ export function MatFlowWorkWorkspacePage() {
         subtitle={
           workspaceFocus === "DESIGN"
             ? juniorDesignerOnly
-              ? "Only your assigned Design tasks and their related Product / PD information are shown."
+              ? "Only your assigned Design tasks and their related PD / Project context are shown."
               : retainWholePdInDesign
-                ? "PD-level Design oversight: while any Product in a PD is still in Engineering, the complete PD remains visible with each Product's live workflow status."
-                : "Start with Client / PD, then open the Product that needs Design action."
+                ? "PD / Project-level Design oversight. The complete Project stays visible as one Production File while its child Products remain available as work context."
+                : "Start with Client / PD, then open the whole Project Production File for Design action."
             : workspaceFocus === "ENGINEERING"
-              ? "Start with Client / PD, then open the Product that needs Engineering action."
+              ? "Start with Client / PD, then open the whole Project Production File for Engineering action."
               : workspaceFocus === "PPC"
-                ? "Review Client / PD queues first, then open the Product for the required gate decision."
-                : "Client / PD-first work queue with one controlled Production File per Product / Drawing."
+                ? "Review Client / PD queues first, then open the whole Project for the required gate decision."
+                : "Client / PD-first work queue with one controlled Production File per PD / Project."
         }
         actions={(
           <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
             {focusOptions.length > 1 && focusOptions.map((item) => (
-              <Button key={item.value} onClick={() => { closeFilePanel(); setWorkspaceFocus(item.value); setWorkspaceView("FILES"); setTab(juniorDesignerOnly && item.value === "DESIGN" ? "designTasks" : "overview"); }} sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}>
+              <Button
+                key={item.value}
+                onClick={() => {
+                  if (item.value === "DESIGN" && departmentAccess.management) {
+                    closeFilePanel();
+                    setSearchParams((previous) => {
+                      const next = new URLSearchParams(previous);
+                      next.set("designPd", "1");
+                      next.delete("fileId");
+                      next.delete("tab");
+                      next.delete("queryId");
+                      return next;
+                    }, { replace: true });
+                    return;
+                  }
+                  closeFilePanel();
+                  setWorkspaceFocus(item.value);
+                  setWorkspaceView("FILES");
+                  setTab(juniorDesignerOnly && item.value === "DESIGN" ? "designTasks" : "overview");
+                }}
+                sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}
+              >
                 {item.label}
               </Button>
             ))}
             {workspaceFocus === "DESIGN" && departmentAccess.design && (
               <Button onClick={() => { const nextView = workspaceView === "TASKS" ? "FILES" : "TASKS"; if (nextView === "TASKS") closeFilePanel(); setWorkspaceView(nextView); }} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>
-                {workspaceView === "TASKS" ? (juniorDesignerOnly ? "Assigned Products" : "Products") : (juniorDesignerOnly ? "My Tasks" : "Task Desk")}
+                {workspaceView === "TASKS" ? (juniorDesignerOnly ? "Assigned Project Tasks" : "PD / Project Files") : (juniorDesignerOnly ? "My Tasks" : "Task Desk")}
               </Button>
             )}
             {workspaceView === "FILES" && <Button startIcon={<RefreshOutlinedIcon />} onClick={refresh} sx={secondaryBtnSx}>Refresh</Button>}
@@ -1243,7 +1282,7 @@ export function MatFlowWorkWorkspacePage() {
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))" }}>
           {[
             [groupBy === "PD" ? "PDs" : "Clients", groupBy === "PD" ? queueSummary.pds : queueSummary.clients, "Current queue"],
-            ["Products", queueSummary.products, "Production Files"],
+            ["PD / Project Files", queueSummary.products, "One file per Project"],
             [workspaceFocus === "PPC" ? "Gate Actions" : "Open Assigned Work", queueSummary.openWork, "Task-first workload"],
             ["Overdue", queueSummary.overdueWork, queueSummary.overdueWork ? "Needs immediate attention" : "No overdue assigned task"],
           ].map(([label, value, helper], index) => (
@@ -1295,7 +1334,7 @@ export function MatFlowWorkWorkspacePage() {
               }}
               rowAriaLabel={(item) => item.kind === "GROUP"
                 ? `${expandedGroupKey === item.group.key ? "Collapse" : "Expand"} ${groupBy === "PD" ? item.group.projectCode : item.group.clientName}`
-                : `Open ${item.row.productName || "Product"} work`}
+                : `Open ${item.row.projectName || item.row.productName || "Project"} work`}
               renderCell={(item, column) => {
                 const isGroup = item.kind === "GROUP";
                 const group = item.group;
@@ -1315,13 +1354,13 @@ export function MatFlowWorkWorkspacePage() {
                         {groupBy === "PD" ? group.projectCode : group.clientName}
                       </Typography>
                       <Typography noWrap sx={{ mt: 0.06, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
-                        {groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} products across ${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
+                        {groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} project file${group.fileCount === 1 ? "" : "s"} across ${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
                       </Typography>
                     </Box>
                   );
                   return (
                     <Box sx={{ pl: 1.1, minWidth: 0 }}>
-                      <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                      <MatFlowProductIdentity productName={row.projectName || row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={null} size="sm" />
                     </Box>
                   );
                 }
@@ -1330,7 +1369,7 @@ export function MatFlowWorkWorkspacePage() {
                     <Typography sx={{ fontSize: 9.8, fontWeight: 950, color: assignedWorkAccent(load) }}>{assignedWorkText(load)}</Typography>
                     <Typography sx={{ mt: 0.08, fontSize: 8.6, color: "var(--mf-text-muted)" }}>
                       {isGroup
-                        ? `${group.fileCount} product${group.fileCount === 1 ? "" : "s"} in this ${groupBy === "PD" ? "PD" : "client"} queue`
+                        ? `${group.fileCount} project file${group.fileCount === 1 ? "" : "s"} in this ${groupBy === "PD" ? "PD" : "client"} queue`
                         : workspaceFocus === "DESIGN"
                           ? `${row.designTaskProgress?.percent || 0}% task completion`
                           : workspaceFocus === "ENGINEERING"
@@ -1344,7 +1383,7 @@ export function MatFlowWorkWorkspacePage() {
                 if (column.key === "workflow") {
                   if (isGroup) return (
                     <Box>
-                      <Typography sx={{ fontSize: 9.5, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{group.fileCount} Product / File{group.fileCount === 1 ? "" : "s"}</Typography>
+                      <Typography sx={{ fontSize: 9.5, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{group.fileCount} PD / Project file{group.fileCount === 1 ? "" : "s"}</Typography>
                       <Typography noWrap sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>
                         {workspaceFocus === "DESIGN" && retainWholePdInDesign ? designPdWorkflowSummary(group.rows) : `${group.attentionCount} currently need action`}
                       </Typography>
@@ -1393,7 +1432,7 @@ export function MatFlowWorkWorkspacePage() {
                       <Box sx={{ minWidth: 0 }}>
                         <Typography sx={{ fontSize: 8.6, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".045em", color: "var(--mf-text-muted)" }}>{groupBy === "PD" ? group.clientName : `${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}</Typography>
                         <Typography noWrap sx={{ mt: 0.1, fontSize: 13, fontWeight: 950, color: "var(--mf-text)" }}>{groupBy === "PD" ? group.projectCode : group.clientName}</Typography>
-                        <Typography noWrap sx={{ mt: 0.08, fontSize: 9, color: "var(--mf-text-secondary)" }}>{groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} products`}</Typography>
+                        <Typography noWrap sx={{ mt: 0.08, fontSize: 9, color: "var(--mf-text-secondary)" }}>{groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} project file${group.fileCount === 1 ? "" : "s"}`}</Typography>
                       </Box>
                       <Typography sx={{ fontSize: 9, fontWeight: 900, color: group.attentionCount ? visual.accent : "var(--mf-success-text)" }}>{group.attentionCount ? `${group.attentionCount} need action` : "On track"}</Typography>
                     </Box>
@@ -1404,7 +1443,7 @@ export function MatFlowWorkWorkspacePage() {
                       <Box sx={{ p: 0.7, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)" }}><Typography sx={{ fontSize: 8.2, color: "var(--mf-text-muted)" }}>DUE</Typography><Typography sx={{ mt: 0.08, fontSize: 9.4, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{compactDate(group.dueDate)}</Typography></Box>
                     </Box>
 
-                    <Button size="small" onClick={() => setExpandedGroupKey(expanded ? "" : group.key)} sx={secondaryBtnSx}>{expanded ? "Hide products" : `Show ${group.fileCount} product${group.fileCount === 1 ? "" : "s"}`}</Button>
+                    <Button size="small" onClick={() => setExpandedGroupKey(expanded ? "" : group.key)} sx={secondaryBtnSx}>{expanded ? "Hide project files" : `Show ${group.fileCount} project file${group.fileCount === 1 ? "" : "s"}`}</Button>
                   </Box>
 
                   {expanded && (
@@ -1415,7 +1454,7 @@ export function MatFlowWorkWorkspacePage() {
                         return (
                           <Box key={row.id} role="button" tabIndex={0} onClick={() => openFilePanel(row.id, taskFirstTab)} onKeyDown={(event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); openFilePanel(row.id, taskFirstTab); } }} sx={{ px: 1, py: 0.8, borderBottom: "1px solid var(--mf-border)", cursor: "pointer", background: selectedId === row.id ? "var(--mf-primary-soft)" : "var(--mf-panel-solid)", "&:last-child": { borderBottom: 0 }, "&:hover": { background: selectedId === row.id ? "var(--mf-primary-soft)" : "var(--mf-table-hover)" } }}>
                             <Box sx={{ display: "flex", justifyContent: "space-between", gap: 0.8, alignItems: "flex-start" }}>
-                              <Box sx={{ minWidth: 0 }}><Typography noWrap sx={{ fontSize: 10.4, fontWeight: 950, color: "var(--mf-text)" }}>{row.productName || "Unnamed Product"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>{row.productionFileNo || "No file"} · Drawing {row.drawingNo || "—"}</Typography></Box>
+                              <Box sx={{ minWidth: 0 }}><Typography noWrap sx={{ fontSize: 10.4, fontWeight: 950, color: "var(--mf-text)" }}>{row.projectName || row.productName || "Unnamed Project"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>{row.productionFileNo || "No file"} · Whole PD / Project handoff</Typography></Box>
                               <Typography sx={{ fontSize: 8.7, fontWeight: 900, color: rowVisual.accent }}>{readable(row.stage)}</Typography>
                             </Box>
                             <Box sx={{ mt: 0.45, display: "flex", justifyContent: "space-between", gap: 0.8, alignItems: "center" }}><Typography sx={{ fontSize: 8.8, fontWeight: 850, color: assignedWorkAccent(rowLoad) }}>{assignedWorkText(rowLoad)}</Typography><Typography sx={{ fontSize: 8.3, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography></Box>
@@ -1443,22 +1482,22 @@ export function MatFlowWorkWorkspacePage() {
               {workspaceFocus === "DESIGN" ? "DESIGN WORK FILE" : workspaceFocus === "ENGINEERING" ? "ENGINEERING WORK FILE" : workspaceFocus === "PPC" ? "PPC WORK FILE" : "PRODUCTION FILE"}
             </Typography>
             <Typography noWrap sx={{ mt: 0.08, fontSize: 13.5, fontWeight: 950, color: "var(--mf-text)" }}>
-              {file?.productName || (detailLoading ? "Loading Production File…" : "Production File")}
+              {file?.projectName || file?.productName || (detailLoading ? "Loading PD / Project…" : "PD / Project") }
             </Typography>
             <Typography noWrap sx={{ mt: 0.05, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
-              {file ? `PD No. ${file.projectCode || "—"} · File ${file.productionFileNo || "—"} · Drawing ${file.drawingNo || "—"}` : "Selected work opens here without moving the queue."}
+              {file ? `PD No. ${file.projectCode || "not assigned"} · Project File ${file.productionFileNo || "—"} · Whole-project handoff` : "Selected work opens here without moving the queue."}
             </Typography>
           </Box>
-          <IconButton aria-label="Close Production File" onClick={closeFilePanel} sx={{ color: "var(--mf-text-secondary)", border: "1px solid var(--mf-border)" }}>
+          <IconButton aria-label="Close PD / Project File" onClick={closeFilePanel} sx={{ color: "var(--mf-text-secondary)", border: "1px solid var(--mf-border)" }}>
             <CloseRoundedIcon fontSize="small" />
           </IconButton>
         </Box>
 
         <Box className="mf-side-panel-scroll" sx={sidePanelBodySx}>
           {detailLoading && !detail ? (
-            <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Production File…</Card>
+            <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading PD / Project Production File…</Card>
           ) : !detail || !file ? (
-            <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Unable to display the selected Production File.</Card>
+            <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Unable to display the selected PD / Project Production File.</Card>
           ) : (
             <>
               <Card sx={{ ...productionFileHeaderSx(juniorDesignerOnly ? "" : file.releaseHealth), mb: 0 }}>
@@ -1467,7 +1506,7 @@ export function MatFlowWorkWorkspacePage() {
                     <Typography sx={{ mb: 0.35, fontSize: 9.2, fontWeight: 900, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
                       {file.clientName || "Client not assigned"}
                     </Typography>
-                    <MatFlowProductIdentity productName={file.productName} projectCode={file.projectCode} productionFileNo={file.productionFileNo} drawingNo={file.drawingNo} projectName={file.projectName} showProjectName size="hero" />
+                    <MatFlowProductIdentity productName={file.projectName || file.productName} projectCode={file.projectCode} productionFileNo={file.productionFileNo} drawingNo={null} projectName={file.clientName} showProjectName size="hero" />
                   </Box>
                   <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
                     {!juniorDesignerOnly && healthVisual(file.releaseHealth).label && <Typography sx={{ color: healthVisual(file.releaseHealth).accent, fontSize: 10, fontWeight: 900 }}>{healthVisual(file.releaseHealth).label}</Typography>}
@@ -1497,7 +1536,7 @@ export function MatFlowWorkWorkspacePage() {
                       <SummaryCard label="Checklist" value={`${file.engineeringChecklistProgress?.percent || 0}%`} helper={`${file.engineeringChecklistProgress?.pending || 0} pending`} />
                       <SummaryCard label="Tasks" value={`${file.engineeringTaskCompleted || 0}/${Number(file.engineeringTaskPending || 0) + Number(file.engineeringTaskCompleted || 0)}`} helper={`${file.engineeringTaskPending || 0} pending`} tone={file.engineeringTaskPending ? "warning" : "success"} />
                       <SummaryCard label="Issues" value={file.openQueries || 0} helper={file.openQueries ? "Needs response / closure" : "No open issue"} tone={file.openQueries ? "warning" : "success"} />
-                      <SummaryCard label="BOM" value={readable(file.latestBomStatus || "NOT_STARTED")} helper={file.assignedEngineer || "Engineer not assigned"} tone={file.latestBomStatus === "READY_FOR_RELEASE" || file.latestBomStatus === "RELEASED" ? "success" : "default"} />
+                      <SummaryCard label="Product BOMs" value={`${projectBoms.filter((bom) => bom.latestRevision && ["READY_FOR_RELEASE", "RELEASED"].includes(bom.status)).length}/${(projectContext?.products || []).filter((product) => product.active !== false).length}`} helper="Ready Product BOMs / active Products" tone={(projectContext?.products || []).filter((product) => product.active !== false).length > 0 && projectBoms.filter((bom) => bom.latestRevision && ["READY_FOR_RELEASE", "RELEASED"].includes(bom.status)).length === (projectContext?.products || []).filter((product) => product.active !== false).length ? "success" : "default"} />
                     </>
                   )}
                   {workspaceFocus === "PPC" && (
@@ -1518,6 +1557,8 @@ export function MatFlowWorkWorkspacePage() {
                   )}
                 </Box>
               </Card>
+
+              <ProjectProductContext project={projectContext} boms={projectBoms} file={file} />
 
               <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
                 <Tabs value={tab} onChange={(_, value) => selectWorkspaceTab(value)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: "1px solid var(--mf-border)", px: 1, minHeight: 42, background: "var(--mf-panel-solid)", position: "sticky", top: 0, zIndex: 2 }}>
@@ -1542,7 +1583,7 @@ export function MatFlowWorkWorkspacePage() {
       )}
 
       <Dialog open={setupOpen} onClose={() => !working && setSetupOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
-        <DialogTitle sx={dialogTitleSx}>Production File Responsibility & Dates</DialogTitle>
+        <DialogTitle sx={dialogTitleSx}>PD / Project Responsibility & Dates</DialogTitle>
         <DialogContent sx={dialogContentSx}>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1, mt: 0.4 }}>
             {(workspaceFocus === "DESIGN" || workspaceFocus === "MANAGEMENT") && (
@@ -1647,14 +1688,14 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
       fileName: `MatFlow_Design_Task_Report_${new Date().toISOString().slice(0, 10)}`,
       sheetName: "Design Tasks",
       title: juniorDesignerOnly ? "My Design Tasks" : "Design Department · Task Assignment Report",
-      subtitle: "Product Name + PD No. identify every assignment.",
+      subtitle: "PD / Project identifies the Production File; Products remain child work context.",
       rows: exportRows,
       metadata: [selectedPlantParam ? `Plant ${selectedPlantParam}` : "All permitted plants", juniorDesignerOnly ? `User ${currentUsername}` : (assignee ? `User ${assignee}` : "All users"), status ? `Status ${designTaskStatusLabel(status)}` : "All statuses", `${rows.length} row(s)`],
       columns: [
-        { key: "productName", label: "Product Name" },
+        { key: "productName", label: "PD / Project" },
         { key: "projectCode", label: "PD No." },
-        { key: "productionFileNo", label: "Production File" },
-        { key: "drawingNo", label: "Drawing No." },
+        { key: "productionFileNo", label: "Project Production File" },
+        { key: "drawingNo", label: "Drawing / Child Context" },
         { key: "clientName", label: "Client" },
         { key: "projectName", label: "Project" },
         { key: "taskNo", label: "Task No." },
@@ -1686,7 +1727,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
 
       <Card sx={{ ...panelSx, p: 1.1 }}>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: juniorDesignerOnly ? "2fr 170px auto auto" : "2fr 1fr 170px auto auto" }, gap: 0.7 }}>
-          <TextField size="small" label="Search Product / PD / client / project / task" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
+          <TextField size="small" label="Search PD / Project / child Product / client / task" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
           {!juniorDesignerOnly && <TextField size="small" label="Assigned user" value={assignee} onChange={(e) => setAssignee(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />}
           <TextField select size="small" label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
@@ -1707,7 +1748,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
             const task = row.task || {};
             return (
               <Card key={task.id} sx={{ ...panelSx, p: 1.1, display: "grid", gap: 0.8, boxShadow: "none", borderTop: `3px solid ${designTaskStatusAccent(task.status)}` }}>
-                <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                <MatFlowProductIdentity productName={row.projectName || row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={null} size="sm" />
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
                   <Box><Typography sx={{ fontSize: 8.4, color: "var(--mf-text-muted)" }}>PROJECT / CLIENT</Typography><Typography sx={{ mt: 0.08, fontSize: 9.7, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"} · {row.clientName || "—"}</Typography></Box>
                   <Box><Typography sx={{ fontSize: 8.4, color: "var(--mf-text-muted)" }}>STATUS</Typography><Typography sx={{ mt: 0.08, fontSize: 9.7, fontWeight: 900, color: designTaskStatusAccent(task.status) }}>{designTaskStatusLabel(task.status)}</Typography></Box>
@@ -1722,7 +1763,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
       ) : (
         <MatFlowListGrid
           columns={[
-            { key: "product", label: "Product / PD", width: "300px" },
+            { key: "product", label: "PD / Project File", width: "300px" },
             { key: "context", label: "Project / Client", width: "220px" },
             { key: "task", label: "Task", width: "minmax(320px,1.3fr)" },
             { key: "dates", label: "Received / Due", width: "220px" },
@@ -1736,7 +1777,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
           rowAccent={(row) => designTaskStatusAccent(row.task?.status)}
           renderCell={(row, column) => {
             const task = row.task || {};
-            if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
+            if (column.key === "product") return <MatFlowProductIdentity productName={row.projectName || row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={null} size="sm" />;
             if (column.key === "context") return <Box><Typography sx={{ fontSize: 9.9, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.clientName || "Client not assigned"}</Typography></Box>;
             if (column.key === "task") return <Box><Typography sx={{ fontSize: 10.5, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>;
             if (column.key === "dates") return <Box><Typography sx={{ fontSize: 9.5, color: "var(--mf-text-secondary)" }}>{toDateTime(task.receivedAt)}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>Due {toDateTime(task.dueAt)}</Typography></Box>;
@@ -1747,6 +1788,49 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
         />
       )}
    </Box>
+  );
+}
+
+function ProjectProductContext({ project, boms = [], file }) {
+  const products = (project?.products || []).filter((product) => product.active !== false);
+  const latestByProduct = new Map();
+  for (const bom of boms || []) {
+    if (!bom?.productId) continue;
+    const current = latestByProduct.get(bom.productId);
+    if (!current || bom.latestRevision || Number(bom.revisionNo || 0) > Number(current.revisionNo || 0)) {
+      latestByProduct.set(bom.productId, bom);
+    }
+  }
+
+  return (
+    <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+      <Box sx={{ px: 1.2, py: 0.9, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+        <Box>
+          <Typography sx={{ fontSize: 10.8, fontWeight: 950, color: "var(--mf-text)" }}>Products inside this PD / Project</Typography>
+          <Typography sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>Shared Production File {file?.productionFileNo || "—"} · the whole Project moves through Design, PPC and Engineering together.</Typography>
+        </Box>
+        <Chip label={`${products.length} active Product${products.length === 1 ? "" : "s"}`} size="small" sx={statusSx} />
+      </Box>
+      {!products.length ? (
+        <Typography sx={{ p: 1.2, fontSize: 9.5, color: "var(--mf-text-muted)" }}>No active Products have been added yet. The PD / Project Production File can still exist and be prepared without an official PD No.</Typography>
+      ) : (
+        <Box sx={{ p: 0.8, display: "grid", gap: 0.45 }}>
+          {products.map((product) => {
+            const bom = latestByProduct.get(product.id);
+            return (
+              <Box key={product.id} sx={{ px: 0.8, py: 0.65, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)", display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto auto" }, gap: 0.7, alignItems: "center" }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography noWrap sx={{ fontSize: 9.8, fontWeight: 900, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
+                  <Typography noWrap sx={{ mt: 0.04, fontSize: 8.2, color: "var(--mf-text-muted)" }}>{product.drawingNo ? `Drawing ${product.drawingNo}` : "Drawing not assigned"}{product.dimensions ? ` · ${product.dimensions}` : ""}</Typography>
+                </Box>
+                <Typography sx={{ fontSize: 8.6, color: "var(--mf-text-secondary)" }}>{product.productType || "Product"}</Typography>
+                <MatFlowStatusChip status={bom?.status || "BOM_NOT_STARTED"} />
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+    </Card>
   );
 }
 
@@ -1998,7 +2082,7 @@ function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onSt
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 13.5, fontWeight: 950, color: "var(--mf-text)" }}>Design Tasks</Typography>
           <Typography sx={{ mt: 0.12, fontSize: 9.5, color: "var(--mf-text-muted)" }}>
-            Assignment, ownership and due dates for this Product / Production File.
+            Assignment, ownership and due dates for this PD / Project Production File.
           </Typography>
         </Box>
         <Box sx={{ display: "flex", gap: 0.55, alignItems: "center", flexWrap: "wrap" }}>
@@ -2202,7 +2286,7 @@ function IssueChat({
             <Typography sx={{ fontSize: 13.2, fontWeight: 900, color: "var(--mf-text)" }}>Issue Chat</Typography>
           </Box>
           <Typography sx={{ mt: 0.15, fontSize: 9.4, color: "var(--mf-text-muted)" }}>
-            Design ↔ Engineering conversation on this Product / PD · {openCount} open
+            Design ↔ Engineering conversation on this PD / Project · {openCount} open
           </Typography>
         </Box>
         <Box sx={{ display: "flex", gap: 0.6, alignItems: "center", flexWrap: "wrap" }}>
@@ -2309,7 +2393,7 @@ function IssueChat({
                     {active.key} · {issueStatusLabel(active.status)} · {active.priority || "NORMAL"} · Due {toDateTime(active.dueAt)}
                   </Typography>
                   <Typography sx={{ mt: 0.15, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
-                    Product {file?.productName || "—"} · PD {file?.projectCode || "—"} · Current action {active.assignedTo || "Shared"}
+                    Project {file?.projectName || file?.productName || "—"} · PD {file?.projectCode || "not assigned"} · Current action {active.assignedTo || "Shared"}
                   </Typography>
                 </Box>
                 {canClose && String(active.status || "").toUpperCase() !== "CLOSED" && (
@@ -2457,7 +2541,7 @@ function Tasks({ items, canManage, canCreateSelf, canCreate, canWork, setAction 
           <Typography sx={{ fontSize: 13.5, fontWeight: 950, color: "var(--mf-text)" }}>Engineering Tasks</Typography>
           <Typography sx={{ mt: 0.12, fontSize: 9.5, color: "var(--mf-text-muted)" }}>
             {canCreateSelf && !canManage
-              ? "Your engineering work items for this Production File."
+              ? "Your engineering work items for this PD / Project Production File."
               : "Delegated engineering work, ownership and release-blocking status."}
           </Typography>
         </Box>

@@ -32,12 +32,17 @@ const REPORTS = Object.freeze({
   PPC: "PPC_HANDOFF",
 });
 
-const CLOSED = new Set(["DONE", "COMPLETE", "COMPLETED", "CANCELLED", "CLOSED", "NOT_APPLICABLE", "PRODUCTION_RELEASED"]);
+const CLOSED = new Set(["DONE", "COMPLETE", "COMPLETED", "CANCELLED", "CLOSED", "NOT_APPLICABLE", "HANDED_OFF", "PRODUCTION_RELEASED"]);
 const designTaskStatusLabel = (status) => {
   const value = String(status || "").toUpperCase();
+  if (value === "HANDED_OFF") return "Handed to PPC";
+  if (value === "READY_FOR_HANDOFF") return "Ready for handoff";
+  if (value === "IN_PROGRESS") return "In progress";
+  if (value === "ASSIGNED") return "Assigned";
+  if (value === "UNASSIGNED") return "Unassigned";
   if (["COMPLETED", "DONE", "CANCELLED"].includes(value)) return "Completed";
-  if (["WIP", "WORKING", "HOLD", "IN_PROGRESS"].includes(value)) return "WIP";
-  return "Pending / Yet To Start";
+  if (["WIP", "WORKING", "HOLD"].includes(value)) return "WIP";
+  return readable(status || "Pending");
 };
 
 const reportStatusLabel = (type, status) => type === REPORTS.DESIGN ? designTaskStatusLabel(status) : readable(status || "—");
@@ -68,9 +73,9 @@ async function mapConcurrent(items, limit, worker) {
 }
 
 const identityColumns = [
-  { key: "productName", label: "Product Name", width: 26 },
+  { key: "productName", label: "PD / Project", width: 26 },
   { key: "projectCode", label: "PD No.", width: 16 },
-  { key: "productionFileNo", label: "Production File", width: 18 },
+  { key: "productionFileNo", label: "Project Production File", width: 18 },
   { key: "drawingNo", label: "Drawing No.", width: 16 },
   { key: "clientName", label: "Client", width: 24 },
   { key: "projectName", label: "Project", width: 26 },
@@ -78,20 +83,21 @@ const identityColumns = [
 
 function reportColumns(type) {
   if (type === REPORTS.DESIGN) return [
-    ...identityColumns,
-    { key: "taskNo", label: "Task No.", width: 20 },
-    { key: "taskTitle", label: "Task", width: 30 },
-    { key: "taskType", label: "Task Type", width: 18 },
-    { key: "designer1", label: "Designer / Originator", width: 22 },
+    { key: "projectCode", label: "PD No.", width: 16, value: (row) => row.projectCode || "Pending" },
+    { key: "projectName", label: "Project", width: 30 },
+    { key: "clientName", label: "Client", width: 24 },
+    { key: "productionFileNo", label: "Project Production File", width: 22 },
     { key: "assignedBy", label: "Assigned By", width: 22 },
-    { key: "assignee", label: "Assigned User(s)", width: 28 },
+    { key: "assignee", label: "Assigned Junior", width: 24 },
     { key: "status", label: "Status", width: 22, value: (row) => designTaskStatusLabel(row.status) },
     { key: "priority", label: "Priority", width: 13 },
-    { key: "receivedAt", label: "Received At", width: 22 },
+    { key: "productCount", label: "Products", width: 12 },
+    { key: "productDone", label: "Products Done", width: 14 },
+    { key: "checklistPercent", label: "Checklist %", width: 14 },
+    { key: "receivedAt", label: "Assigned At", width: 22 },
     { key: "dueAt", label: "Due At", width: 22 },
-    { key: "startedAt", label: "Started At", width: 22 },
-    { key: "completedAt", label: "Completed At", width: 22 },
-    { key: "remarks", label: "Remarks", width: 34 },
+    { key: "completedAt", label: "Handed Off At", width: 22 },
+    { key: "remarks", label: "Design Brief", width: 40 },
   ];
   if (type === REPORTS.ENGINEERING) return [
     ...identityColumns,
@@ -138,14 +144,14 @@ const reportWorkPath = (type, row) => {
   const fileId = row?.productionFileId;
   if (!fileId) return "/matflow/work";
   if (type === REPORTS.QUERIES && row?.queryId) return `/matflow/work?fileId=${fileId}&tab=queries&queryId=${row.queryId}`;
-  if (type === REPORTS.DESIGN) return `/matflow/work?fileId=${fileId}&tab=designTasks`;
+  if (type === REPORTS.DESIGN && row?.projectId) return `/matflow/work?designPd=1&projectId=${row.projectId}`;
   if (type === REPORTS.ENGINEERING) return `/matflow/work?fileId=${fileId}&tab=engineeringTasks`;
   return `/matflow/work?fileId=${fileId}`;
 };
 
 function reportTitle(type) {
   return {
-    [REPORTS.DESIGN]: "Design Department · Task Assignment Report",
+    [REPORTS.DESIGN]: "Design Department · PD / Project Assignment Report",
     [REPORTS.ENGINEERING]: "Engineering Department · Task Assignment Report",
     [REPORTS.QUERIES]: "Design ↔ Engineering · Open Issue Chats",
     [REPORTS.PPC]: "PPC · Handoff & Release Report",
@@ -164,7 +170,7 @@ function reportTitle(type) {
  */
 const pageColumns = (type) => {
   if (type === REPORTS.DESIGN) return [
-    { key: "identity", label: "Product / PD", width: "minmax(0,1.02fr)" },
+    { key: "identity", label: "PD / Project", width: "minmax(0,1.02fr)" },
     { key: "context", label: "Client / Project", width: "minmax(0,.86fr)" },
     { key: "task", label: "Task", width: "minmax(0,1.34fr)" },
     { key: "assignment", label: "Assignment", width: "minmax(0,1.02fr)" },
@@ -173,7 +179,7 @@ const pageColumns = (type) => {
     { key: "action", label: "", width: "90px", align: "right" },
   ];
   if (type === REPORTS.ENGINEERING) return [
-    { key: "identity", label: "Product / PD", width: "minmax(0,1.02fr)" },
+    { key: "identity", label: "PD / Project", width: "minmax(0,1.02fr)" },
     { key: "context", label: "Client / Project", width: "minmax(0,.86fr)" },
     { key: "task", label: "Engineering Task", width: "minmax(0,1.38fr)" },
     { key: "assignment", label: "Engineer", width: "minmax(0,1fr)" },
@@ -182,7 +188,7 @@ const pageColumns = (type) => {
     { key: "action", label: "", width: "90px", align: "right" },
   ];
   if (type === REPORTS.QUERIES) return [
-    { key: "identity", label: "Product / PD", width: "minmax(0,1.02fr)" },
+    { key: "identity", label: "PD / Project", width: "minmax(0,1.02fr)" },
     { key: "context", label: "Client / Project", width: "minmax(0,.86fr)" },
     { key: "task", label: "Issue / Topic", width: "minmax(0,1.48fr)" },
     { key: "assignment", label: "Assigned To", width: "minmax(0,.95fr)" },
@@ -191,7 +197,7 @@ const pageColumns = (type) => {
     { key: "action", label: "", width: "96px", align: "right" },
   ];
   return [
-    { key: "identity", label: "Product / PD", width: "minmax(0,1.10fr)" },
+    { key: "identity", label: "PD / Project", width: "minmax(0,1.10fr)" },
     { key: "context", label: "Client / Project", width: "minmax(0,.92fr)" },
     { key: "workflow", label: "Workflow / Owner", width: "minmax(0,1.10fr)" },
     { key: "gates", label: "PPC Gates", width: "minmax(0,.86fr)" },
@@ -205,7 +211,7 @@ const reportStatusColor = (row) => {
   const due = safeDate(row?.dueAt);
   const overdue = due && due < new Date() && !CLOSED.has(status);
   if (overdue || ["BLOCKED", "CANCELLED"].includes(status)) return "var(--mf-danger-text)";
-  if (["DONE", "COMPLETE", "COMPLETED", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
+  if (["DONE", "COMPLETE", "COMPLETED", "CLOSED", "HANDED_OFF", "READY_FOR_HANDOFF", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
   if (["WIP", "IN_PROGRESS", "WORKING", "ASSIGNED", "RESPONDED"].includes(status)) return "var(--mf-primary-text)";
   return "var(--mf-text-secondary)";
 };
@@ -215,7 +221,7 @@ const reportRowAccent = (row) => {
   if (due && due < new Date() && !CLOSED.has(String(row?.status || "").toUpperCase())) return "var(--mf-danger-text)";
   const status = String(row?.status || row?.stage || "").toUpperCase();
   if (["BLOCKED"].includes(status)) return "var(--mf-warning-text)";
-  if (["DONE", "COMPLETE", "COMPLETED", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
+  if (["DONE", "COMPLETE", "COMPLETED", "CLOSED", "HANDED_OFF", "READY_FOR_HANDOFF", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
   return "transparent";
 };
 
@@ -253,7 +259,7 @@ const dateText = (value) => (value ? toDateTime(value) : "—");
 const pageCellValue = (row, key, type) => {
   if (key === "identity") return (
     <Box sx={{ minWidth: 0 }}>
-      <Typography sx={cellPrimarySx}>{row.productName || "Unnamed Product"}</Typography>
+      <Typography sx={cellPrimarySx}>{row.projectName || row.productName || "Unnamed Project"}</Typography>
       <Typography sx={cellSecondarySx}>
         PD {row.projectCode || "—"}
         {row.productionFileNo ? ` · File ${row.productionFileNo}` : ""}
@@ -272,10 +278,17 @@ const pageCellValue = (row, key, type) => {
   if (key === "task") return (
     <Box sx={{ minWidth: 0 }}>
       <Typography sx={cellPrimarySx}>{row.taskTitle || "—"}</Typography>
-      <Typography sx={cellSecondarySx}>
-        {row.taskNo || row.taskKey || readable(row.taskType || "") || "—"}
-        {row.taskType && row.taskNo ? ` · ${readable(row.taskType)}` : ""}
-      </Typography>
+      {type === REPORTS.DESIGN ? (
+        <>
+          <Typography sx={cellSecondarySx}>{row.productDone || 0}/{row.productCount || 0} Products done · Checklist {row.checklistPercent || 0}%</Typography>
+          <Typography sx={cellSecondarySx}>{row.checklistLocked ? "Checklist locked" : "Checklist open"}</Typography>
+        </>
+      ) : (
+        <Typography sx={cellSecondarySx}>
+          {row.taskNo || row.taskKey || readable(row.taskType || "") || "—"}
+          {row.taskType && row.taskNo ? ` · ${readable(row.taskType)}` : ""}
+        </Typography>
+      )}
       {type === REPORTS.QUERIES && row.description && (
         <Typography sx={{ ...cellSecondarySx, mt: 0.18 }}>{row.description}</Typography>
       )}
@@ -328,8 +341,8 @@ const pageCellValue = (row, key, type) => {
     if (type === REPORTS.DESIGN) return (
       <Box sx={{ minWidth: 0 }}>
         <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>Due · {dateText(row.dueAt)}</Typography>
-        <Typography sx={cellSecondarySx}>Received · {dateText(row.receivedAt)}</Typography>
-        {row.completedAt && <Typography sx={cellSecondarySx}>Completed · {dateText(row.completedAt)}</Typography>}
+        <Typography sx={cellSecondarySx}>Assigned · {dateText(row.receivedAt)}</Typography>
+        {row.completedAt && <Typography sx={cellSecondarySx}>Handed off · {dateText(row.completedAt)}</Typography>}
       </Box>
     );
     if (type === REPORTS.ENGINEERING) return (
@@ -371,12 +384,12 @@ export function MatFlowReportsPage() {
     && !roles.some((role) => [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER].includes(role)), [roles]);
   // PPC receives read-only Issue Chat visibility because unresolved cross-department
   // issues are gate context, not PPC-owned work. Junior Designers see only their own
-  // assignment report; related Issue Chat stays inside the assigned Product workspace.
+  // Assignment report; related Issue Chat stays inside the shared PD / Project workspace.
   const canSeeQueries = !juniorDesignerOnly && (access.design || access.engineering || access.ppc || access.management);
 
   const availableReports = useMemo(() => {
     const rows = [];
-    if (access.design) rows.push({ value: REPORTS.DESIGN, label: "Design Tasks" });
+    if (access.design) rows.push({ value: REPORTS.DESIGN, label: "Design PD / Projects" });
     if (access.engineering) rows.push({ value: REPORTS.ENGINEERING, label: "Engineering Tasks" });
     if (canSeeQueries) rows.push({ value: REPORTS.QUERIES, label: "Issue Chats" });
     if (access.ppc || access.production) rows.push({ value: REPORTS.PPC, label: "PPC / Release" });
@@ -420,34 +433,36 @@ export function MatFlowReportsPage() {
     setError("");
     try {
       if (reportType === REPORTS.DESIGN) {
-        const response = await matflowApi.listDesignTasks({ plantCode: selectedPlantParam });
-        const mapped = (response?.data || []).map((row) => {
-          const task = row.task || {};
-          return {
-            productionFileId: row.productionFileId,
-            productionFileNo: row.productionFileNo,
-            projectCode: row.projectCode,
-            projectName: row.projectName,
-            clientName: row.clientName,
-            productName: row.productName,
-            drawingNo: row.drawingNo,
-            stage: row.stage,
-            taskNo: task.taskNo,
-            taskTitle: task.title,
-            taskType: task.taskType,
-            designer1: task.designer1,
-            assignedBy: task.assignedBy,
-            assignee: (task.assignees || []).join(", "),
-            status: task.status,
-            priority: task.priority,
-            receivedAt: task.receivedAt,
-            dueAt: task.dueAt,
-            startedAt: task.startedAt,
-            completedAt: task.completedAt,
-            remarks: task.remarks,
-            activityAt: task.receivedAt || task.createdAt || task.updatedAt,
-          };
-        });
+        const response = await matflowApi.listDesignProjects({ plantCode: selectedPlantParam });
+        const mapped = (response?.data || []).map((row) => ({
+          projectId: row.projectId,
+          productionFileId: row.productionFileId,
+          productionFileNo: row.productionFileNo,
+          projectCode: row.projectCode,
+          projectName: row.projectName,
+          clientName: row.clientName,
+          productName: row.projectName,
+          drawingNo: null,
+          stage: row.productionFileStage,
+          taskNo: row.projectCode || row.productionFileNo,
+          taskTitle: "PD / Project Design Assignment",
+          taskType: "PD_PROJECT",
+          assignedBy: row.assignedBy,
+          assignee: row.assignedJunior || "",
+          status: row.status,
+          priority: row.priority,
+          receivedAt: row.assignedAt,
+          dueAt: row.dueAt,
+          startedAt: row.assignedAt,
+          completedAt: row.status === "HANDED_OFF" ? row.updatedAt : null,
+          remarks: row.brief,
+          productCount: Number(row.productCount || 0),
+          productDone: Number(row.productDone || 0),
+          checklistPercent: Number(row.checklistPercent || 0),
+          checklistLocked: Boolean(row.checklistLocked),
+          overdue: Boolean(row.overdue),
+          activityAt: row.assignedAt || row.updatedAt,
+        }));
         setRows(mapped);
         return;
       }
@@ -591,7 +606,7 @@ export function MatFlowReportsPage() {
       fileName: `${reportTitle(reportType)}_${selectedPlantParam || "ALL"}_${new Date().toISOString().slice(0, 10)}`,
       sheetName: "Department Report",
       title: reportTitle(reportType),
-      subtitle: "Product Name + PD No. are the primary human-facing identity across MatFlow.",
+      subtitle: "PD / Project is the Production File identity; Products remain child work context.",
       rows: filtered,
       columns: reportColumns(reportType),
       metadata: [
@@ -619,10 +634,10 @@ export function MatFlowReportsPage() {
         badge={teamMode ? "DEPARTMENT TEAM" : "DEPARTMENT REPORTS"}
         title={juniorDesignerOnly ? "My Tasks" : teamMode ? `${departmentLabel} Team` : "Reports"}
         subtitle={juniorDesignerOnly
-          ? "Your assigned Design tasks with Product Name + PD No. context."
+          ? "Your assigned Design tasks with PD / Project and child Product context."
           : teamMode
-            ? "Team workload, task ownership, due dates and handoffs in one operational view."
-            : "Department task and handoff reports with Product Name + PD No. as the common reference."}
+            ? "Team workload, task ownership, due dates and whole-Project handoffs in one operational view."
+            : "Department task and whole-PD / Project handoff reports with PD / Project as the workflow reference."}
         actions={(
           <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
@@ -656,7 +671,7 @@ export function MatFlowReportsPage() {
           ) : <Box sx={{ px: 1, minHeight: 40, display: "flex", alignItems: "center", border: "1px solid var(--mf-border)", borderRadius: 1.2, color: "var(--mf-text-secondary)", fontSize: 10.5, fontWeight: 850 }}>{reportLabel}</Box>}
           <TextField
             size="small"
-            label="Search Product / PD / client / project / task"
+            label="Search PD / Project / child Product / client / task"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             sx={{ ...fieldSx, gridColumn: { xs: "auto", sm: "span 2", lg: "span 2", xl: "span 2" } }}
