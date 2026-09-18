@@ -153,55 +153,68 @@ function reportTitle(type) {
 }
 
 
+/*
+ * Reports/Team grid tracks deliberately use minmax + fractional growth instead of
+ * fixed pixel-only columns. The minimums keep the grid readable at normal/high zoom;
+ * the fractional maxima absorb extra width when the browser is zoomed out so the
+ * header and rows continue to fill the available MatFlow workspace evenly.
+ */
 const pageColumns = (type) => {
   const identity = [
-    { key: "productName", label: "Product", width: "190px" },
-    { key: "projectCode", label: "PD No.", width: "120px" },
-    { key: "clientName", label: "Client", width: "170px" },
-    { key: "projectName", label: "Project", width: "180px" },
+    { key: "productName", label: "Product", width: "minmax(150px,1.05fr)" },
+    { key: "projectCode", label: "PD No.", width: "minmax(92px,.62fr)" },
+    { key: "clientName", label: "Client", width: "minmax(125px,.86fr)" },
+    { key: "projectName", label: "Project", width: "minmax(135px,.94fr)" },
   ];
   if (type === REPORTS.DESIGN) return [
     ...identity,
-    { key: "task", label: "Task", width: "240px" },
-    { key: "assignedBy", label: "Assigned By", width: "150px" },
-    { key: "assignee", label: "Assigned To", width: "190px" },
-    { key: "status", label: "Status", width: "115px" },
-    { key: "receivedAt", label: "Received", width: "165px" },
-    { key: "dueAt", label: "Due", width: "165px" },
-    { key: "completedAt", label: "Completed", width: "165px" },
-    { key: "action", label: "", width: "82px" },
+    { key: "task", label: "Task", width: "minmax(205px,1.5fr)" },
+    { key: "assignedBy", label: "Assigned By", width: "minmax(118px,.82fr)" },
+    { key: "assignee", label: "Assigned To", width: "minmax(145px,1fr)" },
+    { key: "status", label: "Status", width: "minmax(100px,.68fr)" },
+    { key: "receivedAt", label: "Received", width: "minmax(132px,.9fr)" },
+    { key: "dueAt", label: "Due", width: "minmax(132px,.9fr)" },
+    { key: "completedAt", label: "Completed", width: "minmax(132px,.9fr)" },
+    { key: "action", label: "", width: "88px", align: "right" },
   ];
   if (type === REPORTS.ENGINEERING) return [
     ...identity,
-    { key: "task", label: "Engineering Task", width: "240px" },
-    { key: "assignee", label: "Assigned Engineer", width: "180px" },
-    { key: "status", label: "Status", width: "115px" },
-    { key: "priority", label: "Priority", width: "105px" },
-    { key: "dueAt", label: "Due", width: "165px" },
-    { key: "startedAt", label: "Started", width: "165px" },
-    { key: "completedAt", label: "Completed", width: "165px" },
-    { key: "action", label: "", width: "82px" },
+    { key: "task", label: "Engineering Task", width: "minmax(210px,1.55fr)" },
+    { key: "assignee", label: "Assigned Engineer", width: "minmax(145px,1fr)" },
+    { key: "status", label: "Status", width: "minmax(100px,.68fr)" },
+    { key: "priority", label: "Priority", width: "minmax(90px,.58fr)" },
+    { key: "dueAt", label: "Due", width: "minmax(132px,.9fr)" },
+    { key: "startedAt", label: "Started", width: "minmax(132px,.9fr)" },
+    { key: "completedAt", label: "Completed", width: "minmax(132px,.9fr)" },
+    { key: "action", label: "", width: "88px", align: "right" },
   ];
   if (type === REPORTS.QUERIES) return [
     ...identity,
-    { key: "task", label: "Issue / Topic", width: "260px" },
-    { key: "assignee", label: "Assigned To", width: "180px" },
-    { key: "status", label: "Status", width: "115px" },
-    { key: "priority", label: "Priority", width: "105px" },
-    { key: "dueAt", label: "Due", width: "165px" },
-    { key: "updatedAt", label: "Last Updated", width: "165px" },
-    { key: "action", label: "", width: "82px" },
+    { key: "task", label: "Issue / Topic", width: "minmax(225px,1.65fr)" },
+    { key: "assignee", label: "Assigned To", width: "minmax(145px,1fr)" },
+    { key: "status", label: "Status", width: "minmax(100px,.68fr)" },
+    { key: "priority", label: "Priority", width: "minmax(90px,.58fr)" },
+    { key: "dueAt", label: "Due", width: "minmax(132px,.9fr)" },
+    { key: "updatedAt", label: "Last Updated", width: "minmax(132px,.9fr)" },
+    { key: "action", label: "", width: "88px", align: "right" },
   ];
   return [
     ...identity,
-    { key: "stage", label: "Stage", width: "165px" },
-    { key: "ppcOwner", label: "PPC Owner", width: "160px" },
-    { key: "ppcGate1Decision", label: "Gate 1", width: "115px" },
-    { key: "ppcGate2Decision", label: "Gate 2", width: "115px" },
-    { key: "plannedProductionReleaseDate", label: "Planned Release", width: "145px" },
-    { key: "productionReleasedAt", label: "Released At", width: "165px" },
-    { key: "action", label: "", width: "82px" },
+    { key: "stage", label: "Stage", width: "minmax(135px,.92fr)" },
+    { key: "ppcOwner", label: "PPC Owner", width: "minmax(130px,.88fr)" },
+    { key: "ppcGate1Decision", label: "Gate 1", width: "minmax(92px,.62fr)" },
+    { key: "ppcGate2Decision", label: "Gate 2", width: "minmax(92px,.62fr)" },
+    { key: "plannedProductionReleaseDate", label: "Planned Release", width: "minmax(120px,.8fr)" },
+    { key: "productionReleasedAt", label: "Released At", width: "minmax(132px,.9fr)" },
+    { key: "action", label: "", width: "88px", align: "right" },
   ];
+};
+
+const reportTableMinWidth = (type) => {
+  if (type === REPORTS.DESIGN) return 1500;
+  if (type === REPORTS.ENGINEERING) return 1390;
+  if (type === REPORTS.QUERIES) return 1300;
+  return 1260;
 };
 
 const reportStatusColor = (row) => {
@@ -502,6 +515,7 @@ export function MatFlowReportsPage() {
   const reportLabel = availableReports.find((item) => item.value === reportType)?.label || "Report";
   const visibleColumns = useMemo(() => pageColumns(reportType), [reportType]);
   const tableTemplate = useMemo(() => visibleColumns.map((column) => column.width).join(" "), [visibleColumns]);
+  const tableMinWidth = useMemo(() => reportTableMinWidth(reportType), [reportType]);
 
   if (loading && !rows.length) return <LoadingBlock />;
 
@@ -526,14 +540,33 @@ export function MatFlowReportsPage() {
 
       {error && <ErrorBox>{error}</ErrorBox>}
 
-      <Card sx={{ ...panelSx, p: 1.15 }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(auto-fit,minmax(150px,1fr))" }, gap: 0.75 }}>
+      <Card sx={{ ...panelSx, p: 1.15, minWidth: 0 }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2,minmax(0,1fr))",
+              lg: "repeat(4,minmax(0,1fr))",
+              xl: "repeat(9,minmax(0,1fr))",
+            },
+            gap: 0.75,
+            alignItems: "stretch",
+            minWidth: 0,
+          }}
+        >
           {availableReports.length > 1 ? (
             <TextField select size="small" label={teamMode ? "Team View" : "Report"} value={reportType} onChange={(event) => { setReportType(event.target.value); setAssignee(""); setClient(""); setProject(""); setStatus(""); }} sx={fieldSx}>
               {availableReports.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}
             </TextField>
-          ) : <Box sx={{ px: 1, py: 1, border: "1px solid var(--mf-border)", borderRadius: 1.2, color: "var(--mf-text-secondary)", fontSize: 10.5, fontWeight: 850 }}>{reportLabel}</Box>}
-          <TextField size="small" label="Search Product / PD / client / project / task" value={search} onChange={(event) => setSearch(event.target.value)} sx={fieldSx} />
+          ) : <Box sx={{ px: 1, minHeight: 40, display: "flex", alignItems: "center", border: "1px solid var(--mf-border)", borderRadius: 1.2, color: "var(--mf-text-secondary)", fontSize: 10.5, fontWeight: 850 }}>{reportLabel}</Box>}
+          <TextField
+            size="small"
+            label="Search Product / PD / client / project / task"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            sx={{ ...fieldSx, gridColumn: { xs: "auto", sm: "span 2", lg: "span 2", xl: "span 2" } }}
+          />
           {!juniorDesignerOnly && <TextField select size="small" label="Assigned User" value={assignee} onChange={(event) => setAssignee(event.target.value)} sx={fieldSx}>
             <MenuItem value="">All users</MenuItem>
             {assigneeOptions.map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}
@@ -555,17 +588,24 @@ export function MatFlowReportsPage() {
         </Box>
       </Card>
 
-      <Card sx={{ ...panelSx, p: 0, boxShadow: "none" }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" } }}>
+      <Card sx={{ ...panelSx, p: 0, boxShadow: "none", overflow: "hidden" }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(125px,1fr))",
+            gap: "1px",
+            background: "var(--mf-border)",
+          }}
+        >
           {[
             [teamMode ? "Assignments" : "Rows", stats.total],
             ["Active", stats.active],
             ["Completed", stats.completed],
             ["Overdue", stats.overdue],
-          ].map(([label, value], index) => (
-            <Box key={label} sx={{ px: 1.25, py: 1, borderLeft: index ? "1px solid var(--mf-border)" : "none" }}>
-              <Typography sx={{ fontSize: 18, fontWeight: 950, color: label === "Overdue" && value ? "var(--mf-danger-text)" : "var(--mf-text)" }}>{value}</Typography>
-              <Typography sx={{ mt: 0.1, fontSize: 9.5, fontWeight: 800, color: "var(--mf-text-muted)" }}>{label}</Typography>
+          ].map(([label, value]) => (
+            <Box key={label} sx={{ px: 1.25, py: 0.9, minWidth: 0, background: "var(--mf-panel-solid)" }}>
+              <Typography sx={{ fontSize: 18, lineHeight: 1.05, fontWeight: 950, color: label === "Overdue" && value ? "var(--mf-danger-text)" : "var(--mf-text)" }}>{value}</Typography>
+              <Typography sx={{ mt: 0.12, fontSize: 9.3, fontWeight: 850, color: "var(--mf-text-muted)" }}>{label}</Typography>
             </Box>
           ))}
         </Box>
@@ -580,7 +620,16 @@ export function MatFlowReportsPage() {
             </Box>
             {assignee && <Button size="small" onClick={() => setAssignee("")} sx={secondaryBtnSx}>Show whole team</Button>}
           </Box>
-          <Box sx={{ p: 0.8, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 0.65 }}>
+          <Box
+            sx={{
+              p: 0.8,
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fill,minmax(190px,230px))" },
+              justifyContent: "start",
+              alignItems: "stretch",
+              gap: 0.65,
+            }}
+          >
             {teamMembers.map((member) => (
               <Box
                 key={member.name}
@@ -589,7 +638,11 @@ export function MatFlowReportsPage() {
                 onClick={() => setAssignee(member.name)}
                 sx={{
                   p: 0.9,
+                  width: "100%",
                   minWidth: 0,
+                  minHeight: 66,
+                  display: "grid",
+                  alignContent: "center",
                   textAlign: "left",
                   font: "inherit",
                   color: "inherit",
@@ -601,10 +654,10 @@ export function MatFlowReportsPage() {
                 }}
               >
                 <Typography noWrap sx={{ fontSize: 10.3, fontWeight: 950, color: "var(--mf-text)" }}>{member.name}</Typography>
-                <Box sx={{ mt: 0.45, display: "flex", gap: 0.8, flexWrap: "wrap" }}>
-                  <Typography sx={{ fontSize: 8.8, fontWeight: 850, color: "var(--mf-primary-text)" }}>{member.active} active</Typography>
-                  <Typography sx={{ fontSize: 8.8, fontWeight: 850, color: "var(--mf-success-text)" }}>{member.completed} done</Typography>
-                  <Typography sx={{ fontSize: 8.8, fontWeight: 900, color: member.overdue ? "var(--mf-danger-text)" : "var(--mf-text-muted)" }}>{member.overdue} overdue</Typography>
+                <Box sx={{ mt: 0.5, display: "grid", gridTemplateColumns: "repeat(3,auto)", justifyContent: "start", columnGap: 1.05, rowGap: 0.3 }}>
+                  <Typography sx={{ whiteSpace: "nowrap", fontSize: 8.7, fontWeight: 850, color: "var(--mf-primary-text)" }}>{member.active} active</Typography>
+                  <Typography sx={{ whiteSpace: "nowrap", fontSize: 8.7, fontWeight: 850, color: "var(--mf-success-text)" }}>{member.completed} done</Typography>
+                  <Typography sx={{ whiteSpace: "nowrap", fontSize: 8.7, fontWeight: 900, color: member.overdue ? "var(--mf-danger-text)" : "var(--mf-text-muted)" }}>{member.overdue} overdue</Typography>
                 </Box>
               </Box>
             ))}
@@ -617,7 +670,7 @@ export function MatFlowReportsPage() {
           <EmptyState>No rows match the current report filters.</EmptyState>
         </Card>
       ) : viewMode === "CARD" ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 1 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(auto-fit,minmax(420px,1fr))" }, gap: 1, alignItems: "stretch" }}>
           {filtered.map((row, index) => (
             <Card
               key={`${row.productionFileId || "file"}-${row.taskNo || row.taskKey || row.stage}-${index}`}
@@ -647,9 +700,9 @@ export function MatFlowReportsPage() {
           ))}
         </Box>
       ) : (
-        <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
-          <Box sx={{ overflowX: "auto" }}>
-            <Box sx={{ minWidth: "max-content" }}>
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none", minWidth: 0 }}>
+          <Box sx={{ overflowX: "auto", overflowY: "hidden", width: "100%", scrollbarGutter: "stable" }}>
+            <Box sx={{ width: "100%", minWidth: tableMinWidth }}>
               <Box
                 sx={{
                   px: 1.1,
@@ -666,7 +719,7 @@ export function MatFlowReportsPage() {
                 }}
               >
                 {visibleColumns.map((column) => (
-                  <Typography key={column.key} sx={{ fontSize: 8.6, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
+                  <Typography key={column.key} sx={{ minWidth: 0, textAlign: column.align || "left", fontSize: 8.6, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
                     {column.label}
                   </Typography>
                 ))}
@@ -682,7 +735,7 @@ export function MatFlowReportsPage() {
                     gap: 0.9,
                     alignItems: "center",
                     borderBottom: "1px solid var(--mf-border)",
-                    borderLeft: `3px solid ${reportRowAccent(row)}`,
+                    boxShadow: `inset 3px 0 0 ${reportRowAccent(row)}`,
                     background: "var(--mf-panel-solid)",
                     "&:last-child": { borderBottom: 0 },
                     "&:hover": { background: "var(--mf-table-hover)" },
@@ -694,7 +747,7 @@ export function MatFlowReportsPage() {
                       size="small"
                       endIcon={<OpenInNewOutlinedIcon />}
                       onClick={() => navigate(reportWorkPath(reportType, row))}
-                      sx={secondaryBtnSx}
+                      sx={{ ...secondaryBtnSx, justifySelf: "end" }}
                     >
                       {reportType === REPORTS.QUERIES ? "Open chat" : "Open"}
                     </Button>
