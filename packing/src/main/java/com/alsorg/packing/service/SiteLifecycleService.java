@@ -59,6 +59,7 @@ public class SiteLifecycleService {
     private static final int MAX_OPENING_PHOTOS = 2;
     private static final int MAX_METADATA_IDS = 500;
     private static final int MAX_REGISTER_PAGE_SIZE = 100;
+    private static final int MAX_DELIVERY_CHALLAN_PACKETS = 1000;
     private static final double MAX_ACCEPTABLE_ACCURACY_METRES = 500.0d;
 
     private final PacketSiteLifecycleRepository lifecycleRepository;
@@ -123,6 +124,134 @@ public class SiteLifecycleService {
                 .orElse(null);
 
         return toRow(item, packetItem, lifecycle, true);
+    }
+
+    /**
+     * Returns the authoritative number of physical packets in the dispatch
+     * challan identified by the scanned packet.
+     *
+     * Security boundary:
+     * - the supplied QR / Sticker Number is first resolved through the exact
+     *   existing site-lifecycle scanner;
+     * - the scanned packet must already be eligible for site delivery;
+     * - the authenticated account must be the assigned DRIVER (or ADMIN);
+     * - every packet in the resolved challan is checked against the same driver
+     *   assignment before the count is returned.
+     *
+     * This deliberately does not expose the Dispatch challan register or item
+     * details to DRIVER. The mobile app receives only the already-authorized
+     * challan number and its distinct physical packet count.
+     */
+    @Transactional(readOnly = true)
+    public DeliveryChallanContext deliveryChallanContext(
+            String rawScanText,
+            User user) {
+
+        User actor = requireUser(user);
+
+        if (rawScanText == null || rawScanText.trim().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Scan text is required");
+        }
+
+        ScannerDispatchService.SiteScanResolution scan =
+                scannerDispatchService.resolveForSiteLifecycle(rawScanText);
+
+        DispatchedItem scannedItem = dispatchedItemRepository
+                .findById(scan.zohoItemId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Dispatch record not found for scanned packet"));
+
+        /*
+         * Reuse the same delivery eligibility and DRIVER authorization rules as
+         * POST /resolve with mode DELIVERY. This also preserves the existing
+         * controlled path for intentionally unassigned/external drivers.
+         */
+        assertSiteLifecycleEligible(scannedItem);
+        assertResolvePermission(actor, scannedItem, "DELIVERY");
+
+        String challanNumber = clean(
+                scannedItem.getChalaanNumber(),
+                255);
+
+        if (challanNumber == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Resolved packet does not contain a dispatch challan number");
+        }
+
+        /*
+         * Load the complete challan, not only a status-filtered subset. Every
+         * returned row is validated below with assertSiteLifecycleEligible().
+         * This prevents an old/corrupt row in the same challan from being
+         * silently omitted and producing a packet count smaller than the real
+         * challan.
+         *
+         * Normal site-proof processing intentionally keeps factory status
+         * DISPATCHED after delivery, so valid current challans remain stable
+         * before, during and after partial mobile submissions.
+         *
+         * MAX + 1 bounds the read while still letting us reject any corrupted /
+         * legacy challan that exceeds the application's normal 1000-item limit.
+         */
+        List<DispatchedItem> challanItems = entityManager.createQuery(
+                        "SELECT d FROM DispatchedItem d "
+                                + "WHERE d.chalaanNumber = :challan "
+                                + "ORDER BY d.zohoItemId ASC",
+                        DispatchedItem.class)
+                .setParameter("challan", challanNumber)
+                .setMaxResults(MAX_DELIVERY_CHALLAN_PACKETS + 1)
+                .getResultList();
+
+        if (challanItems.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "No dispatched packet rows were found for challan " + challanNumber);
+        }
+
+        if (challanItems.size() > MAX_DELIVERY_CHALLAN_PACKETS) {
+            throw new ResponseStatusException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Challan contains more than "
+                            + MAX_DELIVERY_CHALLAN_PACKETS
+                            + " packets and cannot be processed by site bulk delivery");
+        }
+
+        LinkedHashSet<UUID> packetItemIds = new LinkedHashSet<>();
+
+        for (DispatchedItem challanItem : challanItems) {
+            /*
+             * A challan scan can only be declared complete when every row is a
+             * physical packet that can participate in the site lifecycle.
+             * Rejecting an unlinked legacy row is safer than returning a smaller
+             * count that would let the driver continue prematurely.
+             */
+            assertSiteLifecycleEligible(challanItem);
+            assertDriverAssignment(actor, challanItem);
+
+            UUID packetItemId = challanItem.getPacketItemId();
+
+            if (packetItemId == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Challan " + challanNumber
+                                + " contains a row without a physical packet QR");
+            }
+
+            packetItemIds.add(packetItemId);
+        }
+
+        if (packetItemIds.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "No physical packet rows were found for challan " + challanNumber);
+        }
+
+        return new DeliveryChallanContext(
+                challanNumber,
+                packetItemIds.size());
     }
 
     @Transactional
@@ -1023,6 +1152,11 @@ public class SiteLifecycleService {
         List<UUID> ids(UUID lifecycleId) {
             return evidenceIds.getOrDefault(lifecycleId, List.of());
         }
+    }
+
+    public record DeliveryChallanContext(
+            String challanNumber,
+            int packetCount) {
     }
 
     public record RegisterResult(

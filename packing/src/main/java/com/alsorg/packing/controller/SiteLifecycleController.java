@@ -48,6 +48,31 @@ public class SiteLifecycleController {
         return noStore(ResponseEntity.ok(row));
     }
 
+    /*
+     * Driver-safe continuous bulk-scan context.
+     *
+     * The service first validates the exact scanned QR through the existing
+     * DELIVERY authorization rules, then returns only the authorized challan
+     * number and its physical packet count. DRIVER is not given access to the
+     * Dispatch challan-history read model.
+     */
+    @GetMapping(
+            value = "/delivery-challan-context",
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<SiteLifecycleService.DeliveryChallanContext> deliveryChallanContext(
+            @RequestParam String scanText) {
+
+        User user = currentUserService.requireCurrentUser();
+
+        SiteLifecycleService.DeliveryChallanContext context =
+                service.deliveryChallanContext(
+                        scanText,
+                        user);
+
+        return noStore(
+                ResponseEntity.ok(context));
+    }
+
     @PostMapping(value = "/deliver", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SiteLifecycleRow> deliver(
             @RequestParam String scanText,

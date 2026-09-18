@@ -16,7 +16,7 @@ import * as Location from "expo-location";
 
 import { useAuth } from "../auth/AuthContext";
 import { buildStickerScanText } from "../api/dispatchApi";
-import { getBackendMessage } from "../api/client";
+import { api, getBackendMessage } from "../api/client";
 import {
   resolveSitePacket,
   submitSiteDelivery,
@@ -72,56 +72,52 @@ function packetIdentity(data, scanText) {
 }
 
 /*
- * Backward-compatible helper.
+ * Driver-safe challan context.
  *
- * The current site-lifecycle response does not need to expose a challan count
- * for this screen to work. If the backend later includes one of these fields,
- * the driver UI automatically upgrades from an explicit "all scanned" gate to
- * an exact N/N gate without changing the existing API contract.
+ * This endpoint does NOT expose Dispatch history to DRIVER. The backend first
+ * runs the exact scanned packet through the existing DELIVERY resolver and only
+ * then returns the authoritative number of physical packet rows linked to that
+ * already-authorized challan.
  */
-function getExpectedChallanCount(data) {
-  const candidates = [
-    data?.challanItemCount,
-    data?.challanTotalItems,
-    data?.challanPacketCount,
-    data?.totalChallanItems,
-    data?.totalPackets,
-  ];
+async function fetchDeliveryChallanContext(scanText) {
+  const value = clean(scanText);
 
-  for (const value of candidates) {
-    const number = Number(value);
-
-    if (Number.isInteger(number) && number > 0) {
-      return number;
-    }
+  if (!value) {
+    throw new Error("Scan a packet QR or enter Sticker Number.");
   }
 
-  /*
-   * Some sticker/resolve payloads represent packet sequencing as 2/5 or
-   * "Packet 2 of 5" instead of exposing a dedicated challan count. Only
-   * infer a total when the text explicitly contains both current and total;
-   * a plain packet number like "5" must never be treated as challan size.
-   */
-  const sequenceText = clean(
-    data?.packetNumber ||
-      data?.packetNo ||
-      data?.packetSequence ||
-      data?.packetLabel
+  const response = await api.get(
+    "/api/site-lifecycle/delivery-challan-context",
+    {
+      params: {
+        scanText: value,
+      },
+      headers: {
+        Accept: "application/json",
+      },
+    }
   );
 
-  const slashMatch = sequenceText.match(/(?:^|\D)(\d+)\s*\/\s*(\d+)(?:\D|$)/);
-  const ofMatch = sequenceText.match(/(?:^|\D)(\d+)\s+of\s+(\d+)(?:\D|$)/i);
-  const sequenceMatch = slashMatch || ofMatch;
+  const data = response?.data || {};
+  const challanNumber = clean(data?.challanNumber);
+  const packetCount = Number(data?.packetCount);
 
-  if (sequenceMatch) {
-    const total = Number(sequenceMatch[2]);
-
-    if (Number.isInteger(total) && total > 0) {
-      return total;
-    }
+  if (!challanNumber) {
+    throw new Error(
+      "The delivery challan number could not be determined for this packet."
+    );
   }
 
-  return 0;
+  if (!Number.isInteger(packetCount) || packetCount < 1) {
+    throw new Error(
+      "The challan packet count could not be determined. Delivery cannot continue until the server returns the complete challan count."
+    );
+  }
+
+  return {
+    challanNumber,
+    packetCount,
+  };
 }
 
 function getBulkRepresentative(rows) {
@@ -220,7 +216,7 @@ export default function SiteLifecycleScreen({
   const modeSub =
     mode === "DELIVERY"
       ? isBulkDelivery
-        ? "Scan every physical packet from one challan first. Then capture one site proof and confirm the scanned delivery set."
+        ? "Scan continuously until every physical packet from the first packet’s challan is accepted. Proof unlocks automatically only at the exact challan total."
         : "Scan the exact packet, photograph it at site, capture fresh GPS and mark physical delivery."
       : "Scan a delivered packet when it is physically opened and record the opening time/GPS.";
 
@@ -234,8 +230,10 @@ export default function SiteLifecycleScreen({
     bulkExpectedCount > 0 && bulkRows.length >= bulkExpectedCount;
 
   const bulkScanComplete =
-    bulkRows.length > 0 &&
-    (bulkExpectedCount <= 0 || bulkRows.length === bulkExpectedCount);
+    bulkRecoveryMode
+      ? bulkRows.length > 0
+      : bulkExpectedCount > 0 &&
+        bulkRows.length === bulkExpectedCount;
 
   const ensureCameraPermission = async () => {
     if (permission?.granted) return true;
@@ -282,13 +280,38 @@ export default function SiteLifecycleScreen({
     setDeliveryScanMode(nextMode);
   };
 
-  const addBulkResolvedPacket = (raw, data) => {
-    const challanNumber = clean(data?.challanNumber);
+  const lockBulkProof = (rows) => {
+    const representative = getBulkRepresentative(rows);
+
+    setResolved(representative);
+    setScanText(rows?.[0]?.scanText || "");
+    setBulkProofReady(true);
+    setScannerEnabled(false);
+    setCameraPurpose("SCAN");
+    setBulkProgress("");
+  };
+
+  const addBulkResolvedPacket = (raw, data, context = null) => {
+    const resolvedChallan = clean(data?.challanNumber);
+    const contextChallan = clean(context?.challanNumber);
+    const challanNumber = contextChallan || resolvedChallan;
 
     if (!challanNumber) {
       Alert.alert(
         "Challan missing",
-        "This packet resolved successfully, but its dispatch challan number was not returned. Use Single Scan for this legacy packet."
+        "This packet resolved successfully, but its dispatch challan number was not returned."
+      );
+      return false;
+    }
+
+    if (
+      contextChallan &&
+      resolvedChallan &&
+      normalize(contextChallan) !== normalize(resolvedChallan)
+    ) {
+      Alert.alert(
+        "Challan mismatch",
+        "The server resolved this QR to a different challan than its delivery context. Reset and scan again."
       );
       return false;
     }
@@ -299,13 +322,12 @@ export default function SiteLifecycleScreen({
     ) {
       Alert.alert(
         "Different challan",
-        `Bulk delivery is locked to challan ${bulkChallanNumber}. Finish or reset that challan before scanning ${challanNumber}.`
+        `Bulk delivery is locked to challan ${bulkChallanNumber}. Scan only packets from that challan.`
       );
       return false;
     }
 
     const identity = packetIdentity(data, raw);
-
     const duplicate = bulkRows.some(
       (row) => packetIdentity(row.data, row.scanText) === identity
     );
@@ -318,27 +340,36 @@ export default function SiteLifecycleScreen({
       return false;
     }
 
-    const responseExpectedCount = getExpectedChallanCount(data);
+    const contextCount = Number(context?.packetCount);
+    const authoritativeCount =
+      Number.isInteger(contextCount) && contextCount > 0
+        ? contextCount
+        : bulkExpectedCount;
 
-    if (
-      bulkExpectedCount > 0 &&
-      responseExpectedCount > 0 &&
-      bulkExpectedCount !== responseExpectedCount
-    ) {
+    if (!Number.isInteger(authoritativeCount) || authoritativeCount < 1) {
       Alert.alert(
-        "Challan count mismatch",
-        "The server returned a different packet count for this scan. Reset the bulk cart and scan the challan again."
+        "Challan count unavailable",
+        "The server did not return the complete packet count for this challan. Bulk delivery is blocked so the driver cannot continue with an incomplete scan set."
       );
       return false;
     }
 
-    const expectedCount =
-      bulkExpectedCount || responseExpectedCount || 0;
+    if (
+      bulkExpectedCount > 0 &&
+      contextCount > 0 &&
+      bulkExpectedCount !== contextCount
+    ) {
+      Alert.alert(
+        "Challan count changed",
+        "The server returned a different packet count for this challan. Reset and scan the challan again."
+      );
+      return false;
+    }
 
-    if (expectedCount > 0 && bulkRows.length >= expectedCount) {
+    if (bulkRows.length >= authoritativeCount) {
       Alert.alert(
         "Challan already complete",
-        `${expectedCount} packet${expectedCount === 1 ? "" : "s"} are already scanned for this challan.`
+        `${authoritativeCount} packet${authoritativeCount === 1 ? "" : "s"} are already scanned for this challan.`
       );
       return false;
     }
@@ -353,23 +384,18 @@ export default function SiteLifecycleScreen({
 
     setBulkRows(nextRows);
     setBulkChallanNumber(challanNumber);
-
-    if (expectedCount > 0) {
-      setBulkExpectedCount(expectedCount);
-    }
-
+    setBulkExpectedCount(authoritativeCount);
     setManualSticker("");
-    setResolved(null);
-    setScanText("");
-    setBulkProofReady(false);
     setBulkProgress("");
 
-    const isNowComplete =
-      expectedCount > 0 && nextRows.length === expectedCount;
+    const isNowComplete = nextRows.length === authoritativeCount;
 
     if (isNowComplete) {
-      setScannerEnabled(false);
+      lockBulkProof(nextRows);
     } else {
+      setResolved(null);
+      setScanText("");
+      setBulkProofReady(false);
       setScannerEnabled(true);
     }
 
@@ -386,32 +412,30 @@ export default function SiteLifecycleScreen({
 
       const data = await resolveSitePacket(raw, mode);
 
-      if (isBulkDelivery) {
-        return addBulkResolvedPacket(raw, data);
-      }
+      if (mode === "DELIVERY") {
+        if (isBulkDelivery) {
+          let context = null;
 
-      /*
-       * If the resolve payload tells us this challan contains more than one
-       * packet, Single Scan must not become a bypass. Promote the driver to
-       * Bulk Challan Scan automatically and keep this first packet in the cart.
-       */
-      if (
-        mode === "DELIVERY" &&
-        deliveryScanMode === "SINGLE" &&
-        getExpectedChallanCount(data) > 1
-      ) {
-        setDeliveryScanMode("BULK");
+          if (!bulkChallanNumber || bulkExpectedCount <= 0) {
+            context = await fetchDeliveryChallanContext(raw);
+          }
 
-        const added = addBulkResolvedPacket(raw, data);
-
-        if (added) {
-          Alert.alert(
-            "Bulk scan required",
-            `This challan contains ${getExpectedChallanCount(data)} packets. The first packet is added; scan every remaining packet before delivery proof.`
-          );
+          return addBulkResolvedPacket(raw, data, context);
         }
 
-        return added;
+        if (deliveryScanMode === "SINGLE") {
+          const context = await fetchDeliveryChallanContext(raw);
+
+          if (context.packetCount > 1) {
+            /*
+             * A multi-packet challan can never be completed through Single Scan.
+             * Promote immediately, keep the first QR, and re-arm the camera for
+             * packet 2 exactly like Dispatch Bulk Scan. No confirmation dialog.
+             */
+            setDeliveryScanMode("BULK");
+            return addBulkResolvedPacket(raw, data, context);
+          }
+        }
       }
 
       setResolved(data);
@@ -489,75 +513,7 @@ export default function SiteLifecycleScreen({
     setScannerEnabled(true);
   };
 
-  const enterBulkProof = () => {
-    if (bulkRows.length === 0) {
-      Alert.alert(
-        "Scan required",
-        "Scan at least one packet from the challan first."
-      );
-      return;
-    }
 
-    if (
-      !bulkRecoveryMode &&
-      bulkExpectedCount > 0 &&
-      bulkRows.length !== bulkExpectedCount
-    ) {
-      Alert.alert(
-        "Challan scan incomplete",
-        `Scanned ${bulkRows.length} of ${bulkExpectedCount}. Scan every packet in challan ${bulkChallanNumber} before continuing.`
-      );
-      return;
-    }
-
-    const proceed = () => {
-      const representative = getBulkRepresentative(bulkRows);
-
-      setResolved(representative);
-      setScanText(bulkRows[0]?.scanText || "");
-      setBulkProofReady(true);
-      setScannerEnabled(false);
-      setCameraPurpose("SCAN");
-      setBulkProgress("");
-    };
-
-    if (bulkExpectedCount > 0) {
-      proceed();
-      return;
-    }
-
-    /*
-     * Older backends do not publish challanItemCount in SiteLifecycleRow.
-     * Keep the workflow safe and explicit without opening the Dispatch register
-     * to DRIVER: the driver must affirm that every physical packet shown on the
-     * challan has been scanned before the proof controls are revealed.
-     */
-    Alert.alert(
-      "Complete challan scan?",
-      `${bulkRows.length} packet${bulkRows.length === 1 ? "" : "s"} scanned for challan ${bulkChallanNumber}. Continue only after every physical packet on this challan has been scanned.`,
-      [
-        {
-          text: "Keep Scanning",
-          style: "cancel",
-        },
-        {
-          text: "All Packets Scanned",
-          onPress: proceed,
-        },
-      ]
-    );
-  };
-
-  const resumeBulkScanning = () => {
-    if (!isBulkDelivery || submitting) return;
-
-    setResolved(null);
-    setScanText("");
-    setBulkProofReady(false);
-    setBulkProgress("");
-    setCameraPurpose("SCAN");
-    setScannerEnabled(true);
-  };
 
   const startPhoto = async () => {
     if (isBulkDelivery && !bulkProofReady) {
@@ -664,6 +620,37 @@ export default function SiteLifecycleScreen({
     const refreshedRows = [];
     let expectedCount = bulkRecoveryMode ? 0 : bulkExpectedCount;
 
+    if (!bulkRecoveryMode) {
+      const context = await fetchDeliveryChallanContext(
+        bulkRows?.[0]?.scanText
+      );
+
+      if (
+        normalize(context.challanNumber) !== normalize(bulkChallanNumber)
+      ) {
+        throw new Error(
+          `The first packet now resolves to challan ${context.challanNumber}, not ${bulkChallanNumber}. Reset and scan again.`
+        );
+      }
+
+      if (
+        expectedCount > 0 &&
+        context.packetCount !== expectedCount
+      ) {
+        throw new Error(
+          `The challan packet count changed from ${expectedCount} to ${context.packetCount}. Reset and scan the challan again.`
+        );
+      }
+
+      expectedCount = context.packetCount;
+
+      if (bulkRows.length !== expectedCount) {
+        throw new Error(
+          `Challan ${bulkChallanNumber} requires ${expectedCount} packet scans, but ${bulkRows.length} are present.`
+        );
+      }
+    }
+
     for (let index = 0; index < bulkRows.length; index += 1) {
       const row = bulkRows[index];
       const data = await resolveSitePacket(row.scanText, "DELIVERY");
@@ -691,43 +678,10 @@ export default function SiteLifecycleScreen({
         );
       }
 
-      const responseExpectedCount = bulkRecoveryMode
-        ? 0
-        : getExpectedChallanCount(data);
-
-      if (
-        !bulkRecoveryMode &&
-        expectedCount > 0 &&
-        responseExpectedCount > 0 &&
-        expectedCount !== responseExpectedCount
-      ) {
-        throw new Error(
-          "The challan packet count changed after scanning. Reset and scan the challan again."
-        );
-      }
-
-      if (
-        !bulkRecoveryMode &&
-        !expectedCount &&
-        responseExpectedCount > 0
-      ) {
-        expectedCount = responseExpectedCount;
-      }
-
       refreshedRows.push({
         scanText: row.scanText,
         data,
       });
-    }
-
-    if (
-      !bulkRecoveryMode &&
-      expectedCount > 0 &&
-      refreshedRows.length !== expectedCount
-    ) {
-      throw new Error(
-        `Challan ${bulkChallanNumber} requires ${expectedCount} packet scans, but only ${refreshedRows.length} are present.`
-      );
     }
 
     return {
@@ -1028,7 +982,7 @@ export default function SiteLifecycleScreen({
 
         <Text style={styles.cardSub}>
           {isBulkDelivery
-            ? "The first accepted packet locks this cart to its challan. Every later scan must belong to the same challan; duplicates are rejected. Delivery proof stays locked until you finish the scan set."
+            ? "The first accepted packet locks the challan and loads its exact packet total from the server. The camera then keeps scanning continuously; duplicates and other challans are rejected, and proof unlocks automatically only when the counter reaches the total."
             : "The backend validates the latest active sticker, not only the text printed in the QR."}
         </Text>
 
@@ -1118,7 +1072,9 @@ export default function SiteLifecycleScreen({
                   ? "Resolving…"
                   : isBulkDelivery
                     ? bulkRows.length > 0
-                      ? `Scan next packet • ${bulkRows.length} added`
+                      ? bulkExpectedCount > 0
+                        ? `Keep scanning • ${bulkRows.length}/${bulkExpectedCount} • ${Math.max(0, bulkExpectedCount - bulkRows.length)} left`
+                        : "Loading challan packet count…"
                       : "Scan first packet from the challan"
                     : "Point camera at packet QR"}
               </Text>
@@ -1140,9 +1096,9 @@ export default function SiteLifecycleScreen({
                     ? "A previous save stopped part-way through. Only the remaining verified packets are kept here for retry."
                     : bulkExpectedCount > 0
                       ? bulkRows.length === bulkExpectedCount
-                        ? "Required packet count reached. Review the cart and continue to proof."
-                        : `${bulkExpectedCount - bulkRows.length} packet${bulkExpectedCount - bulkRows.length === 1 ? "" : "s"} still required by the server count.`
-                      : "Keep scanning until every physical packet on the challan is in this cart."}
+                        ? "Complete challan scanned. Delivery proof unlocked automatically."
+                        : `${bulkExpectedCount - bulkRows.length} packet${bulkExpectedCount - bulkRows.length === 1 ? "" : "s"} remaining. Keep scanning continuously.`
+                      : "Loading the authoritative challan packet total…"}
                 </Text>
               </View>
 
@@ -1175,27 +1131,23 @@ export default function SiteLifecycleScreen({
             ))}
 
             {!bulkProofReady ? (
-              <TouchableOpacity
-                style={[
-                  styles.finishScanBtn,
-                  loading || submitting ? styles.disabled : null,
-                ]}
-                onPress={enterBulkProof}
-                disabled={loading || submitting}
-              >
-                <Text style={styles.finishScanText}>
+              <View style={styles.scanProgressBox}>
+                <Text style={styles.scanProgressTitle}>
                   {bulkExpectedCount > 0
-                    ? bulkRows.length === bulkExpectedCount
-                      ? "All Required Packets Scanned • Continue"
-                      : `Scan All ${bulkExpectedCount} Packets First`
-                    : "I’ve Scanned All Challan Packets • Continue"}
+                    ? `${bulkRows.length} of ${bulkExpectedCount} scanned`
+                    : "Reading challan total…"}
                 </Text>
-              </TouchableOpacity>
+                <Text style={styles.scanProgressText}>
+                  {bulkExpectedCount > 0
+                    ? `${Math.max(0, bulkExpectedCount - bulkRows.length)} packet${Math.max(0, bulkExpectedCount - bulkRows.length) === 1 ? "" : "s"} still required. Scan the next QR; there is no manual finish button.`
+                    : "The driver cannot proceed until the server returns the authoritative packet total."}
+                </Text>
+              </View>
             ) : (
               <View style={styles.scanLockedBox}>
-                <Text style={styles.scanLockedTitle}>Scan set locked for proof</Text>
+                <Text style={styles.scanLockedTitle}>All challan packets scanned</Text>
                 <Text style={styles.scanLockedText}>
-                  Receiver, photo and fresh GPS below will be applied to this scanned challan set.
+                  Exact packet total reached. Receiver, photo and fresh GPS below will now be applied to this complete challan scan set.
                 </Text>
               </View>
             )}
@@ -1257,17 +1209,6 @@ export default function SiteLifecycleScreen({
               </Text>
             ) : null}
 
-            {isBulkDelivery ? (
-              <TouchableOpacity
-                style={styles.resumeScanBtn}
-                onPress={resumeBulkScanning}
-                disabled={submitting}
-              >
-                <Text style={styles.resumeScanText}>
-                  + Return to scanning / add missing packet
-                </Text>
-              </TouchableOpacity>
-            ) : null}
           </View>
 
           {(unassignedDelivery || bulkUnassignedDelivery) ? (
@@ -2021,21 +1962,26 @@ const styles = {
     lineHeight: 20,
   },
 
-  finishScanBtn: {
-    minHeight: 50,
-    marginTop: 12,
-    paddingHorizontal: 12,
+  scanProgressBox: {
+    marginTop: 14,
     borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#2563eb",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,.28)",
+    backgroundColor: "rgba(37,99,235,.10)",
+    padding: 13,
   },
 
-  finishScanText: {
-    color: "#fff",
-    fontSize: 12,
+  scanProgressTitle: {
+    color: "#dbeafe",
+    fontSize: 13,
     fontWeight: "900",
-    textAlign: "center",
+  },
+
+  scanProgressText: {
+    color: "#93c5fd",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 5,
   },
 
   scanLockedBox: {
@@ -2136,23 +2082,6 @@ const styles = {
     color: "#6ee7b7",
     fontSize: 11,
     fontWeight: "800",
-  },
-
-  resumeScanBtn: {
-    marginTop: 12,
-    minHeight: 42,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(59,130,246,.08)",
-    borderWidth: 1,
-    borderColor: "rgba(59,130,246,.18)",
-  },
-
-  resumeScanText: {
-    color: "#93c5fd",
-    fontSize: 10.5,
-    fontWeight: "900",
   },
 
   addPhotoBtn: {
