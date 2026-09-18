@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Chip,
+  Collapse,
   Drawer,
   Dialog,
   DialogActions,
@@ -19,6 +20,8 @@ import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutli
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
+import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
@@ -323,7 +326,7 @@ function ProductionFileTrackingSheet({ product }) {
             </Typography>
           </Box>
           <Typography sx={{ mt: 0.15, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
-            {product.productName || "Unnamed Product"} · File {product.productionFileNo || "—"} · latest successful handoff is shown.
+            Latest successful handoff, receiving timestamp and digital sign-off.
           </Typography>
         </Box>
       </Box>
@@ -383,126 +386,126 @@ function ProductionFileTrackingSheet({ product }) {
 }
 
 function ProductMasterRow({ project, product, boms, canEdit, showEngineering, onEdit, onImage, onOpenFile, onOpenBom }) {
+  const [expanded, setExpanded] = useState(false);
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
+  const health = String(product.releaseHealth || "").toUpperCase();
+  const healthText = healthLabel(health) || "Status pending";
 
   return (
     <Box sx={productCardSx(product.releaseHealth)}>
       <Box sx={productHeaderSx}>
-        <Box sx={{ minWidth: 0 }}>
-          <Box sx={{ display: "flex", gap: 0.65, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <MatFlowProductIdentity
-              productName={product.productName}
-              projectCode={project.projectCode}
-              productionFileNo={product.productionFileNo}
-              drawingNo={product.drawingNo}
-              size="md"
-              sx={{ minWidth: 0, flex: "1 1 260px" }}
-              projectSx={{ display: "none" }}
-            />
-            {product.productType && <Chip label={product.productType} size="small" sx={softChipSx} />}
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, minWidth: 0 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: "50%", flex: "0 0 auto", background: ticketHealthColor(product.releaseHealth) }} />
+            <Typography noWrap sx={{ fontSize: 11.4, fontWeight: 950, color: "var(--mf-text)", minWidth: 0 }}>
+              {product.productName || "Unnamed Product"}
+            </Typography>
+            {product.productType && <Chip label={product.productType} size="small" sx={{ ...softChipSx, height: 19, fontSize: 8.2 }} />}
           </Box>
-          {product.drawingRevision && (
-            <Typography sx={{ mt: 0.2, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Drawing revision {product.drawingRevision}</Typography>
-          )}
+          <Typography noWrap sx={{ mt: 0.18, fontSize: 8.7, color: "var(--mf-text-muted)" }}>
+            {product.productionFileNo ? `File ${product.productionFileNo}` : "Production File pending"} · Drawing {product.drawingNo || "—"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""}
+          </Typography>
         </Box>
 
-        {canEdit && (
-          <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", justifyContent: { md: "flex-end" } }}>
-            <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(project, product)} sx={secondaryBtnSx}>
-              Edit
-            </Button>
-            <Button size="small" component="label" startIcon={<ImageOutlinedIcon />} sx={secondaryBtnSx}>
-              {product.productImageAvailable ? "Replace Image" : "Attach Image"}
-              <input hidden type="file" accept="image/*" onChange={(event) => onImage(project, product, event.target.files?.[0])} />
-            </Button>
-          </Box>
-        )}
-      </Box>
-
-      <Box sx={productInfoGridSx}>
-        <Meta label="Dimensions" value={product.dimensions || "Pending"} />
-        <Meta label="Units" value={product.unitQuantity || 1} />
-        <Meta label="Required" value={formatDate(product.requiredDate || project.requiredDate)} />
-        <Meta label="Product Remarks" value={product.remarks || "—"} />
-      </Box>
-
-      <Box sx={{ ...identityGridSx, gridTemplateColumns: showEngineering ? { xs: "1fr", lg: "1fr 1fr" } : "1fr" }}>
-        <Box sx={productionFilePanelSx(product.releaseHealth)}>
-          <Box sx={panelTopRowSx}>
-            <Box>
-              <Typography sx={panelEyebrowSx}>PRODUCTION FILE</Typography>
-              <MatFlowProductIdentity
-                productName={product.productName}
-                projectCode={project.projectCode}
-                productionFileNo={product.productionFileNo}
-                drawingNo={product.drawingNo}
-                size="md"
-                sx={{ mt: 0.25 }}
-              />
-            </Box>
-          </Box>
-          <Box sx={{ mt: 0.9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
-            <Meta label="Stage" value={readable(product.stage || "NOT_STARTED")} />
-            <Meta label="Drawing" value={product.drawingNo || "—"} />
-          </Box>
+        <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", flex: "0 0 auto" }}>
+          <Typography sx={{ fontSize: 8.5, fontWeight: 900, color: ticketHealthColor(product.releaseHealth), whiteSpace: "nowrap" }}>
+            {healthText}
+          </Typography>
+          <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={{ ...softChipSx, height: 20, fontSize: 8.4 }} />
           <Button
-            fullWidth
             size="small"
-            disabled={!product.productionFileId}
-            endIcon={<OpenInNewOutlinedIcon />}
-            onClick={() => onOpenFile(product)}
-            sx={{ ...secondaryBtnSx, mt: 0.9 }}
+            endIcon={expanded ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+            onClick={() => setExpanded((value) => !value)}
+            sx={{ ...secondaryBtnSx, minWidth: 0, px: 0.8, py: 0.35, fontSize: 9 }}
           >
-            Open Production File
+            {expanded ? "Less" : "Details"}
           </Button>
         </Box>
-
-        {showEngineering && (
-          <Box sx={bomPanelSx}>
-            <Box sx={panelTopRowSx}>
-              <Box>
-                <Typography sx={panelEyebrowSx}>ENGINEERING BOM</Typography>
-                <Typography sx={{ mt: 0.25, fontSize: 12.2, fontWeight: 950, color: "var(--mf-text)" }}>
-                  {currentBom ? currentBom.bomNumber : "No BOM yet"}
-                </Typography>
-              </Box>
-              {currentBom ? <MatFlowStatusChip status={currentBom.status} /> : null}
-            </Box>
-
-            {currentBom ? (
-              <>
-                <Box sx={{ mt: 0.9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
-                  <Meta label="Current Revision" value={`Rev ${currentBom.revisionNo}`} />
-                  <Meta label="BOM Revisions" value={boms.length} />
-                </Box>
-                <Button fullWidth size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => onOpenBom(currentBom)} sx={{ ...secondaryBtnSx, mt: 0.9 }}>
-                  Open BOM
-                </Button>
-              </>
-            ) : (
-              <Box sx={emptyBomSx}>No Engineering BOM has been created for this Production File.</Box>
-            )}
-          </Box>
-        )}
       </Box>
 
-      <ProductionFileTrackingSheet product={product} />
-
-      {showEngineering && boms.length > 0 && (
-        <Box sx={bomHistorySx}>
-          <Box sx={{ px: 1.05, py: 0.8, display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-            <Typography sx={{ fontSize: 10.5, fontWeight: 900, color: "var(--mf-text-secondary)" }}>
-              BOM revision history
-            </Typography>
-            <Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>
-              Every revision remains attached to the same Product / Production File
-            </Typography>
+      <Collapse in={expanded} unmountOnExit>
+        <Box sx={productExpandedSx}>
+          <Box sx={productInfoGridSx}>
+            <Meta label="Dimensions" value={product.dimensions || "Pending"} />
+            <Meta label="Units" value={product.unitQuantity || 1} />
+            <Meta label="Required" value={formatDate(product.requiredDate || project.requiredDate)} />
+            <Meta label="Remarks" value={product.remarks || "—"} />
           </Box>
-          {boms.map((bom) => (
-            <BomRevisionRow key={bom.id} bom={bom} onOpen={onOpenBom} />
-          ))}
+
+          {canEdit && (
+            <Box sx={productUtilityRowSx}>
+              <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(project, product)} sx={secondaryBtnSx}>Edit Product</Button>
+              <Button size="small" component="label" startIcon={<ImageOutlinedIcon />} sx={secondaryBtnSx}>
+                {product.productImageAvailable ? "Replace Image" : "Attach Image"}
+                <input hidden type="file" accept="image/*" onChange={(event) => onImage(project, product, event.target.files?.[0])} />
+              </Button>
+            </Box>
+          )}
+
+          <Box sx={{ ...identityGridSx, gridTemplateColumns: showEngineering ? { xs: "1fr", md: "1fr 1fr" } : "1fr" }}>
+            <Box sx={productionFilePanelSx(product.releaseHealth)}>
+              <Box sx={panelTopRowSx}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={panelEyebrowSx}>PRODUCTION FILE</Typography>
+                  <Typography noWrap sx={{ mt: 0.18, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
+                    {product.productionFileNo || "Not created"}
+                  </Typography>
+                  <Typography noWrap sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>
+                    {readable(product.stage || "NOT_STARTED")} · Drawing {product.drawingNo || "—"}
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: 8.3, fontWeight: 900, color: ticketHealthColor(product.releaseHealth), whiteSpace: "nowrap" }}>{healthText}</Typography>
+              </Box>
+              <Button
+                fullWidth
+                size="small"
+                disabled={!product.productionFileId}
+                endIcon={<OpenInNewOutlinedIcon />}
+                onClick={() => onOpenFile(product)}
+                sx={{ ...secondaryBtnSx, mt: 0.65 }}
+              >
+                Open Production File
+              </Button>
+            </Box>
+
+            {showEngineering && (
+              <Box sx={bomPanelSx}>
+                <Box sx={panelTopRowSx}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={panelEyebrowSx}>ENGINEERING BOM</Typography>
+                    <Typography noWrap sx={{ mt: 0.18, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
+                      {currentBom ? currentBom.bomNumber : "No BOM yet"}
+                    </Typography>
+                    <Typography noWrap sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>
+                      {currentBom ? `Rev ${currentBom.revisionNo} · ${boms.length} revision${boms.length === 1 ? "" : "s"}` : "Engineering reference not created"}
+                    </Typography>
+                  </Box>
+                  {currentBom ? <MatFlowStatusChip status={currentBom.status} /> : null}
+                </Box>
+                {currentBom ? (
+                  <Button fullWidth size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => onOpenBom(currentBom)} sx={{ ...secondaryBtnSx, mt: 0.65 }}>
+                    Open BOM
+                  </Button>
+                ) : (
+                  <Box sx={{ ...emptyBomSx, mt: 0.65 }}>No Engineering BOM yet.</Box>
+                )}
+              </Box>
+            )}
+          </Box>
+
+          <ProductionFileTrackingSheet product={product} />
+
+          {showEngineering && boms.length > 1 && (
+            <Box sx={bomHistorySx}>
+              <Box sx={{ px: 1, py: 0.65, display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap", borderBottom: "1px solid var(--mf-border)" }}>
+                <Typography sx={{ fontSize: 9.7, fontWeight: 900, color: "var(--mf-text-secondary)" }}>Earlier BOM revisions</Typography>
+                <Typography sx={{ fontSize: 8.4, color: "var(--mf-text-muted)" }}>{boms.length} total</Typography>
+              </Box>
+              {boms.map((bom) => <BomRevisionRow key={bom.id} bom={bom} onOpen={onOpenBom} />)}
+            </Box>
+          )}
         </Box>
-      )}
+      </Collapse>
     </Box>
   );
 }
@@ -852,22 +855,14 @@ export function MatFlowProjectsPage() {
       ) : (
         <Box sx={{
           display: "grid",
-          gridTemplateColumns: viewMode === "CARD"
-            ? { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" }
-            : "1fr",
-          gap: viewMode === "CARD" ? 1 : 0.75,
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit,minmax(300px,1fr))" },
+          gap: 0.8,
           alignItems: "stretch",
         }}>
           {filteredRows.map((project) => {
             const products = project.products || [];
-            const bomCount = products.reduce(
-              (total, product) => total + (bomsByFile.get(product.productionFileId) || []).length,
-              0
-            );
-            const productsWithBom = products.filter(
-              (product) => (bomsByFile.get(product.productionFileId) || []).length > 0
-            ).length;
             const productionFiles = products.filter((product) => product.productionFileId);
+            const productsWithBom = products.filter((product) => (bomsByFile.get(product.productionFileId) || []).length > 0).length;
             const healthValues = productionFiles.map((product) => String(product.releaseHealth || "").toUpperCase());
             const projectHealth = healthValues.includes("RED")
               ? "RED"
@@ -876,140 +871,85 @@ export function MatFlowProjectsPage() {
                 : healthValues.includes("GREEN") && healthValues.length
                   ? "GREEN"
                   : "PENDING";
-            const visibleFiles = productionFiles.slice(0, 2);
-            const stageCounts = productionFiles.reduce((map, product) => {
-              const key = product.stage || "NOT_STARTED";
-              map.set(key, (map.get(key) || 0) + 1);
-              return map;
-            }, new Map());
+            const visibleProducts = products.slice(0, 2);
+            const owner = project.projectManager || project.designer1 || "Unassigned";
 
             return (
               <Card key={project.id} sx={ticketCardSx(projectHealth)}>
                 <Box sx={ticketTopSx}>
                   <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography sx={ticketEyebrowSx}>
-                      PROJECT TICKET · {project.plantCode || "NO PLANT"}
-                    </Typography>
-                    <Typography sx={{ mt: 0.25, fontSize: 16.5, lineHeight: 1.08, fontWeight: 950, color: "var(--mf-text)" }}>
-                      {project.projectCode}
-                    </Typography>
-                    <Typography noWrap sx={{ mt: 0.2, fontSize: 10.3, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
+                    <Box sx={{ display: "flex", gap: 0.55, alignItems: "center", minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 8, fontWeight: 950, letterSpacing: ".07em", color: "var(--mf-primary-text)", whiteSpace: "nowrap" }}>
+                        PD {project.projectCode || "—"}
+                      </Typography>
+                      <Typography sx={{ fontSize: 8, color: "var(--mf-text-muted)" }}>·</Typography>
+                      <Typography noWrap sx={{ fontSize: 8.3, fontWeight: 800, color: "var(--mf-text-muted)" }}>{project.plantCode || "No plant"}</Typography>
+                    </Box>
+                    <Typography noWrap sx={{ mt: 0.25, fontSize: 12.8, lineHeight: 1.12, fontWeight: 950, color: "var(--mf-text)" }}>
                       {project.projectName || "Unnamed Project"}
                     </Typography>
-                    <Typography noWrap sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
+                    <Typography noWrap sx={{ mt: 0.12, fontSize: 8.8, color: "var(--mf-text-secondary)" }}>
                       {project.clientName || "Client not assigned"}
                     </Typography>
-                    {!!products.length && (
-                      <Typography noWrap sx={{ mt: 0.2, fontSize: 8.7, fontWeight: 800, color: "var(--mf-primary-text)" }}>
-                        Products: {products.slice(0, 2).map((item) => item.productName || "Unnamed Product").join(" · ")}{products.length > 2 ? ` +${products.length - 2}` : ""}
-                      </Typography>
-                    )}
                   </Box>
-
-                  <Box sx={{ display: "grid", justifyItems: "end", gap: 0.4, flex: "0 0 auto" }}>
-                    <Chip label={`${productionFiles.length} File${productionFiles.length === 1 ? "" : "s"}`} size="small" sx={softChipSx} />
-                  </Box>
-                </Box>
-
-                <Box sx={ticketPerforationSx} />
-
-                <Box sx={ticketMetaGridSx}>
-                  <TicketMeta label="Tentative Completion" value={project.requiredDate ? formatDate(project.requiredDate) : "Not set"} />
-                  <TicketMeta label="Priority" value={readable(project.priority || "NORMAL")} />
-                  {juniorDesignerOnly ? <TicketMeta label="Assigned Products" value={products.length} /> : <TicketMeta label="Manager" value={project.projectManager || "—"} />}
-                  {juniorDesignerOnly ? <TicketMeta label="Client" value={project.clientName || "—"} /> : <TicketMeta label="Designer" value={project.designer1 || "—"} />}
-                </Box>
-
-                <Box sx={{ px: 1.05, pb: 0.8, display: "flex", flexDirection: "column", flex: 1 }}>
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 0.7, mb: 0.55 }}>
-                    <Box>
-                      <Typography sx={{ fontSize: 9.3, fontWeight: 950, color: "var(--mf-text)" }}>PRODUCTS / PRODUCTION FILES</Typography>
-                      <Typography sx={{ mt: 0.08, fontSize: 8.2, color: "var(--mf-text-muted)" }}>
-                        One Product / Drawing = one controlled Production File
-                      </Typography>
-                    </Box>
-                    <Typography sx={{ fontSize: 8.5, fontWeight: 850, color: "var(--mf-text-muted)", whiteSpace: "nowrap" }}>
-                      {canSeeEngineeringReference
-                        ? `${productsWithBom}/${products.length || 0} with BOM · ${bomCount} revisions`
-                        : `${productionFiles.length} controlled file${productionFiles.length === 1 ? "" : "s"}`}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.45, flex: "0 0 auto" }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", background: ticketHealthColor(projectHealth) }} />
+                    <Typography sx={{ fontSize: 8.3, fontWeight: 900, color: ticketHealthColor(projectHealth), whiteSpace: "nowrap" }}>
+                      {healthLabel(projectHealth) || "Pending"}
                     </Typography>
                   </Box>
+                </Box>
 
-                  {!visibleFiles.length ? (
-                    <Box sx={ticketEmptyFileSx}>No Production File yet. Add a Product / Drawing to create one automatically.</Box>
+                <Box sx={ticketMetaGridSx}>
+                  <TicketMeta label="Products" value={products.length} />
+                  <TicketMeta label="Files" value={productionFiles.length} />
+                  <TicketMeta label="Tentative" value={project.requiredDate ? formatDate(project.requiredDate) : "Not set"} />
+                  <TicketMeta label="Owner" value={owner} />
+                </Box>
+
+                <Box sx={{ px: 0.85, pb: 0.7, display: "grid", gap: 0.38, flex: 1 }}>
+                  {!visibleProducts.length ? (
+                    <Box sx={ticketEmptyFileSx}>No Product / Production File yet.</Box>
                   ) : (
-                    <Box sx={{ display: "grid", gap: 0.45 }}>
-                      {visibleFiles.map((product) => (
-                        <Box
-                          key={product.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openProductionFile(product)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") openProductionFile(product);
-                          }}
-                          sx={ticketFileRowSx(product.releaseHealth)}
-                        >
-                          <MatFlowProductIdentity
-                            productName={product.productName}
-                            projectCode={project.projectCode}
-                            productionFileNo={product.productionFileNo}
-                            drawingNo={product.drawingNo}
-                            size="sm"
-                            sx={{ minWidth: 0 }}
-                          />
-                          <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                            {juniorDesignerOnly ? (
-                              <Typography sx={{ color: "var(--mf-primary-text)", fontSize: 8.6, fontWeight: 900 }}>Assigned to you</Typography>
-                            ) : (
-                              <>
-                                <Typography sx={{ color: ticketHealthColor(product.releaseHealth), fontSize: 8.4, fontWeight: 900 }}>
-                                  {healthLabel(product.releaseHealth)}
-                                </Typography>
-                                <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={softChipSx} />
-                              </>
-                            )}
-                          </Box>
+                    visibleProducts.map((product) => (
+                      <Box
+                        key={product.id}
+                        role={product.productionFileId ? "button" : undefined}
+                        tabIndex={product.productionFileId ? 0 : undefined}
+                        onClick={() => product.productionFileId && openProductionFile(product)}
+                        onKeyDown={(event) => {
+                          if (product.productionFileId && (event.key === "Enter" || event.key === " ")) openProductionFile(product);
+                        }}
+                        sx={ticketFileRowSx(product.releaseHealth)}
+                      >
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography noWrap sx={{ fontSize: 9.6, fontWeight: 900, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
+                          <Typography noWrap sx={{ mt: 0.05, fontSize: 7.9, color: "var(--mf-text-muted)" }}>
+                            {product.productionFileNo ? `File ${product.productionFileNo}` : "File pending"} · DWG {product.drawingNo || "—"}
+                          </Typography>
                         </Box>
-                      ))}
-                      {productionFiles.length > visibleFiles.length && (
-                        <Typography sx={{ px: 0.2, fontSize: 8.4, fontWeight: 850, color: "var(--mf-primary-text)" }}>
-                          + {productionFiles.length - visibleFiles.length} more Production File{productionFiles.length - visibleFiles.length === 1 ? "" : "s"} inside this Project ticket
-                        </Typography>
-                      )}
-                    </Box>
+                        <Box sx={{ display: "flex", gap: 0.35, alignItems: "center", justifyContent: "flex-end", flex: "0 0 auto" }}>
+                          <Box sx={{ width: 7, height: 7, borderRadius: "50%", background: ticketHealthColor(product.releaseHealth) }} />
+                          <Chip label={readable(product.stage || "NOT_STARTED")} size="small" sx={{ ...softChipSx, height: 19, fontSize: 8 }} />
+                        </Box>
+                      </Box>
+                    ))
                   )}
-
-                  <Box sx={{ mt: "auto", pt: 0.65, minHeight: 24, display: "flex", flexWrap: "wrap", gap: 0.35, alignItems: "flex-end" }}>
-                    {juniorDesignerOnly
-                      ? <Typography sx={{ fontSize: 8.6, color: "var(--mf-text-muted)" }}>Only your assigned Product / PD records are shown.</Typography>
-                      : Array.from(stageCounts.entries()).slice(0, 2).map(([stageName, count]) => (
-                          <Chip key={stageName} label={`${readable(stageName)} · ${count}`} size="small" sx={softChipSx} />
-                        ))}
-                  </Box>
+                  {products.length > visibleProducts.length && (
+                    <Typography sx={{ px: 0.15, pt: 0.05, fontSize: 8, fontWeight: 850, color: "var(--mf-primary-text)" }}>
+                      + {products.length - visibleProducts.length} more product{products.length - visibleProducts.length === 1 ? "" : "s"}
+                    </Typography>
+                  )}
                 </Box>
 
                 <Box sx={ticketActionsSx}>
-                  {canProjectWrite && (
-                    <>
-                      <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(project)} sx={secondaryBtnSx}>
-                        Edit
-                      </Button>
-                      <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={primaryBtnSx}>
-                        Add
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    size="small"
-                    endIcon={<OpenInNewOutlinedIcon />}
-                    onClick={() => openProjectDetails(project)}
-                    sx={{ ...secondaryBtnSx, ml: { sm: "auto" } }}
-                  >
-                    View details
-                  </Button>
+                  <Typography sx={{ mr: "auto", fontSize: 8, color: "var(--mf-text-muted)", whiteSpace: "nowrap" }}>
+                    {canSeeEngineeringReference ? `${productsWithBom}/${products.length || 0} with BOM` : `${readable(project.priority || "NORMAL")} priority`}
+                  </Typography>
+                  {canProjectWrite && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(project)} sx={{ ...secondaryBtnSx, px: 0.75 }}>Edit</Button>}
+                  {canProjectWrite && <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={{ ...primaryBtnSx, px: 0.75 }}>Add</Button>}
+                  <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => openProjectDetails(project)} sx={{ ...secondaryBtnSx, px: 0.8 }}>Details</Button>
                 </Box>
-
               </Card>
             );
           })}
@@ -1020,7 +960,18 @@ export function MatFlowProjectsPage() {
         anchor="right"
         open={Boolean(selectedProject)}
         onClose={closeProjectDetails}
-        PaperProps={{ sx: sidePanelPaperSx }}
+        PaperProps={{
+          sx: {
+            ...sidePanelPaperSx,
+            width: {
+              xs: "100vw",
+              sm: "min(94vw, 700px)",
+              md: "min(78vw, 790px)",
+              lg: "min(62vw, 860px)",
+              xl: "min(54vw, 900px)",
+            },
+          },
+        }}
       >
         {selectedProject && (
           <>
@@ -1044,9 +995,8 @@ export function MatFlowProjectsPage() {
             </Box>
 
             <Box className="mf-side-panel-scroll" sx={sidePanelBodySx}>
-              <Card sx={{ ...panelSx, p: 1.15, boxShadow: "none" }}>
-                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 0.75 }}>
-                  <Meta label="Plant" value={selectedProject.plantCode} />
+              <Card sx={{ ...panelSx, p: 0.8, boxShadow: "none" }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(118px,1fr))", gap: 0.5 }}>
                   <Meta label="Priority" value={selectedProject.priority || "NORMAL"} />
                   <Meta label="Tentative Completion" value={selectedProject.requiredDate ? formatDate(selectedProject.requiredDate) : "Not set"} />
                   {juniorDesignerOnly ? <Meta label="Client" value={selectedProject.clientName || "—"} /> : <Meta label="Project Manager" value={selectedProject.projectManager || "—"} />}
@@ -1061,22 +1011,24 @@ export function MatFlowProjectsPage() {
               <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
                 <Box sx={{ px: 1.15, py: 0.9, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Box>
-                    <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>Products / Production Files</Typography>
-                    <Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>Each Product / Drawing keeps its controlled Production File and reference history.</Typography>
+                    <Typography sx={{ fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>Products</Typography>
+                    <Typography sx={{ mt: 0.06, fontSize: 8.5, color: "var(--mf-text-muted)" }}>Open only the Product you need; file, BOM and workflow history stay inside it.</Typography>
                   </Box>
                   <Typography sx={{ fontSize: 9, fontWeight: 850, color: "var(--mf-text-muted)" }}>{(selectedProject.products || []).length} product{(selectedProject.products || []).length === 1 ? "" : "s"}</Typography>
                 </Box>
-                <Box sx={{ p: 1.05 }}>
+                <Box sx={{ p: 0.75 }}>
                   {!(selectedProject.products || []).length ? (
                     <EmptyState>No products added.</EmptyState>
                   ) : (
-                    <Box sx={{ display: "grid", gap: 0.9 }}>
+                    <Box sx={{ display: "grid", gap: 0.55 }}>
                       {(selectedProject.products || []).map((product) => juniorDesignerOnly ? (
-                        <Box key={product.id} sx={{ p: 1, border: "1px solid var(--mf-border)", borderRadius: 1.2, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 0.8, alignItems: "center", background: "var(--mf-panel-solid)" }}>
-                          <MatFlowProductIdentity productName={product.productName} projectCode={selectedProject.projectCode} productionFileNo={product.productionFileNo} drawingNo={product.drawingNo} size="sm" />
-                          <Box><Typography sx={{ fontSize: 8.7, color: "var(--mf-text-muted)" }}>Dimensions</Typography><Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{product.dimensions || "—"}</Typography></Box>
-                          <Box><Typography sx={{ fontSize: 8.7, color: "var(--mf-text-muted)" }}>Required</Typography><Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{formatDate(product.requiredDate)}</Typography></Box>
-                          <Button size="small" onClick={() => openProductionFile(product)} sx={primaryBtnSx}>Open my task</Button>
+                        <Box key={product.id} sx={{ p: 0.75, border: "1px solid var(--mf-border)", borderLeft: `3px solid ${ticketHealthColor(product.releaseHealth)}`, borderRadius: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto auto" }, gap: 0.65, alignItems: "center", background: ticketHealthSoft(product.releaseHealth) }}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography noWrap sx={{ fontSize: 10.3, fontWeight: 950, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
+                            <Typography noWrap sx={{ mt: 0.06, fontSize: 8.3, color: "var(--mf-text-muted)" }}>{product.productionFileNo ? `File ${product.productionFileNo}` : "File pending"} · DWG {product.drawingNo || "—"}</Typography>
+                          </Box>
+                          <Typography sx={{ fontSize: 8.8, color: "var(--mf-text-secondary)" }}>{product.dimensions || "Dimensions pending"} · Due {formatDate(product.requiredDate || selectedProject.requiredDate)}</Typography>
+                          <Button size="small" onClick={() => openProductionFile(product)} sx={primaryBtnSx}>Open task</Button>
                         </Box>
                       ) : (
                         <ProductMasterRow
@@ -1222,12 +1174,8 @@ function Summary({ label, value }) {
 function TicketMeta({ label, value }) {
   return (
     <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ fontSize: 7.2, fontWeight: 950, letterSpacing: ".055em", color: "var(--mf-text-muted)" }}>
-        {label.toUpperCase()}
-      </Typography>
-      <Typography noWrap sx={{ mt: 0.1, fontSize: 9.1, fontWeight: 850, color: "var(--mf-text-secondary)" }}>
-        {value || "—"}
-      </Typography>
+      <Typography sx={{ fontSize: 6.9, fontWeight: 950, letterSpacing: ".055em", color: "var(--mf-text-muted)" }}>{label.toUpperCase()}</Typography>
+      <Typography noWrap sx={{ mt: 0.06, fontSize: 8.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{value || "—"}</Typography>
     </Box>
   );
 }
@@ -1255,110 +1203,86 @@ const ticketCardSx = (health) => ({
   position: "relative",
   p: 0,
   overflow: "hidden",
-  height: "100%",
   minHeight: 0,
   display: "flex",
   flexDirection: "column",
-  borderRadius: 1.35,
-  borderTop: `2px solid ${ticketHealthColor(health)}`,
+  borderRadius: 1.2,
   borderLeft: `3px solid ${ticketHealthColor(health)}`,
-  boxShadow: `inset 20px 0 30px -32px ${ticketHealthColor(health)}, var(--mf-card-shadow)`,
-  "&::before": {
-    content: '""',
-    position: "absolute",
-    top: 72,
-    left: -6,
-    width: 12,
-    height: 12,
-    borderRadius: "50%",
-    background: "var(--mf-page-bg)",
-    border: "1px solid var(--mf-border)",
-    zIndex: 2,
-  },
-  "&::after": {
-    content: '""',
-    position: "absolute",
-    top: 72,
-    right: -6,
-    width: 12,
-    height: 12,
-    borderRadius: "50%",
-    background: "var(--mf-page-bg)",
-    border: "1px solid var(--mf-border)",
-    zIndex: 2,
-  },
+  boxShadow: `inset 14px 0 24px -30px ${ticketHealthColor(health)}`,
+  transition: "border-color .15s ease, box-shadow .15s ease, transform .15s ease",
+  "&:hover": { borderColor: "var(--mf-card-border-hover)", transform: "translateY(-1px)" },
 });
 
 const ticketTopSx = {
-  px: 1.1,
-  py: 0.9,
-  minHeight: 72,
+  px: 0.9,
+  pt: 0.75,
+  pb: 0.55,
+  minHeight: 56,
   display: "flex",
   justifyContent: "space-between",
-  gap: 0.75,
+  gap: 0.7,
   alignItems: "flex-start",
   background: "var(--mf-panel-solid)",
 };
 
 const ticketEyebrowSx = {
-  fontSize: 7.5,
+  fontSize: 7.2,
   fontWeight: 950,
-  letterSpacing: ".08em",
+  letterSpacing: ".07em",
   color: "var(--mf-primary-text)",
 };
 
-const ticketPerforationSx = {
-  mx: 0.95,
-  borderTop: "1px dashed var(--mf-border-strong)",
-};
+const ticketPerforationSx = { display: "none" };
 
 const ticketMetaGridSx = {
-  px: 1.05,
-  py: 0.7,
-  minHeight: 70,
+  mx: 0.85,
+  mb: 0.55,
+  px: 0.7,
+  py: 0.5,
   display: "grid",
-  gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+  gridTemplateColumns: "repeat(4,minmax(0,1fr))",
   gap: 0.55,
-  columnGap: 0.8,
-  alignContent: "center",
+  borderRadius: 1,
+  border: "1px solid var(--mf-border)",
+  background: "var(--mf-surface)",
 };
 
 const ticketFileRowSx = (health) => ({
-  px: 0.7,
-  py: 0.55,
+  px: 0.62,
+  py: 0.48,
   display: "grid",
-  gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto" },
+  gridTemplateColumns: "minmax(0,1fr) auto",
   gap: 0.55,
-  minHeight: 45,
+  minHeight: 38,
   alignItems: "center",
   border: "1px solid var(--mf-border)",
   borderLeft: `3px solid ${ticketHealthColor(health)}`,
-  borderRadius: 1,
+  borderRadius: 0.9,
   background: ticketHealthSoft(health),
   cursor: "pointer",
-  transition: "border-color .15s ease, background .15s ease, transform .15s ease",
-  "&:hover": { borderColor: ticketHealthColor(health), transform: "translateY(-1px)" },
+  transition: "border-color .15s ease, background .15s ease",
+  "&:hover": { borderColor: ticketHealthColor(health) },
   "&:focus-visible": { outline: "2px solid var(--mf-primary)", outlineOffset: 1 },
 });
 
 const ticketEmptyFileSx = {
-  p: 0.75,
-  minHeight: 45,
+  p: 0.65,
+  minHeight: 38,
   border: "1px dashed var(--mf-border-strong)",
-  borderRadius: 1.2,
-  fontSize: 8.8,
+  borderRadius: 0.9,
+  fontSize: 8.4,
   color: "var(--mf-text-muted)",
   background: "var(--mf-surface)",
 };
 
 const ticketActionsSx = {
-  px: 1.05,
-  py: 0.65,
+  px: 0.85,
+  py: 0.5,
   mt: "auto",
-  minHeight: 45,
+  minHeight: 40,
   display: "flex",
   flexWrap: "wrap",
-  gap: 0.45,
+  gap: 0.4,
   alignItems: "center",
   borderTop: "1px solid var(--mf-border)",
   background: "var(--mf-panel-solid)",
@@ -1391,23 +1315,23 @@ const projectMetaGridSx = {
 
 const metaSx = {
   minWidth: 0,
-  p: 0.8,
-  borderRadius: 1.2,
+  p: 0.58,
+  borderRadius: 0.95,
   background: "var(--mf-surface)",
   border: "1px solid var(--mf-border)",
 };
 
 const metaLabelSx = {
-  fontSize: 8.2,
+  fontSize: 7.3,
   fontWeight: 900,
-  letterSpacing: ".05em",
+  letterSpacing: ".045em",
   textTransform: "uppercase",
   color: "var(--mf-text-muted)",
 };
 
 const metaValueSx = {
-  mt: 0.2,
-  fontSize: 10.5,
+  mt: 0.12,
+  fontSize: 9.4,
   fontWeight: 850,
   color: "var(--mf-text)",
   overflow: "hidden",
@@ -1417,42 +1341,54 @@ const metaValueSx = {
 const productCardSx = (health) => ({
   border: "1px solid var(--mf-border)",
   borderLeft: `3px solid ${ticketHealthColor(health)}`,
-  borderRadius: 1.5,
+  borderRadius: 1.15,
   background: "var(--mf-panel-solid)",
   overflow: "hidden",
-  boxShadow: `inset 18px 0 28px -32px ${ticketHealthColor(health)}`,
+  boxShadow: `inset 14px 0 24px -30px ${ticketHealthColor(health)}`,
 });
 
 const productHeaderSx = {
-  px: 1.15,
-  py: 1,
+  px: 0.85,
+  py: 0.65,
+  minHeight: 48,
   display: "flex",
   justifyContent: "space-between",
-  gap: 1,
-  alignItems: { xs: "flex-start", md: "center" },
-  flexDirection: { xs: "column", md: "row" },
-  borderBottom: "1px solid var(--mf-border)",
+  gap: 0.65,
+  alignItems: { xs: "flex-start", sm: "center" },
+  flexDirection: { xs: "column", sm: "row" },
 };
 
 const productInfoGridSx = {
-  px: 1.15,
-  py: 0.9,
   display: "grid",
-  gridTemplateColumns: { xs: "1fr 1fr", lg: "repeat(4,1fr)" },
-  gap: 0.7,
+  gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" },
+  gap: 0.5,
 };
 
 const identityGridSx = {
-  px: 1.15,
-  pb: 1.05,
   display: "grid",
-  gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
-  gap: 0.8,
+  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+  gap: 0.55,
+};
+
+const productExpandedSx = {
+  px: 0.75,
+  pb: 0.75,
+  pt: 0.2,
+  display: "grid",
+  gap: 0.6,
+  borderTop: "1px solid var(--mf-border)",
+};
+
+const productUtilityRowSx = {
+  display: "flex",
+  gap: 0.45,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
 };
 
 const productionFilePanelSx = (health) => ({
-  p: 1,
-  borderRadius: 1.4,
+  p: 0.72,
+  borderRadius: 1,
   border: "1px solid",
   borderColor: ticketHealthColor(health),
   borderLeftWidth: 3,
@@ -1460,8 +1396,8 @@ const productionFilePanelSx = (health) => ({
 });
 
 const bomPanelSx = {
-  p: 1,
-  borderRadius: 1.4,
+  p: 0.72,
+  borderRadius: 1,
   border: "1px solid var(--mf-border)",
   background: "var(--mf-surface)",
 };
@@ -1474,9 +1410,9 @@ const panelTopRowSx = {
 };
 
 const panelEyebrowSx = {
-  fontSize: 8.2,
+  fontSize: 7.4,
   fontWeight: 950,
-  letterSpacing: ".07em",
+  letterSpacing: ".06em",
   color: "var(--mf-text-muted)",
 };
 
@@ -1491,8 +1427,8 @@ const emptyBomSx = {
 };
 
 const bomHistorySx = {
-  mx: 1.15,
-  mb: 1.05,
+  mx: 0,
+  mb: 0,
   border: "1px solid var(--mf-border)",
   borderRadius: 1.3,
   overflow: "hidden",
@@ -1500,8 +1436,8 @@ const bomHistorySx = {
 };
 
 const trackingSheetSx = {
-  mx: 1.15,
-  mb: 1.05,
+  mx: 0,
+  mb: 0,
   border: "1px solid var(--mf-border)",
   borderRadius: 1.3,
   overflow: "hidden",
@@ -1509,8 +1445,8 @@ const trackingSheetSx = {
 };
 
 const trackingHeaderSx = {
-  px: 1,
-  py: 0.8,
+  px: 0.8,
+  py: 0.6,
   borderBottom: "1px solid var(--mf-border)",
   background: "var(--mf-panel-solid)",
 };
@@ -1545,9 +1481,9 @@ const trackingRowSx = (state) => {
     gridTemplateColumns: { xs: "1fr", md: "minmax(180px,1.15fr) minmax(180px,.9fr) minmax(140px,.75fr)" },
     gap: { xs: 0.25, md: 0.8 },
     alignItems: "center",
-    px: 1,
-    py: 0.72,
-    pl: 1.2,
+    px: 0.8,
+    py: 0.58,
+    pl: 1,
     borderBottom: "1px solid var(--mf-border)",
     "&::before": {
       content: '""',
@@ -1562,8 +1498,8 @@ const trackingRowSx = (state) => {
 };
 
 const trackingFootnoteSx = {
-  px: 1,
-  py: 0.75,
+  px: 0.8,
+  py: 0.55,
   fontSize: 8.6,
   lineHeight: 1.45,
   color: "var(--mf-text-muted)",
@@ -1571,7 +1507,7 @@ const trackingFootnoteSx = {
 };
 
 const softChipSx = {
-  height: 22,
+  height: 20,
   borderRadius: 1.1,
   fontSize: 9,
   fontWeight: 850,
