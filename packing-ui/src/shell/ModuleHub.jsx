@@ -583,11 +583,21 @@ function ModuleHubContent() {
 				"Inventory",
 				"Excel Import",
 			],
-			// Transitional visibility: existing MatFlow users keep access today.
-			// Later PackFlow-only users can be assigned MATERIALS independently.
-			visible:
-				canAccess(MODULE_KEYS.MATERIALS) ||
-				canAccess(MODULE_KEYS.MATFLOW),
+			/*
+			 * Material Inventory is a Store/Admin control surface.
+			 *
+			 * Do not inherit this card from MATFLOW or MATERIALS module membership:
+			 * Design, Engineering, PPC, Director and other MatFlow users must not
+			 * see it in Module Hub merely because they can access MatFlow.
+			 *
+			 * MATFLOW_STORE is the current Store authority. STORE is retained only
+			 * as a compatibility alias for older identities.
+			 */
+			visible: hasAnyRole(
+				"ADMIN",
+				"MATFLOW_STORE",
+				"STORE"
+			),
 			accent: "Global Material Control",
 		},
 		{
