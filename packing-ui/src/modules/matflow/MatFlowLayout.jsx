@@ -96,9 +96,14 @@ const sectionLabel = (section) => ({
     CONTROL: "Control & Reports",
 }[section] || section);
 
+const isManagementRole = (role) => [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR].includes(role);
+
 const sectionFor = (item, role) => {
     if (item.screen === "dashboard") return "HOME";
     if (item.screen === "work") return "PRIMARY";
+    // For department users the Reports route is their Team surface, so keep it
+    // beside day-to-day work. Management retains it under Control & Reports.
+    if (item.screen === "reports" && !isManagementRole(role)) return "PRIMARY";
     if (PRIMARY_SCREENS[role]?.has(item.screen)) return "PRIMARY";
     if (CONTROL_SCREENS.has(item.screen)) return "CONTROL";
     if (REFERENCE_SCREENS.has(item.screen)) return "REFERENCE";
@@ -217,6 +222,18 @@ export default function MatFlowLayout() {
     };
 
     const juniorDesignerOnly = role === MATFLOW_ROLES.DESIGNER_JUNIOR;
+    const managementReports = isManagementRole(role);
+    const teamLabel = juniorDesignerOnly
+        ? "My Tasks"
+        : [MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER].includes(role)
+            ? "Design Team"
+            : [MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.ENGINEERING_JUNIOR].includes(role)
+                ? "Engineering Team"
+                : role === MATFLOW_ROLES.PPC
+                    ? "PPC Team"
+                    : role === MATFLOW_ROLES.PRODUCTION
+                        ? "Production Team"
+                        : "Team";
     const workLabel = (
         juniorDesignerOnly
             ? "My Design Work"
@@ -229,15 +246,15 @@ export default function MatFlowLayout() {
     const displayNavLabel = (item) => {
         if (item.screen === "work") return workLabel;
         if (juniorDesignerOnly && item.screen === "projects") return "My Assigned Products";
-        if (juniorDesignerOnly && item.screen === "reports") return "My Reports";
+        if (item.screen === "reports") return managementReports ? "Reports" : teamLabel;
         return item.label;
     };
     const effectiveHeader = location.pathname.startsWith("/matflow/work")
         ? ["", workLabel, juniorDesignerOnly ? "Only your assigned task and related Product / PD information." : "Department work on the shared Product / PD Production File."]
         : juniorDesignerOnly && location.pathname.startsWith("/matflow/projects")
             ? ["", "My Assigned Products", "Only PDs and Products linked to your assigned Design tasks."]
-            : juniorDesignerOnly && location.pathname.startsWith("/matflow/reports")
-                ? ["", "My Reports", "Your Design-task report only."]
+            : location.pathname.startsWith("/matflow/reports") && !managementReports
+                ? ["", teamLabel, juniorDesignerOnly ? "Your assigned Design tasks and related Product / PD context." : "Department team workload, task ownership and handoff visibility."]
                 : header;
 
     const renderNavItem = (item) => {
@@ -564,9 +581,11 @@ const headerSx = {
     borderBottom: "1px solid var(--mf-border)",
 };
 const contentSx = {
+    width: "100%",
+    minWidth: 0,
     p: { xs: 1.05, md: 1.45 },
-    maxWidth: 1640,
-    mx: "auto",
+    maxWidth: "none",
+    mx: 0,
 };
 const linkStyle = (active, collapsed) => ({
     display: "flex",

@@ -134,6 +134,15 @@ function reportColumns(type) {
   ];
 }
 
+const reportWorkPath = (type, row) => {
+  const fileId = row?.productionFileId;
+  if (!fileId) return "/matflow/work";
+  if (type === REPORTS.QUERIES && row?.queryId) return `/matflow/work?fileId=${fileId}&tab=queries&queryId=${row.queryId}`;
+  if (type === REPORTS.DESIGN) return `/matflow/work?fileId=${fileId}&tab=designTasks`;
+  if (type === REPORTS.ENGINEERING) return `/matflow/work?fileId=${fileId}&tab=engineeringTasks`;
+  return `/matflow/work?fileId=${fileId}`;
+};
+
 function reportTitle(type) {
   return {
     [REPORTS.DESIGN]: "Design Department · Task Assignment Report",
@@ -214,6 +223,18 @@ const reportRowAccent = (row) => {
   return "transparent";
 };
 
+const teamDepartmentLabel = (primary) => ({
+  DESIGN: "Design",
+  ENGINEERING: "Engineering",
+  PPC: "PPC",
+  PRODUCTION: "Production",
+}[primary] || "Department");
+
+const teamMemberNames = (value) => String(value || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean);
+
 const pageCellValue = (row, key, type) => {
   if (key === "task") return (
     <Box>
@@ -236,6 +257,8 @@ export function MatFlowReportsPage() {
   const navigate = useNavigate();
   const access = useMemo(() => getMatFlowDepartmentAccess(roles), [roles]);
   const primary = useMemo(() => primaryMatFlowDepartment(roles), [roles]);
+  const teamMode = !access.management;
+  const departmentLabel = teamDepartmentLabel(primary);
   const juniorDesignerOnly = useMemo(() => roles.includes(MATFLOW_ROLES.DESIGNER_JUNIOR)
     && !roles.some((role) => [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER].includes(role)), [roles]);
   // PPC receives read-only Issue Chat visibility because unresolved cross-department
@@ -432,6 +455,29 @@ export function MatFlowReportsPage() {
     return { total, active, completed, overdue };
   }, [filtered]);
 
+  const teamMembers = useMemo(() => {
+    if (!teamMode || juniorDesignerOnly) return [];
+    const now = new Date();
+    const members = new Map();
+    filtered.forEach((row) => {
+      const names = teamMemberNames(row.assignee);
+      names.forEach((name) => {
+        if (!members.has(name)) members.set(name, { name, total: 0, active: 0, completed: 0, overdue: 0 });
+        const member = members.get(name);
+        const completed = CLOSED.has(row.status);
+        member.total += 1;
+        if (completed) member.completed += 1;
+        else member.active += 1;
+        if (!completed && row.dueAt && safeDate(row.dueAt) < now) member.overdue += 1;
+      });
+    });
+    return Array.from(members.values()).sort((left, right) => {
+      if (right.overdue !== left.overdue) return right.overdue - left.overdue;
+      if (right.active !== left.active) return right.active - left.active;
+      return left.name.localeCompare(right.name);
+    });
+  }, [filtered, teamMode, juniorDesignerOnly]);
+
   const exportReport = async () => {
     await downloadMatFlowExcel({
       fileName: `${reportTitle(reportType)}_${selectedPlantParam || "ALL"}_${new Date().toISOString().slice(0, 10)}`,
@@ -462,9 +508,13 @@ export function MatFlowReportsPage() {
   return (
     <Box sx={{ ...pageSx, display: "grid", gap: 1 }}>
       <PageHero
-        badge="DEPARTMENT REPORTS"
-        title={juniorDesignerOnly ? "My Reports" : "Reports"}
-        subtitle={juniorDesignerOnly ? "Only your assigned Design tasks and their related Product / PD information." : "Department task and handoff reports with Product Name + PD No. as the common reference."}
+        badge={teamMode ? "DEPARTMENT TEAM" : "DEPARTMENT REPORTS"}
+        title={juniorDesignerOnly ? "My Tasks" : teamMode ? `${departmentLabel} Team` : "Reports"}
+        subtitle={juniorDesignerOnly
+          ? "Your assigned Design tasks with Product Name + PD No. context."
+          : teamMode
+            ? "Team workload, task ownership, due dates and handoffs in one operational view."
+            : "Department task and handoff reports with Product Name + PD No. as the common reference."}
         actions={(
           <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
@@ -479,7 +529,7 @@ export function MatFlowReportsPage() {
       <Card sx={{ ...panelSx, p: 1.15 }}>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(auto-fit,minmax(150px,1fr))" }, gap: 0.75 }}>
           {availableReports.length > 1 ? (
-            <TextField select size="small" label="Report" value={reportType} onChange={(event) => { setReportType(event.target.value); setAssignee(""); setClient(""); setProject(""); setStatus(""); }} sx={fieldSx}>
+            <TextField select size="small" label={teamMode ? "Team View" : "Report"} value={reportType} onChange={(event) => { setReportType(event.target.value); setAssignee(""); setClient(""); setProject(""); setStatus(""); }} sx={fieldSx}>
               {availableReports.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}
             </TextField>
           ) : <Box sx={{ px: 1, py: 1, border: "1px solid var(--mf-border)", borderRadius: 1.2, color: "var(--mf-text-secondary)", fontSize: 10.5, fontWeight: 850 }}>{reportLabel}</Box>}
@@ -508,7 +558,7 @@ export function MatFlowReportsPage() {
       <Card sx={{ ...panelSx, p: 0, boxShadow: "none" }}>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" } }}>
           {[
-            ["Rows", stats.total],
+            [teamMode ? "Assignments" : "Rows", stats.total],
             ["Active", stats.active],
             ["Completed", stats.completed],
             ["Overdue", stats.overdue],
@@ -520,6 +570,47 @@ export function MatFlowReportsPage() {
           ))}
         </Box>
       </Card>
+
+      {teamMode && !juniorDesignerOnly && teamMembers.length > 0 && (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
+          <Box sx={{ px: 1.2, py: 0.9, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <Box>
+              <Typography sx={{ fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>Team workload</Typography>
+              <Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>Select a team member to filter the assignments below.</Typography>
+            </Box>
+            {assignee && <Button size="small" onClick={() => setAssignee("")} sx={secondaryBtnSx}>Show whole team</Button>}
+          </Box>
+          <Box sx={{ p: 0.8, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 0.65 }}>
+            {teamMembers.map((member) => (
+              <Box
+                key={member.name}
+                component="button"
+                type="button"
+                onClick={() => setAssignee(member.name)}
+                sx={{
+                  p: 0.9,
+                  minWidth: 0,
+                  textAlign: "left",
+                  font: "inherit",
+                  color: "inherit",
+                  cursor: "pointer",
+                  borderRadius: 1.2,
+                  border: assignee === member.name ? "1px solid var(--mf-primary)" : "1px solid var(--mf-border)",
+                  background: assignee === member.name ? "var(--mf-primary-soft)" : "var(--mf-panel-solid)",
+                  "&:hover": { background: "var(--mf-table-hover)", borderColor: "var(--mf-border-strong)" },
+                }}
+              >
+                <Typography noWrap sx={{ fontSize: 10.3, fontWeight: 950, color: "var(--mf-text)" }}>{member.name}</Typography>
+                <Box sx={{ mt: 0.45, display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+                  <Typography sx={{ fontSize: 8.8, fontWeight: 850, color: "var(--mf-primary-text)" }}>{member.active} active</Typography>
+                  <Typography sx={{ fontSize: 8.8, fontWeight: 850, color: "var(--mf-success-text)" }}>{member.completed} done</Typography>
+                  <Typography sx={{ fontSize: 8.8, fontWeight: 900, color: member.overdue ? "var(--mf-danger-text)" : "var(--mf-text-muted)" }}>{member.overdue} overdue</Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Card>
+      )}
 
       {!filtered.length ? (
         <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
@@ -546,9 +637,7 @@ export function MatFlowReportsPage() {
                 <Button
                   size="small"
                   endIcon={<OpenInNewOutlinedIcon />}
-                  onClick={() => navigate(reportType === REPORTS.QUERIES && row.queryId
-                    ? `/matflow/work?fileId=${row.productionFileId}&tab=queries&queryId=${row.queryId}`
-                    : `/matflow/work?fileId=${row.productionFileId}`)}
+                  onClick={() => navigate(reportWorkPath(reportType, row))}
                   sx={secondaryBtnSx}
                 >
                   {reportType === REPORTS.QUERIES ? "Open chat" : "Open"}
@@ -604,9 +693,7 @@ export function MatFlowReportsPage() {
                       key={column.key}
                       size="small"
                       endIcon={<OpenInNewOutlinedIcon />}
-                      onClick={() => navigate(reportType === REPORTS.QUERIES && row.queryId
-                        ? `/matflow/work?fileId=${row.productionFileId}&tab=queries&queryId=${row.queryId}`
-                        : `/matflow/work?fileId=${row.productionFileId}`)}
+                      onClick={() => navigate(reportWorkPath(reportType, row))}
                       sx={secondaryBtnSx}
                     >
                       {reportType === REPORTS.QUERIES ? "Open chat" : "Open"}

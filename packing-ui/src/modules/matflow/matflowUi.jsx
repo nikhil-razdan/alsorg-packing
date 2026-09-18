@@ -2137,6 +2137,7 @@ export const scrollAreaSx = {
 
 export const pageSx = {
   width: "100%",
+  minWidth: 0,
   display: "flex",
   flexDirection: "column",
   gap: "11px",
@@ -2175,6 +2176,7 @@ export const heroSubSx = {
 };
 export const panelSx = {
   p: 1.4,
+  minWidth: 0,
   borderRadius: "11px",
   color: "var(--mf-text)",
   backgroundColor: "var(--mf-card-bg)",
@@ -2183,6 +2185,57 @@ export const panelSx = {
   boxShadow: "none",
   opacity: 1,
 };
+
+
+/**
+ * Responsive right-side workspace surface for master/detail screens.
+ * It keeps the queue/table in place while the selected record opens beside it,
+ * and scales with the viewport/zoom instead of extending the document vertically.
+ */
+export const sidePanelPaperSx = {
+  width: {
+    xs: "100vw",
+    sm: "min(94vw, 760px)",
+    md: "min(86vw, 900px)",
+    lg: "min(76vw, 1080px)",
+    xl: "min(68vw, 1180px)",
+  },
+  maxWidth: "100vw",
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  color: "var(--mf-text)",
+  background: "var(--mf-page-bg)",
+  backgroundImage: "none",
+  borderLeft: "1px solid var(--mf-border-strong)",
+  boxShadow: "var(--mf-modal-shadow)",
+  overflow: "hidden",
+};
+
+export const sidePanelHeaderSx = {
+  px: { xs: 1.15, sm: 1.35 },
+  py: 1,
+  flex: "0 0 auto",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 1,
+  background: "var(--mf-header-bg)",
+  backdropFilter: "blur(14px)",
+  borderBottom: "1px solid var(--mf-border-strong)",
+};
+
+export const sidePanelBodySx = {
+  minWidth: 0,
+  flex: 1,
+  overflowY: "auto",
+  overflowX: "hidden",
+  p: { xs: 1, sm: 1.2 },
+  display: "grid",
+  alignContent: "start",
+  gap: 1,
+};
+
 export const panelTitleSx = { color: "var(--mf-text)", fontSize: 17, fontWeight: 950 };
 export const sectionTitleSx = panelTitleSx;
 export const sectionSubSx = { mt: .35, color: "var(--mf-text-muted)", fontSize: 11, fontWeight: 700 };

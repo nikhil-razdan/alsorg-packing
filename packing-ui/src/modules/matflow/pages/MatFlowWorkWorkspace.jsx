@@ -5,11 +5,13 @@ import {
   Button,
   Card,
   Chip,
+  Drawer,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
   InputAdornment,
   MenuItem,
   Tab,
@@ -28,6 +30,7 @@ import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import { useSearchParams } from "react-router-dom";
@@ -57,6 +60,9 @@ import {
   primaryBtnSx,
   readable,
   secondaryBtnSx,
+  sidePanelPaperSx,
+  sidePanelHeaderSx,
+  sidePanelBodySx,
   useMatFlow,
   useMatFlowViewMode,
 } from "../matflowUi";
@@ -459,6 +465,45 @@ const worstHealth = (rows) => {
   return "";
 };
 
+const assignedWorkForRow = (row, focus) => {
+  const design = row?.designTaskProgress || {};
+  const designTotal = Number(design.total || 0);
+  const designDone = Number(design.done || 0);
+  const designCancelled = Number(design.cancelled || 0);
+  const designOpen = Math.max(0, designTotal - designDone - designCancelled);
+  const designOverdue = Number(design.overdue || 0);
+  const engineeringOpen = Number(row?.engineeringTaskPending || 0);
+  const engineeringDone = Number(row?.engineeringTaskCompleted || 0);
+  const stage = String(row?.stage || "").toUpperCase();
+  const gateOpen = ["PPC_GATE_1", "PPC_GATE_2"].includes(stage) ? 1 : 0;
+
+  if (focus === "DESIGN") return { open: designOpen, done: designDone, overdue: designOverdue, kind: "task" };
+  if (focus === "ENGINEERING") return { open: engineeringOpen, done: engineeringDone, overdue: 0, kind: "task" };
+  if (focus === "PPC") return { open: gateOpen, done: stage === "PRODUCTION_RELEASED" ? 1 : 0, overdue: 0, kind: "gate" };
+  return {
+    open: designOpen + engineeringOpen + gateOpen,
+    done: designDone + engineeringDone + (stage === "PRODUCTION_RELEASED" ? 1 : 0),
+    overdue: designOverdue,
+    kind: "work",
+  };
+};
+
+const assignedWorkText = (load) => {
+  const open = Number(load?.open || 0);
+  const done = Number(load?.done || 0);
+  const overdue = Number(load?.overdue || 0);
+  const noun = load?.kind === "gate" ? "gate action" : load?.kind === "work" ? "work item" : "task";
+  if (!open) return done ? `${done} completed · no open ${noun}${done === 1 ? "" : "s"}` : `No assigned ${noun}${noun === "gate action" ? "" : "s"}`;
+  return `${open} open ${noun}${open === 1 ? "" : "s"}${overdue ? ` · ${overdue} overdue` : ""}${done ? ` · ${done} done` : ""}`;
+};
+
+const assignedWorkAccent = (load) => {
+  if (Number(load?.overdue || 0) > 0) return "var(--mf-danger-text)";
+  if (Number(load?.open || 0) > 0) return "var(--mf-warning-text)";
+  if (Number(load?.done || 0) > 0) return "var(--mf-success-text)";
+  return "var(--mf-text-muted)";
+};
+
 const buildWorkQueueGroups = (rows, groupBy, focus) => {
   const groups = new Map();
   (Array.isArray(rows) ? rows : []).forEach((row) => {
@@ -488,6 +533,7 @@ const buildWorkQueueGroups = (rows, groupBy, focus) => {
       .map((row) => row?.plannedProductionReleaseDate || row?.plannedDispatchDate)
       .filter(Boolean)
       .sort();
+    const workLoads = orderedRows.map((row) => assignedWorkForRow(row, focus));
     return {
       ...group,
       rows: orderedRows,
@@ -495,6 +541,10 @@ const buildWorkQueueGroups = (rows, groupBy, focus) => {
       attentionCount: orderedRows.filter((row) => fileAttention(row, focus)).length,
       fileCount: orderedRows.length,
       pdCount: new Set(orderedRows.map((row) => clean(row?.projectCode)).filter(Boolean)).size,
+      taskOpen: workLoads.reduce((sum, item) => sum + Number(item.open || 0), 0),
+      taskDone: workLoads.reduce((sum, item) => sum + Number(item.done || 0), 0),
+      taskOverdue: workLoads.reduce((sum, item) => sum + Number(item.overdue || 0), 0),
+      issueCount: orderedRows.reduce((sum, row) => sum + Number(row?.openQueries || 0), 0),
       dueDate: dueDates[0] || null,
     };
   }).sort((left, right) => {
@@ -653,13 +703,14 @@ export function MatFlowWorkWorkspacePage() {
 
   const [files, setFiles] = useState([]);
   const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(searchParams.get("fileId") || "");
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [health, setHealth] = useState("");
   const [stage, setStage] = useState("");
   const [tab, setTab] = useState(searchParams.get("tab") || (juniorDesignerOnly ? "designTasks" : "overview"));
   const [selectedQueryId, setSelectedQueryId] = useState(searchParams.get("queryId") || "");
-  const [workspaceView, setWorkspaceView] = useState(juniorDesignerOnly ? "TASKS" : "FILES");
+  const [workspaceView, setWorkspaceView] = useState(searchParams.get("fileId") ? "FILES" : (juniorDesignerOnly ? "TASKS" : "FILES"));
   const [viewMode, setViewMode] = useMatFlowViewMode("work", "LIST");
   const [workspaceFocus, setWorkspaceFocus] = useState(resolvedInitialFocus);
   const [groupBy, setGroupBy] = useState("PD");
@@ -686,7 +737,7 @@ export function MatFlowWorkWorkspacePage() {
     const urlTab = searchParams.get("tab") || (juniorDesignerOnly ? "designTasks" : "overview");
     const urlQueryId = searchParams.get("queryId") || "";
     const urlSearch = searchParams.get("q") || "";
-    if (urlFileId && urlFileId !== selectedId) setSelectedId(urlFileId);
+    if (urlFileId && urlFileId !== selectedId) { setSelectedId(urlFileId); setWorkspaceView("FILES"); }
     if (urlTab !== tab) setTab(urlTab);
     if (urlQueryId !== selectedQueryId) setSelectedQueryId(urlQueryId);
     if (urlSearch && urlSearch !== search) setSearch(urlSearch);
@@ -760,13 +811,17 @@ export function MatFlowWorkWorkspacePage() {
   const loadDetail = useCallback(async (id, { quiet = false } = {}) => {
     if (!id) {
       setDetail(null);
+      setDetailLoading(false);
       return;
     }
+    if (!quiet) setDetailLoading(true);
     try {
       const response = await matflowApi.getProductionFile(id);
       setDetail(response?.data || null);
     } catch (requestError) {
       if (!quiet) setError(readMatFlowError(requestError, "Unable to load Production File."));
+    } finally {
+      if (!quiet) setDetailLoading(false);
     }
   }, []);
 
@@ -775,12 +830,24 @@ export function MatFlowWorkWorkspacePage() {
     [files, groupBy, workspaceFocus]
   );
 
-  const queueSummary = useMemo(() => ({
-    clients: new Set(files.map((row) => clean(row?.clientName)).filter(Boolean)).size,
-    pds: new Set(files.map((row) => clean(row?.projectCode)).filter(Boolean)).size,
-    products: files.length,
-    attention: files.filter((row) => fileAttention(row, workspaceFocus)).length,
-  }), [files, workspaceFocus]);
+  const queueSummary = useMemo(() => {
+    const loads = files.map((row) => assignedWorkForRow(row, workspaceFocus));
+    return {
+      clients: new Set(files.map((row) => clean(row?.clientName)).filter(Boolean)).size,
+      pds: new Set(files.map((row) => clean(row?.projectCode)).filter(Boolean)).size,
+      products: files.length,
+      attention: files.filter((row) => fileAttention(row, workspaceFocus)).length,
+      openWork: loads.reduce((sum, item) => sum + Number(item.open || 0), 0),
+      overdueWork: loads.reduce((sum, item) => sum + Number(item.overdue || 0), 0),
+    };
+  }, [files, workspaceFocus]);
+
+  const workListRows = useMemo(() => queueGroups.flatMap((group) => [
+    { kind: "GROUP", key: `GROUP:${group.key}`, group },
+    ...(expandedGroupKey === group.key
+      ? group.rows.map((row) => ({ kind: "FILE", key: `FILE:${row.id}`, group, row }))
+      : []),
+  ]), [queueGroups, expandedGroupKey]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -856,12 +923,35 @@ export function MatFlowWorkWorkspacePage() {
     }, { replace: true });
   };
 
+  const openFilePanel = (id, nextTab = null) => {
+    if (!id) return;
+    setSelectedQueryId("");
+    if (nextTab) setTab(nextTab);
+    if (id !== selectedId) setDetail(null);
+    setSelectedId(id);
+  };
+
+  const closeFilePanel = () => {
+    setSelectedId("");
+    setSelectedQueryId("");
+    setDetail(null);
+    setDetailLoading(false);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete("fileId");
+      next.delete("tab");
+      next.delete("queryId");
+      return next;
+    }, { replace: true });
+  };
+
   const refresh = async () => {
     await loadList({ quiet: true });
     await loadDetail(selectedId, { quiet: true });
   };
 
   const file = detail?.productionFile;
+  const taskFirstTab = workspaceFocus === "DESIGN" ? "designTasks" : workspaceFocus === "ENGINEERING" ? "engineeringTasks" : "overview";
 
   const execute = async (fn, fallback) => {
     setWorking(true);
@@ -1102,12 +1192,12 @@ export function MatFlowWorkWorkspacePage() {
           <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
             {focusOptions.length > 1 && focusOptions.map((item) => (
-              <Button key={item.value} onClick={() => { setWorkspaceFocus(item.value); setWorkspaceView("FILES"); setTab(juniorDesignerOnly && item.value === "DESIGN" ? "designTasks" : "overview"); }} sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}>
+              <Button key={item.value} onClick={() => { closeFilePanel(); setWorkspaceFocus(item.value); setWorkspaceView("FILES"); setTab(juniorDesignerOnly && item.value === "DESIGN" ? "designTasks" : "overview"); }} sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}>
                 {item.label}
               </Button>
             ))}
             {workspaceFocus === "DESIGN" && departmentAccess.design && (
-              <Button onClick={() => setWorkspaceView(workspaceView === "TASKS" ? "FILES" : "TASKS")} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>
+              <Button onClick={() => { const nextView = workspaceView === "TASKS" ? "FILES" : "TASKS"; if (nextView === "TASKS") closeFilePanel(); setWorkspaceView(nextView); }} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>
                 {workspaceView === "TASKS" ? (juniorDesignerOnly ? "Assigned Products" : "Products") : (juniorDesignerOnly ? "My Tasks" : "Task Desk")}
               </Button>
             )}
@@ -1118,23 +1208,23 @@ export function MatFlowWorkWorkspacePage() {
       {error && <ErrorBox>{error}</ErrorBox>}
 
       {workspaceView === "TASKS" ? (
-        <DesignTaskDesk viewMode={viewMode} selectedPlantParam={selectedPlantParam} juniorDesignerOnly={juniorDesignerOnly} currentUsername={currentUsername} onOpenFile={(fileId) => { setSelectedQueryId(""); setSelectedId(fileId); setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); setTab("designTasks"); }} />
+        <DesignTaskDesk viewMode={viewMode} selectedPlantParam={selectedPlantParam} juniorDesignerOnly={juniorDesignerOnly} currentUsername={currentUsername} onOpenFile={(fileId) => { setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); openFilePanel(fileId, "designTasks"); }} />
       ) : (
       <>
       <Card sx={{ ...panelSx, p: 1.2 }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: juniorDesignerOnly ? (viewMode === "CARD" ? "minmax(280px,2fr) 150px auto" : "minmax(320px,1fr) auto") : (viewMode === "CARD" ? "minmax(260px,2fr) 135px 165px minmax(180px,1fr) auto" : "minmax(320px,2fr) 165px minmax(180px,1fr) auto") }, gap: 0.8 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 0.8, alignItems: "center" }}>
           <TextField
             size="small"
             label="Search PD No. / Client / Project / Product / Drawing"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && loadList()}
-            sx={fieldSx}
+            sx={{ ...fieldSx, gridColumn: { xs: "1 / -1", md: "span 2" } }}
           />
-          {viewMode === "CARD" && <TextField select size="small" label="View by" value={groupBy} onChange={(e) => { setGroupBy(e.target.value); setExpandedGroupKey(""); }} sx={fieldSx}>
+          <TextField select size="small" label="View by" value={groupBy} onChange={(e) => { setGroupBy(e.target.value); setExpandedGroupKey(""); }} sx={fieldSx}>
             <MenuItem value="PD">PD No.</MenuItem>
             <MenuItem value="CLIENT">Client</MenuItem>
-          </TextField>}
+          </TextField>
           {!juniorDesignerOnly && <TextField select size="small" label="Health" value={health} onChange={(e) => setHealth(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
             {HEALTH_FILTERS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
@@ -1149,242 +1239,245 @@ export function MatFlowWorkWorkspacePage() {
         </Box>
       </Card>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: viewMode === "LIST" ? "1fr" : { xs: "1fr", xl: "430px minmax(0,1fr)" }, gap: 1.2, alignItems: "start" }}>
+      <Card sx={{ ...panelSx, p: 0, boxShadow: "none" }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))" }}>
+          {[
+            [groupBy === "PD" ? "PDs" : "Clients", groupBy === "PD" ? queueSummary.pds : queueSummary.clients, "Current queue"],
+            ["Products", queueSummary.products, "Production Files"],
+            [workspaceFocus === "PPC" ? "Gate Actions" : "Open Assigned Work", queueSummary.openWork, "Task-first workload"],
+            ["Overdue", queueSummary.overdueWork, queueSummary.overdueWork ? "Needs immediate attention" : "No overdue assigned task"],
+          ].map(([label, value, helper], index) => (
+            <Box key={label} sx={{ px: 1.15, py: 0.85, borderLeft: index ? "1px solid var(--mf-border)" : "none" }}>
+              <Typography sx={{ fontSize: 16, lineHeight: 1, fontWeight: 950, color: label === "Overdue" && Number(value) ? "var(--mf-danger-text)" : "var(--mf-text)" }}>{value}</Typography>
+              <Typography sx={{ mt: 0.25, fontSize: 8.9, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{label}</Typography>
+              <Typography sx={{ mt: 0.08, fontSize: 8.2, color: "var(--mf-text-muted)" }}>{helper}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Card>
+
+      <Box sx={{ minWidth: 0 }}>
         {viewMode === "LIST" ? (
-          files.length === 0 ? (
+          workListRows.length === 0 ? (
             <Card sx={{ ...panelSx, p: 0 }}><Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No work matches the current filters.</Box></Card>
           ) : (
             <MatFlowListGrid
               columns={[
-                { key: "product", label: "Product / File", width: "300px" },
-                { key: "pd", label: "PD No.", width: "140px" },
-                { key: "context", label: "Client / Project", width: "220px" },
-                { key: "stage", label: "Stage", width: "170px" },
-                { key: "owner", label: "Department / Owner", width: "210px" },
-                { key: "attention", label: "Health / Issues", width: "190px" },
-                { key: "due", label: "Due", width: "125px" },
-                { key: "action", label: "", width: "105px", align: "right" },
+                { key: "identity", label: groupBy === "PD" ? "PD / Client" : "Client / PD", width: "minmax(230px,1.1fr)" },
+                { key: "tasks", label: "Assigned Work", width: "minmax(235px,1.12fr)" },
+                { key: "workflow", label: "Workflow / Owner", width: "minmax(190px,.9fr)" },
+                { key: "issues", label: "Health / Issues / Due", width: "minmax(180px,.78fr)" },
+                { key: "action", label: "", width: "110px", align: "right" },
               ]}
-              rows={files}
-              minWidth={1420}
-              getRowKey={(row) => row.id}
-              rowAccent={(row) => healthVisual(row.releaseHealth).accent}
-              rowSx={(row) => selectedId === row.id ? { background: "var(--mf-primary-soft)", "&:hover": { background: "var(--mf-primary-soft)" } } : {}}
-              onRowClick={(row) => { setSelectedQueryId(""); setSelectedId(row.id); }}
-              rowAriaLabel={(row) => `Open ${row.productName || "Product"} ${row.projectCode || ""}`}
-              renderCell={(row, column) => {
-                const visual = healthVisual(row.releaseHealth);
-                if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
-                if (column.key === "pd") return <Typography sx={{ fontSize: 10.2, fontWeight: 950, color: "var(--mf-text)" }}>{row.projectCode || "—"}</Typography>;
-                if (column.key === "context") return <Box><Typography sx={{ fontSize: 9.9, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>;
-                if (column.key === "stage") return <Box><Typography sx={{ fontSize: 9.8, fontWeight: 900, color: visual.accent }}>{readable(row.stage)}</Typography>{workspaceFocus === "DESIGN" && retainWholePdInDesign && <Typography noWrap sx={{ mt: 0.08, fontSize: 8.3, color: "var(--mf-text-muted)" }}>{designProductWorkflowNote(row)}</Typography>}</Box>;
-                if (column.key === "owner") return <Box><Typography sx={{ fontSize: 9.6, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.currentDepartment ? readable(row.currentDepartment) : "—"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography></Box>;
-                if (column.key === "attention") return <Box><Typography sx={{ fontSize: 9.6, fontWeight: 900, color: visual.accent }}>{visual.label || "Workflow"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: Number(row.openQueries || 0) > 0 ? "var(--mf-warning-text)" : "var(--mf-text-muted)" }}>{Number(row.openQueries || 0) > 0 ? `${row.openQueries} open issue${Number(row.openQueries) === 1 ? "" : "s"}` : fileAttention(row, workspaceFocus) ? "Action required" : "No open issues"}</Typography></Box>;
-                if (column.key === "due") return <Typography sx={{ fontSize: 9.4, fontWeight: 800, color: "var(--mf-text-secondary)", whiteSpace: "nowrap" }}>{compactDate(row.plannedProductionReleaseDate || row.plannedDispatchDate)}</Typography>;
-                return <Button size="small" onClick={(event) => { event.stopPropagation(); setSelectedQueryId(""); setSelectedId(row.id); }} sx={secondaryBtnSx}>Open</Button>;
+              rows={workListRows}
+              minWidth={950}
+              getRowKey={(item) => item.key}
+              rowAccent={(item) => item.kind === "GROUP"
+                ? healthVisual(item.group.health).accent
+                : healthVisual(item.row.releaseHealth).accent}
+              rowSx={(item) => {
+                if (item.kind === "GROUP") return {
+                  background: "var(--mf-surface-strong)",
+                  "&:hover": { background: "var(--mf-hover)" },
+                };
+                if (selectedId === item.row.id) return {
+                  background: "var(--mf-primary-soft)",
+                  "&:hover": { background: "var(--mf-primary-soft)" },
+                };
+                return { background: "var(--mf-panel-solid)" };
+              }}
+              onRowClick={(item) => {
+                if (item.kind === "GROUP") {
+                  setExpandedGroupKey((current) => current === item.group.key ? "" : item.group.key);
+                } else {
+                  openFilePanel(item.row.id, taskFirstTab);
+                }
+              }}
+              rowAriaLabel={(item) => item.kind === "GROUP"
+                ? `${expandedGroupKey === item.group.key ? "Collapse" : "Expand"} ${groupBy === "PD" ? item.group.projectCode : item.group.clientName}`
+                : `Open ${item.row.productName || "Product"} work`}
+              renderCell={(item, column) => {
+                const isGroup = item.kind === "GROUP";
+                const group = item.group;
+                const row = item.row;
+                const load = isGroup
+                  ? { open: group.taskOpen, done: group.taskDone, overdue: group.taskOverdue, kind: workspaceFocus === "PPC" ? "gate" : workspaceFocus === "MANAGEMENT" ? "work" : "task" }
+                  : assignedWorkForRow(row, workspaceFocus);
+                const visual = healthVisual(isGroup ? group.health : row.releaseHealth);
+
+                if (column.key === "identity") {
+                  if (isGroup) return (
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 8.4, fontWeight: 900, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
+                        {groupBy === "PD" ? group.clientName : `${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
+                      </Typography>
+                      <Typography noWrap sx={{ mt: 0.08, fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>
+                        {groupBy === "PD" ? group.projectCode : group.clientName}
+                      </Typography>
+                      <Typography noWrap sx={{ mt: 0.06, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
+                        {groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} products across ${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
+                      </Typography>
+                    </Box>
+                  );
+                  return (
+                    <Box sx={{ pl: 1.1, minWidth: 0 }}>
+                      <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                    </Box>
+                  );
+                }
+                if (column.key === "tasks") return (
+                  <Box>
+                    <Typography sx={{ fontSize: 9.8, fontWeight: 950, color: assignedWorkAccent(load) }}>{assignedWorkText(load)}</Typography>
+                    <Typography sx={{ mt: 0.08, fontSize: 8.6, color: "var(--mf-text-muted)" }}>
+                      {isGroup
+                        ? `${group.fileCount} product${group.fileCount === 1 ? "" : "s"} in this ${groupBy === "PD" ? "PD" : "client"} queue`
+                        : workspaceFocus === "DESIGN"
+                          ? `${row.designTaskProgress?.percent || 0}% task completion`
+                          : workspaceFocus === "ENGINEERING"
+                            ? `${Number(row.engineeringTaskCompleted || 0)} engineering task${Number(row.engineeringTaskCompleted || 0) === 1 ? "" : "s"} completed`
+                            : workspaceFocus === "PPC"
+                              ? readable(row.stage)
+                              : "Current controlled work load"}
+                    </Typography>
+                  </Box>
+                );
+                if (column.key === "workflow") {
+                  if (isGroup) return (
+                    <Box>
+                      <Typography sx={{ fontSize: 9.5, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{group.fileCount} Product / File{group.fileCount === 1 ? "" : "s"}</Typography>
+                      <Typography noWrap sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>
+                        {workspaceFocus === "DESIGN" && retainWholePdInDesign ? designPdWorkflowSummary(group.rows) : `${group.attentionCount} currently need action`}
+                      </Typography>
+                    </Box>
+                  );
+                  return (
+                    <Box>
+                      <Typography sx={{ fontSize: 9.6, fontWeight: 900, color: visual.accent }}>{readable(row.stage)}</Typography>
+                      <Typography noWrap sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>{[row.currentDepartment && readable(row.currentDepartment), row.currentOwner].filter(Boolean).join(" · ") || "Unassigned"}</Typography>
+                    </Box>
+                  );
+                }
+                if (column.key === "issues") return (
+                  <Box>
+                    <Typography sx={{ fontSize: 9.5, fontWeight: 900, color: (isGroup ? group.issueCount : Number(row.openQueries || 0)) > 0 ? "var(--mf-warning-text)" : visual.accent }}>
+                      {isGroup
+                        ? group.issueCount > 0 ? `${group.issueCount} open issue${group.issueCount === 1 ? "" : "s"}` : (group.attentionCount ? `${group.attentionCount} need action` : "On track")
+                        : Number(row.openQueries || 0) > 0 ? `${row.openQueries} open issue${Number(row.openQueries) === 1 ? "" : "s"}` : (visual.label || "No open issue")}
+                    </Typography>
+                    <Typography sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>
+                      {isGroup ? (visual.label || "Workflow") : (fileAttention(row, workspaceFocus) ? "Action may be required" : "No blocking issue")} · Due {compactDate(isGroup ? group.dueDate : (row.plannedProductionReleaseDate || row.plannedDispatchDate))}
+                    </Typography>
+                  </Box>
+                );
+                if (isGroup) return (
+                  <Button size="small" onClick={(event) => { event.stopPropagation(); setExpandedGroupKey((current) => current === group.key ? "" : group.key); }} sx={secondaryBtnSx}>
+                    {expandedGroupKey === group.key ? "Collapse" : `View ${group.fileCount}`}
+                  </Button>
+                );
+                return <Button size="small" onClick={(event) => { event.stopPropagation(); openFilePanel(row.id, taskFirstTab); }} sx={primaryBtnSx}>Open work</Button>;
               }}
             />
           )
+        ) : queueGroups.length === 0 ? (
+          <Card sx={{ ...panelSx, p: 0 }}><Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No work matches the current filters.</Box></Card>
         ) : (
-        <Card sx={{ ...panelSx, p: 0, maxHeight: { xl: "calc(100vh - 210px)" }, overflow: "auto" }}>
-          <Box sx={{ px: 1.25, py: 1.05, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
-            <Box>
-              <Typography sx={{ fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>
-                {juniorDesignerOnly ? (groupBy === "PD" ? "My PD Assignments" : "My Client Assignments") : (groupBy === "PD" ? "PD Work Queue" : "Client Work Queue")}
-              </Typography>
-              <Typography sx={{ mt: 0.1, fontSize: 9.3, color: "var(--mf-text-muted)" }}>
-                {queueGroups.length} group{queueGroups.length === 1 ? "" : "s"}{juniorDesignerOnly ? " · assigned to you" : " · attention first"}
-              </Typography>
-            </Box>
-            <Typography sx={{ fontSize: 9.3, fontWeight: 800, color: "var(--mf-text-muted)" }}>
-              {queueSummary.products} product{queueSummary.products === 1 ? "" : "s"}
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 0.85, alignItems: "start" }}>
+            {queueGroups.map((group) => {
+              const visual = healthVisual(group.health);
+              const expanded = expandedGroupKey === group.key;
+              const load = { open: group.taskOpen, done: group.taskDone, overdue: group.taskOverdue, kind: workspaceFocus === "PPC" ? "gate" : workspaceFocus === "MANAGEMENT" ? "work" : "task" };
+              return (
+                <Card key={group.key} sx={{ ...panelSx, p: 0, overflow: "hidden", borderTop: `3px solid ${visual.accent}`, boxShadow: "none" }}>
+                  <Box sx={{ p: 1.05, display: "grid", gap: 0.65 }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontSize: 8.6, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".045em", color: "var(--mf-text-muted)" }}>{groupBy === "PD" ? group.clientName : `${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}</Typography>
+                        <Typography noWrap sx={{ mt: 0.1, fontSize: 13, fontWeight: 950, color: "var(--mf-text)" }}>{groupBy === "PD" ? group.projectCode : group.clientName}</Typography>
+                        <Typography noWrap sx={{ mt: 0.08, fontSize: 9, color: "var(--mf-text-secondary)" }}>{groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} products`}</Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: 9, fontWeight: 900, color: group.attentionCount ? visual.accent : "var(--mf-success-text)" }}>{group.attentionCount ? `${group.attentionCount} need action` : "On track"}</Typography>
+                    </Box>
+
+                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 0.55 }}>
+                      <Box sx={{ p: 0.7, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)" }}><Typography sx={{ fontSize: 8.2, color: "var(--mf-text-muted)" }}>ASSIGNED WORK</Typography><Typography sx={{ mt: 0.08, fontSize: 9.4, fontWeight: 900, color: assignedWorkAccent(load) }}>{assignedWorkText(load)}</Typography></Box>
+                      <Box sx={{ p: 0.7, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)" }}><Typography sx={{ fontSize: 8.2, color: "var(--mf-text-muted)" }}>ISSUES</Typography><Typography sx={{ mt: 0.08, fontSize: 9.4, fontWeight: 900, color: group.issueCount ? "var(--mf-warning-text)" : "var(--mf-success-text)" }}>{group.issueCount || "None"}</Typography></Box>
+                      <Box sx={{ p: 0.7, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)" }}><Typography sx={{ fontSize: 8.2, color: "var(--mf-text-muted)" }}>DUE</Typography><Typography sx={{ mt: 0.08, fontSize: 9.4, fontWeight: 900, color: "var(--mf-text-secondary)" }}>{compactDate(group.dueDate)}</Typography></Box>
+                    </Box>
+
+                    <Button size="small" onClick={() => setExpandedGroupKey(expanded ? "" : group.key)} sx={secondaryBtnSx}>{expanded ? "Hide products" : `Show ${group.fileCount} product${group.fileCount === 1 ? "" : "s"}`}</Button>
+                  </Box>
+
+                  {expanded && (
+                    <Box sx={{ borderTop: "1px solid var(--mf-border)" }}>
+                      {group.rows.map((row) => {
+                        const rowVisual = healthVisual(row.releaseHealth);
+                        const rowLoad = assignedWorkForRow(row, workspaceFocus);
+                        return (
+                          <Box key={row.id} role="button" tabIndex={0} onClick={() => openFilePanel(row.id, taskFirstTab)} onKeyDown={(event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); openFilePanel(row.id, taskFirstTab); } }} sx={{ px: 1, py: 0.8, borderBottom: "1px solid var(--mf-border)", cursor: "pointer", background: selectedId === row.id ? "var(--mf-primary-soft)" : "var(--mf-panel-solid)", "&:last-child": { borderBottom: 0 }, "&:hover": { background: selectedId === row.id ? "var(--mf-primary-soft)" : "var(--mf-table-hover)" } }}>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 0.8, alignItems: "flex-start" }}>
+                              <Box sx={{ minWidth: 0 }}><Typography noWrap sx={{ fontSize: 10.4, fontWeight: 950, color: "var(--mf-text)" }}>{row.productName || "Unnamed Product"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>{row.productionFileNo || "No file"} · Drawing {row.drawingNo || "—"}</Typography></Box>
+                              <Typography sx={{ fontSize: 8.7, fontWeight: 900, color: rowVisual.accent }}>{readable(row.stage)}</Typography>
+                            </Box>
+                            <Box sx={{ mt: 0.45, display: "flex", justifyContent: "space-between", gap: 0.8, alignItems: "center" }}><Typography sx={{ fontSize: 8.8, fontWeight: 850, color: assignedWorkAccent(rowLoad) }}>{assignedWorkText(rowLoad)}</Typography><Typography sx={{ fontSize: 8.3, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography></Box>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  )}
+                </Card>
+              );
+            })}
+          </Box>
+        )}
+      </Box>
+
+      <Drawer
+        anchor="right"
+        open={Boolean(selectedId)}
+        onClose={closeFilePanel}
+        PaperProps={{ sx: sidePanelPaperSx }}
+      >
+        <Box sx={sidePanelHeaderSx}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: 8.6, fontWeight: 950, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--mf-primary-text)" }}>
+              {workspaceFocus === "DESIGN" ? "DESIGN WORK FILE" : workspaceFocus === "ENGINEERING" ? "ENGINEERING WORK FILE" : workspaceFocus === "PPC" ? "PPC WORK FILE" : "PRODUCTION FILE"}
+            </Typography>
+            <Typography noWrap sx={{ mt: 0.08, fontSize: 13.5, fontWeight: 950, color: "var(--mf-text)" }}>
+              {file?.productName || (detailLoading ? "Loading Production File…" : "Production File")}
+            </Typography>
+            <Typography noWrap sx={{ mt: 0.05, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
+              {file ? `PD No. ${file.projectCode || "—"} · File ${file.productionFileNo || "—"} · Drawing ${file.drawingNo || "—"}` : "Selected work opens here without moving the queue."}
             </Typography>
           </Box>
+          <IconButton aria-label="Close Production File" onClick={closeFilePanel} sx={{ color: "var(--mf-text-secondary)", border: "1px solid var(--mf-border)" }}>
+            <CloseRoundedIcon fontSize="small" />
+          </IconButton>
+        </Box>
 
-          {queueGroups.length === 0 ? (
-            <Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No work matches the current filters.</Box>
-          ) : queueGroups.map((group) => {
-            const visual = healthVisual(group.health);
-            const expanded = expandedGroupKey === group.key;
-            return (
-              <Box key={group.key} sx={{ borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.6 : 0, m: viewMode === "CARD" ? 0.8 : 0, overflow: "hidden", "&:last-child": { borderBottom: viewMode === "CARD" ? undefined : 0 } }}>
-                <Box
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setExpandedGroupKey(expanded ? "" : group.key)}
-                  onKeyDown={(event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); setExpandedGroupKey(expanded ? "" : group.key); } }}
-                  sx={{
-                    position: "relative",
-                    display: "grid",
-                    gridTemplateColumns: "minmax(0,1fr) auto",
-                    gap: 1,
-                    px: 1.25,
-                    py: 1.05,
-                    pl: 1.55,
-                    cursor: "pointer",
-                    background: expanded ? "var(--mf-surface)" : "var(--mf-panel-solid)",
-                    "&:hover": { background: "var(--mf-hover)" },
-                    "&::before": { content: '""', position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: visual.accent },
-                  }}
-                >
+        <Box sx={sidePanelBodySx}>
+          {detailLoading && !detail ? (
+            <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Production File…</Card>
+          ) : !detail || !file ? (
+            <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Unable to display the selected Production File.</Card>
+          ) : (
+            <>
+              <Card sx={{ ...productionFileHeaderSx(juniorDesignerOnly ? "" : file.releaseHealth), mb: 0 }}>
+                <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1.2 }}>
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 9, fontWeight: 850, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
-                      {groupBy === "PD" ? group.clientName : `${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
+                    <Typography sx={{ mb: 0.35, fontSize: 9.2, fontWeight: 900, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
+                      {file.clientName || "Client not assigned"}
                     </Typography>
-                    <Typography noWrap sx={{ mt: 0.15, fontSize: 13, fontWeight: 950, color: "var(--mf-text)" }}>
-                      {groupBy === "PD" ? group.projectCode : group.clientName}
-                    </Typography>
-                    <Typography noWrap sx={{ mt: 0.12, fontSize: 9.6, color: "var(--mf-text-secondary)" }}>
-                      {groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} products across ${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
-                    </Typography>
-                    {workspaceFocus === "DESIGN" && retainWholePdInDesign && (
-                      <Typography noWrap sx={{ mt: 0.16, fontSize: 8.7, fontWeight: 780, color: "var(--mf-text-muted)" }}>
-                        {designPdWorkflowSummary(group.rows)}
-                      </Typography>
-                    )}
+                    <MatFlowProductIdentity productName={file.productName} projectCode={file.projectCode} productionFileNo={file.productionFileNo} drawingNo={file.drawingNo} projectName={file.projectName} showProjectName size="hero" />
                   </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.65, textAlign: "right" }}>
-                    <Box>
-                      <Typography sx={{ fontSize: 9.2, fontWeight: 900, color: group.attentionCount ? visual.accent : "var(--mf-success-text)" }}>
-                        {group.attentionCount ? `${group.attentionCount} need action` : "On track"}
-                      </Typography>
-                      <Typography sx={{ mt: 0.18, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
-                        {group.fileCount} product{group.fileCount === 1 ? "" : "s"} · due {compactDate(group.dueDate)}
-                      </Typography>
-                    </Box>
-                    {expanded ? <ExpandMoreRoundedIcon sx={{ fontSize: 18, color: "var(--mf-text-muted)" }} /> : <ChevronRightRoundedIcon sx={{ fontSize: 18, color: "var(--mf-text-muted)" }} />}
+                  <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
+                    {!juniorDesignerOnly && healthVisual(file.releaseHealth).label && <Typography sx={{ color: healthVisual(file.releaseHealth).accent, fontSize: 10, fontWeight: 900 }}>{healthVisual(file.releaseHealth).label}</Typography>}
+                    {juniorDesignerOnly ? <Typography sx={{ fontSize: 9.8, fontWeight: 900, color: "var(--mf-primary-text)" }}>Assigned Design Work</Typography> : <Chip label={readable(file.stage)} sx={statusSx} />}
+                    {canSetup && <Button onClick={openSetup} sx={secondaryBtnSx}>Setup</Button>}
                   </Box>
                 </Box>
 
-                {expanded && (
-                  <Box sx={{ background: "var(--mf-panel-solid)" }}>
-                    {group.rows.map((row) => {
-                      const rowVisual = healthVisual(row.releaseHealth);
-                      const selected = selectedId === row.id;
-                      return (
-                        <Box
-                          key={row.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => { setSelectedQueryId(""); setSelectedId(row.id); }}
-                          onKeyDown={(event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); setSelectedQueryId(""); setSelectedId(row.id); } }}
-                          sx={{
-                            display: "grid",
-                            gridTemplateColumns: "9px minmax(0,1fr) auto",
-                            gap: 0.75,
-                            alignItems: "center",
-                            px: 1.2,
-                            py: 0.85,
-                            borderTop: "1px solid var(--mf-border)",
-                            cursor: "pointer",
-                            background: selected ? "var(--mf-primary-soft)" : "transparent",
-                            "&:hover": { background: selected ? "var(--mf-primary-soft)" : "var(--mf-hover)" },
-                          }}
-                        >
-                          <Box sx={{ width: 7, height: 7, borderRadius: "50%", background: rowVisual.accent }} />
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography noWrap sx={{ fontSize: 10.8, fontWeight: selected ? 950 : 850, color: "var(--mf-text)" }}>
-                              {row.productName || "Unnamed Product"}
-                            </Typography>
-                            <Typography noWrap sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
-                              {groupBy === "CLIENT" ? `${row.projectCode || "No PD"} · ` : ""}{row.drawingNo || "No drawing"} · {row.productionFileNo}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ textAlign: "right", minWidth: workspaceFocus === "DESIGN" && retainWholePdInDesign ? 138 : 90 }}>
-                            <Typography sx={{ fontSize: 8.9, fontWeight: 850, color: rowVisual.accent }}>{readable(row.stage)}</Typography>
-                            <Typography noWrap sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>
-                              {[row.currentDepartment, row.currentOwner].filter(Boolean).join(" · ") || "Unassigned"}
-                            </Typography>
-                            {workspaceFocus === "DESIGN" && retainWholePdInDesign && (
-                              <Typography noWrap sx={{ mt: 0.08, fontSize: 8.15, fontWeight: 760, color: "var(--mf-text-secondary)" }}>
-                                {designProductWorkflowNote(row)}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                )}
-              </Box>
-            );
-          })}
-        </Card>
-        )}
-
-        {!detail ? (
-          <Card sx={{ ...panelSx, p: { xs: 2.2, md: 3 }, minHeight: 270 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 950, color: "var(--mf-text)" }}>Choose a Product from the work queue</Typography>
-            <Typography sx={{ mt: 0.35, maxWidth: 650, fontSize: 10.5, lineHeight: 1.55, color: "var(--mf-text-muted)" }}>
-              Work now starts from Client / PD context. Expand the relevant group, then open only the Product / Drawing you want to work on. Direct links from Projects, notifications and reports still open the exact Production File.
-            </Typography>
-            <Box sx={{ mt: 2, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.75 }}>
-              {[
-                ["Clients", queueSummary.clients],
-                ["PDs", queueSummary.pds],
-                ["Products", queueSummary.products],
-                ["Need action", queueSummary.attention],
-              ].map(([label, value]) => (
-                <Box key={label} sx={{ py: 1, borderTop: "1px solid var(--mf-border)" }}>
-                  <Typography sx={{ fontSize: 17, fontWeight: 950, color: label === "Need action" && Number(value) ? "var(--mf-warning-text)" : "var(--mf-text)" }}>{value}</Typography>
-                  <Typography sx={{ mt: 0.15, fontSize: 9.2, fontWeight: 800, color: "var(--mf-text-muted)" }}>{label}</Typography>
-                </Box>
-              ))}
-            </Box>
-            {queueGroups.length > 0 && (
-              <Box sx={{ mt: 2 }}>
-                <Typography sx={{ fontSize: 9.2, fontWeight: 900, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>Attention order</Typography>
-                <Box sx={{ mt: 0.6, display: "grid", gap: 0.45 }}>
-                  {queueGroups.slice(0, 4).map((group) => {
-                    const visual = healthVisual(group.health);
-                    return (
-                      <Box key={group.key} sx={{ display: "flex", alignItems: "center", gap: 0.7, py: 0.45 }}>
-                        <Box sx={{ width: 7, height: 7, borderRadius: "50%", background: visual.accent }} />
-                        <Typography sx={{ minWidth: 0, flex: 1, fontSize: 10.2, fontWeight: 850, color: "var(--mf-text)" }}>
-                          {groupBy === "PD" ? `${group.projectCode} · ${group.clientName}` : group.clientName}
-                        </Typography>
-                        <Typography sx={{ fontSize: 9, color: "var(--mf-text-muted)" }}>{group.attentionCount ? `${group.attentionCount} need action` : "On track"}</Typography>
-                      </Box>
-                    );
-                  })}
-                </Box>
-              </Box>
-            )}
-          </Card>
-        ) : (
-          <Box sx={{ minWidth: 0 }}>
-            <Card sx={productionFileHeaderSx(juniorDesignerOnly ? "" : file.releaseHealth)}>
-              <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1.2 }}>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ mb: 0.35, fontSize: 9.2, fontWeight: 900, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
-                    {file.clientName || "Client not assigned"}
-                  </Typography>
-                  <MatFlowProductIdentity
-                    productName={file.productName}
-                    projectCode={file.projectCode}
-                    productionFileNo={file.productionFileNo}
-                    drawingNo={file.drawingNo}
-                    projectName={file.projectName}
-                    showProjectName
-                    size="hero"
-                  />
-                </Box>
-                <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
-                  {!juniorDesignerOnly && healthVisual(file.releaseHealth).label && (
-                    <Typography sx={{ color: healthVisual(file.releaseHealth).accent, fontSize: 10, fontWeight: 900 }}>
-                      {healthVisual(file.releaseHealth).label}
-                    </Typography>
-                  )}
-                  {juniorDesignerOnly
-                    ? <Typography sx={{ fontSize: 9.8, fontWeight: 900, color: "var(--mf-primary-text)" }}>Assigned Design Work</Typography>
-                    : <Chip label={readable(file.stage)} sx={statusSx} />}
-                  {canSetup && <Button onClick={openSetup} sx={secondaryBtnSx}>Setup</Button>}
-                </Box>
-              </Box>
-
-              <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.75 }}>
-                {workspaceFocus === "DESIGN" && (
-                  juniorDesignerOnly ? (
+                <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 0.75 }}>
+                  {workspaceFocus === "DESIGN" && (juniorDesignerOnly ? (
                     <>
                       <SummaryCard label="My Tasks" value={(detail.designTasks || []).length} helper="Only tasks assigned to you" />
                       <SummaryCard label="Pending / Yet To Start" value={(detail.designTasks || []).filter((task) => designTaskStatusGroup(task.status) === "PENDING").length} />
@@ -1398,67 +1491,53 @@ export function MatFlowWorkWorkspacePage() {
                       <SummaryCard label="Design Head" value={readable(file.designHeadDecision || "PENDING")} helper={file.designHead || "Not assigned"} tone={file.designHeadDecision === "APPROVED" ? "success" : "warning"} />
                       <SummaryCard label="Handoff" value={detail.designHandoffReady ? "READY" : "BLOCKED"} helper={detail.designHandoffReady ? "Ready for PPC" : `${detail.designHandoffBlockers?.length || 0} blocker(s)`} tone={detail.designHandoffReady ? "success" : "warning"} />
                     </>
-                  )
-                )}
-                {workspaceFocus === "ENGINEERING" && (
-                  <>
-                    <SummaryCard label="Checklist" value={`${file.engineeringChecklistProgress?.percent || 0}%`} helper={`${file.engineeringChecklistProgress?.pending || 0} pending`} />
-                    <SummaryCard label="Tasks" value={`${file.engineeringTaskCompleted || 0}/${Number(file.engineeringTaskPending || 0) + Number(file.engineeringTaskCompleted || 0)}`} helper={`${file.engineeringTaskPending || 0} pending`} tone={file.engineeringTaskPending ? "warning" : "success"} />
-                    <SummaryCard label="Issues" value={file.openQueries || 0} helper={file.openQueries ? "Needs response / closure" : "No open issue"} tone={file.openQueries ? "warning" : "success"} />
-                    <SummaryCard label="BOM" value={readable(file.latestBomStatus || "NOT_STARTED")} helper={file.assignedEngineer || "Engineer not assigned"} tone={file.latestBomStatus === "READY_FOR_RELEASE" || file.latestBomStatus === "RELEASED" ? "success" : "default"} />
-                  </>
-                )}
-                {workspaceFocus === "PPC" && (
-                  <>
-                    <SummaryCard label="Issues" value={file.openQueries || 0} helper={file.openQueries ? "View Design ↔ Engineering discussion" : "No open issue"} tone={file.openQueries ? "warning" : "success"} />
-                    <SummaryCard label="Gate 1" value={readable(file.ppcGate1Decision || "PENDING")} helper={file.ppcOwner || "PPC owner not assigned"} />
-                    <SummaryCard label="Gate 2" value={readable(file.ppcGate2Decision || "PENDING")} helper={detail.ppcGate2Ready ? "Ready" : `${detail.ppcGate2Blockers?.length || 0} blocker(s)`} tone={detail.ppcGate2Ready ? "success" : "warning"} />
-                    <SummaryCard label="Release" value={file.productionReleasedAt ? "RELEASED" : (file.plannedProductionReleaseDate || "NOT PLANNED")} helper={file.productionReleasedAt ? toDateTime(file.productionReleasedAt) : "Planned production release"} tone={file.productionReleasedAt ? "success" : "default"} />
-                  </>
-                )}
-                {workspaceFocus === "MANAGEMENT" && (
-                  <>
-                    <SummaryCard label="Department" value={file.currentDepartment || "—"} helper={file.currentOwner || "No current owner"} />
-                    <SummaryCard label="Design" value={`${file.designChecklistProgress?.percent || 0}%`} helper={`${file.designTaskProgress?.overdue || 0} overdue task(s)`} tone={file.designTaskProgress?.overdue ? "warning" : "default"} />
-                    <SummaryCard label="Issues" value={file.openQueries || 0} helper={file.openQueries ? "Open communication" : "No open issue"} tone={file.openQueries ? "warning" : "success"} />
-                    <SummaryCard label="Release" value={file.stage === "PRODUCTION_RELEASED" ? "RELEASED" : readable(file.stage)} helper={file.plannedProductionReleaseDate || "No release date"} tone={file.stage === "PRODUCTION_RELEASED" ? "success" : "default"} />
-                  </>
-                )}
-              </Box>
-            </Card>
+                  ))}
+                  {workspaceFocus === "ENGINEERING" && (
+                    <>
+                      <SummaryCard label="Checklist" value={`${file.engineeringChecklistProgress?.percent || 0}%`} helper={`${file.engineeringChecklistProgress?.pending || 0} pending`} />
+                      <SummaryCard label="Tasks" value={`${file.engineeringTaskCompleted || 0}/${Number(file.engineeringTaskPending || 0) + Number(file.engineeringTaskCompleted || 0)}`} helper={`${file.engineeringTaskPending || 0} pending`} tone={file.engineeringTaskPending ? "warning" : "success"} />
+                      <SummaryCard label="Issues" value={file.openQueries || 0} helper={file.openQueries ? "Needs response / closure" : "No open issue"} tone={file.openQueries ? "warning" : "success"} />
+                      <SummaryCard label="BOM" value={readable(file.latestBomStatus || "NOT_STARTED")} helper={file.assignedEngineer || "Engineer not assigned"} tone={file.latestBomStatus === "READY_FOR_RELEASE" || file.latestBomStatus === "RELEASED" ? "success" : "default"} />
+                    </>
+                  )}
+                  {workspaceFocus === "PPC" && (
+                    <>
+                      <SummaryCard label="Issues" value={file.openQueries || 0} helper={file.openQueries ? "View Design ↔ Engineering discussion" : "No open issue"} tone={file.openQueries ? "warning" : "success"} />
+                      <SummaryCard label="Gate 1" value={readable(file.ppcGate1Decision || "PENDING")} helper={file.ppcOwner || "PPC owner not assigned"} />
+                      <SummaryCard label="Gate 2" value={readable(file.ppcGate2Decision || "PENDING")} helper={detail.ppcGate2Ready ? "Ready" : `${detail.ppcGate2Blockers?.length || 0} blocker(s)`} tone={detail.ppcGate2Ready ? "success" : "warning"} />
+                      <SummaryCard label="Release" value={file.productionReleasedAt ? "RELEASED" : (file.plannedProductionReleaseDate || "NOT PLANNED")} helper={file.productionReleasedAt ? toDateTime(file.productionReleasedAt) : "Planned production release"} tone={file.productionReleasedAt ? "success" : "default"} />
+                    </>
+                  )}
+                  {workspaceFocus === "MANAGEMENT" && (
+                    <>
+                      <SummaryCard label="Department" value={file.currentDepartment || "—"} helper={file.currentOwner || "No current owner"} />
+                      <SummaryCard label="Design" value={`${file.designChecklistProgress?.percent || 0}%`} helper={`${file.designTaskProgress?.overdue || 0} overdue task(s)`} tone={file.designTaskProgress?.overdue ? "warning" : "default"} />
+                      <SummaryCard label="Issues" value={file.openQueries || 0} helper={file.openQueries ? "Open communication" : "No open issue"} tone={file.openQueries ? "warning" : "success"} />
+                      <SummaryCard label="Release" value={file.stage === "PRODUCTION_RELEASED" ? "RELEASED" : readable(file.stage)} helper={file.plannedProductionReleaseDate || "No release date"} tone={file.stage === "PRODUCTION_RELEASED" ? "success" : "default"} />
+                    </>
+                  )}
+                </Box>
+              </Card>
 
-            <Card sx={{ ...panelSx, p: 0 }}>
-              <Tabs value={tab} onChange={(_, value) => selectWorkspaceTab(value)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: "1px solid var(--mf-border)", px: 1, minHeight: 42 }}>
-                {visibleTabs.map(([value, label]) => <Tab key={value} value={value} label={value === "queries" && Number(file.openQueries || 0) > 0 ? `${label} · ${file.openQueries}` : label} sx={{ minHeight: 42, py: 0.6 }} />)}
-              </Tabs>
-              <Box sx={{ p: 1.45 }}>
-                {tab === "overview" && <Overview focus={workspaceFocus} file={file} detail={detail} canDesignHead={canDesignHead} canPpc={canPpc} canEngineeringReview={canEngineeringReview} canEngineeringDecision={canEngineeringDecision} setAction={setAction} />}
-                {tab === "designChecklist" && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={!juniorDesignerOnly && canDesignTeam && DESIGN_STAGES.includes(file.stage)} working={working} onSave={saveChecklist} />}
-                {tab === "designTasks" && <DesignTasks items={detail.designTasks || []} progress={file.designTaskProgress} canHead={canDesignHead && DESIGN_STAGES.includes(file.stage)} canWork={canDesignTeam && DESIGN_STAGES.includes(file.stage)} onCreate={openNewDesignTask} onEdit={openEditDesignTask} onStatus={requestDesignTaskStatus} />}
-                {tab === "drawings" && <Revisions file={file} rows={(detail.revisions || []).filter((row) => workspaceFocus === "DESIGN" ? row.type === "DESIGN_DRAWING" : workspaceFocus === "ENGINEERING" ? row.type === "ENGINEERING_DRAWING" : true)} canUploadDesign={workspaceFocus === "DESIGN" && canDesignTeam && !juniorDesignerOnly} canUploadEngineering={workspaceFocus === "ENGINEERING" && canEngineeringReview} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={workspaceFocus === "ENGINEERING" && canEngineeringDecision} setAction={setAction} working={working} />}
-                {tab === "engineeringChecklist" && <Checklist title="Engineering Technical Checklist" area="ENGINEERING" items={detail.engineeringChecklist || []} progress={file.engineeringChecklistProgress} canEdit={canEngineeringReview && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage)} working={working} onSave={saveChecklist} />}
-                {tab === "queries" && <IssueChat
-                  items={detail.queries || []}
-                  timeline={detail.timeline || []}
-                  file={file}
-                  currentUsername={currentUsername}
-                  selectedQueryId={selectedQueryId}
-                  onSelectQuery={selectIssueThread}
-                  canCreate={canSharedQueryWrite && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW"].includes(file.stage)}
-                  canMessage={canSharedQueryWrite}
-                  canClose={canSharedQueryClose}
-                  readOnly={workspaceFocus === "PPC" && !canSharedQueryWrite}
-                  working={working}
-                  onSendMessage={sendQueryMessage}
-                  setAction={setAction}
-                />}
-                {tab === "engineeringTasks" && <Tasks items={detail.engineeringTasks || []} canManage={canEngineeringReview} canCreateSelf={juniorEngineerOnly} canCreate={canCreateEngineeringTask} canWork={canEngineeringTask} setAction={setAction} />}
-                {tab === "timeline" && <Timeline rows={timelineForFocus(detail.timeline, workspaceFocus)} />}
-              </Box>
-            </Card>
-          </Box>
-        )}
-      </Box>
+              <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                <Tabs value={tab} onChange={(_, value) => selectWorkspaceTab(value)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: "1px solid var(--mf-border)", px: 1, minHeight: 42, background: "var(--mf-panel-solid)", position: "sticky", top: 0, zIndex: 2 }}>
+                  {visibleTabs.map(([value, label]) => <Tab key={value} value={value} label={value === "queries" && Number(file.openQueries || 0) > 0 ? `${label} · ${file.openQueries}` : label} sx={{ minHeight: 42, py: 0.6 }} />)}
+                </Tabs>
+                <Box sx={{ p: { xs: 1, sm: 1.25 }, minWidth: 0 }}>
+                  {tab === "overview" && <Overview focus={workspaceFocus} file={file} detail={detail} canDesignHead={canDesignHead} canPpc={canPpc} canEngineeringReview={canEngineeringReview} canEngineeringDecision={canEngineeringDecision} setAction={setAction} />}
+                  {tab === "designChecklist" && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={!juniorDesignerOnly && canDesignTeam && DESIGN_STAGES.includes(file.stage)} working={working} onSave={saveChecklist} />}
+                  {tab === "designTasks" && <DesignTasks items={detail.designTasks || []} progress={file.designTaskProgress} canHead={canDesignHead && DESIGN_STAGES.includes(file.stage)} canWork={canDesignTeam && DESIGN_STAGES.includes(file.stage)} onCreate={openNewDesignTask} onEdit={openEditDesignTask} onStatus={requestDesignTaskStatus} />}
+                  {tab === "drawings" && <Revisions file={file} rows={(detail.revisions || []).filter((row) => workspaceFocus === "DESIGN" ? row.type === "DESIGN_DRAWING" : workspaceFocus === "ENGINEERING" ? row.type === "ENGINEERING_DRAWING" : true)} canUploadDesign={workspaceFocus === "DESIGN" && canDesignTeam && !juniorDesignerOnly} canUploadEngineering={workspaceFocus === "ENGINEERING" && canEngineeringReview} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={workspaceFocus === "ENGINEERING" && canEngineeringDecision} setAction={setAction} working={working} />}
+                  {tab === "engineeringChecklist" && <Checklist title="Engineering Technical Checklist" area="ENGINEERING" items={detail.engineeringChecklist || []} progress={file.engineeringChecklistProgress} canEdit={canEngineeringReview && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage)} working={working} onSave={saveChecklist} />}
+                  {tab === "queries" && <IssueChat items={detail.queries || []} timeline={detail.timeline || []} file={file} currentUsername={currentUsername} selectedQueryId={selectedQueryId} onSelectQuery={selectIssueThread} canCreate={canSharedQueryWrite && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW"].includes(file.stage)} canMessage={canSharedQueryWrite} canClose={canSharedQueryClose} readOnly={workspaceFocus === "PPC" && !canSharedQueryWrite} working={working} onSendMessage={sendQueryMessage} setAction={setAction} />}
+                  {tab === "engineeringTasks" && <Tasks items={detail.engineeringTasks || []} canManage={canEngineeringReview} canCreateSelf={juniorEngineerOnly} canCreate={canCreateEngineeringTask} canWork={canEngineeringTask} setAction={setAction} />}
+                  {tab === "timeline" && <Timeline rows={timelineForFocus(detail.timeline, workspaceFocus)} />}
+                </Box>
+              </Card>
+            </>
+          )}
+        </Box>
+      </Drawer>
       </>
       )}
 
