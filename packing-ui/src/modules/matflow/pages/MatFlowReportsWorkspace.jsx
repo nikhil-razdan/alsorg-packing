@@ -154,67 +154,50 @@ function reportTitle(type) {
 
 
 /*
- * Reports/Team grid tracks deliberately use minmax + fractional growth instead of
- * fixed pixel-only columns. The minimums keep the grid readable at normal/high zoom;
- * the fractional maxima absorb extra width when the browser is zoomed out so the
- * header and rows continue to fill the available MatFlow workspace evenly.
+ * Human-facing Team/Reports rows are intentionally grouped by meaning instead of
+ * splitting every field into its own fixed-width column. This keeps all important
+ * information visible when browser zoom reduces the effective CSS viewport.
+ *
+ * At desktop widths the tracks share the available width with fractional sizing.
+ * Below the md breakpoint List mode automatically changes to a compact stacked row
+ * (rendered later in the page) instead of creating a horizontal-scroll dependency.
  */
 const pageColumns = (type) => {
-  const identity = [
-    { key: "productName", label: "Product", width: "minmax(150px,1.05fr)" },
-    { key: "projectCode", label: "PD No.", width: "minmax(92px,.62fr)" },
-    { key: "clientName", label: "Client", width: "minmax(125px,.86fr)" },
-    { key: "projectName", label: "Project", width: "minmax(135px,.94fr)" },
-  ];
   if (type === REPORTS.DESIGN) return [
-    ...identity,
-    { key: "task", label: "Task", width: "minmax(205px,1.5fr)" },
-    { key: "assignedBy", label: "Assigned By", width: "minmax(118px,.82fr)" },
-    { key: "assignee", label: "Assigned To", width: "minmax(145px,1fr)" },
-    { key: "status", label: "Status", width: "minmax(100px,.68fr)" },
-    { key: "receivedAt", label: "Received", width: "minmax(132px,.9fr)" },
-    { key: "dueAt", label: "Due", width: "minmax(132px,.9fr)" },
-    { key: "completedAt", label: "Completed", width: "minmax(132px,.9fr)" },
-    { key: "action", label: "", width: "88px", align: "right" },
+    { key: "identity", label: "Product / PD", width: "minmax(0,1.02fr)" },
+    { key: "context", label: "Client / Project", width: "minmax(0,.86fr)" },
+    { key: "task", label: "Task", width: "minmax(0,1.34fr)" },
+    { key: "assignment", label: "Assignment", width: "minmax(0,1.02fr)" },
+    { key: "status", label: "Status", width: "minmax(0,.72fr)" },
+    { key: "timeline", label: "Timeline", width: "minmax(0,1.20fr)" },
+    { key: "action", label: "", width: "90px", align: "right" },
   ];
   if (type === REPORTS.ENGINEERING) return [
-    ...identity,
-    { key: "task", label: "Engineering Task", width: "minmax(210px,1.55fr)" },
-    { key: "assignee", label: "Assigned Engineer", width: "minmax(145px,1fr)" },
-    { key: "status", label: "Status", width: "minmax(100px,.68fr)" },
-    { key: "priority", label: "Priority", width: "minmax(90px,.58fr)" },
-    { key: "dueAt", label: "Due", width: "minmax(132px,.9fr)" },
-    { key: "startedAt", label: "Started", width: "minmax(132px,.9fr)" },
-    { key: "completedAt", label: "Completed", width: "minmax(132px,.9fr)" },
-    { key: "action", label: "", width: "88px", align: "right" },
+    { key: "identity", label: "Product / PD", width: "minmax(0,1.02fr)" },
+    { key: "context", label: "Client / Project", width: "minmax(0,.86fr)" },
+    { key: "task", label: "Engineering Task", width: "minmax(0,1.38fr)" },
+    { key: "assignment", label: "Engineer", width: "minmax(0,1fr)" },
+    { key: "status", label: "Status", width: "minmax(0,.72fr)" },
+    { key: "timeline", label: "Timeline", width: "minmax(0,1.18fr)" },
+    { key: "action", label: "", width: "90px", align: "right" },
   ];
   if (type === REPORTS.QUERIES) return [
-    ...identity,
-    { key: "task", label: "Issue / Topic", width: "minmax(225px,1.65fr)" },
-    { key: "assignee", label: "Assigned To", width: "minmax(145px,1fr)" },
-    { key: "status", label: "Status", width: "minmax(100px,.68fr)" },
-    { key: "priority", label: "Priority", width: "minmax(90px,.58fr)" },
-    { key: "dueAt", label: "Due", width: "minmax(132px,.9fr)" },
-    { key: "updatedAt", label: "Last Updated", width: "minmax(132px,.9fr)" },
-    { key: "action", label: "", width: "88px", align: "right" },
+    { key: "identity", label: "Product / PD", width: "minmax(0,1.02fr)" },
+    { key: "context", label: "Client / Project", width: "minmax(0,.86fr)" },
+    { key: "task", label: "Issue / Topic", width: "minmax(0,1.48fr)" },
+    { key: "assignment", label: "Assigned To", width: "minmax(0,.95fr)" },
+    { key: "status", label: "Status", width: "minmax(0,.72fr)" },
+    { key: "timeline", label: "Timeline", width: "minmax(0,1.16fr)" },
+    { key: "action", label: "", width: "96px", align: "right" },
   ];
   return [
-    ...identity,
-    { key: "stage", label: "Stage", width: "minmax(135px,.92fr)" },
-    { key: "ppcOwner", label: "PPC Owner", width: "minmax(130px,.88fr)" },
-    { key: "ppcGate1Decision", label: "Gate 1", width: "minmax(92px,.62fr)" },
-    { key: "ppcGate2Decision", label: "Gate 2", width: "minmax(92px,.62fr)" },
-    { key: "plannedProductionReleaseDate", label: "Planned Release", width: "minmax(120px,.8fr)" },
-    { key: "productionReleasedAt", label: "Released At", width: "minmax(132px,.9fr)" },
-    { key: "action", label: "", width: "88px", align: "right" },
+    { key: "identity", label: "Product / PD", width: "minmax(0,1.10fr)" },
+    { key: "context", label: "Client / Project", width: "minmax(0,.92fr)" },
+    { key: "workflow", label: "Workflow / Owner", width: "minmax(0,1.10fr)" },
+    { key: "gates", label: "PPC Gates", width: "minmax(0,.86fr)" },
+    { key: "timeline", label: "Release Timeline", width: "minmax(0,1.18fr)" },
+    { key: "action", label: "", width: "90px", align: "right" },
   ];
-};
-
-const reportTableMinWidth = (type) => {
-  if (type === REPORTS.DESIGN) return 1500;
-  if (type === REPORTS.ENGINEERING) return 1390;
-  if (type === REPORTS.QUERIES) return 1300;
-  return 1260;
 };
 
 const reportStatusColor = (row) => {
@@ -248,21 +231,133 @@ const teamMemberNames = (value) => String(value || "")
   .map((item) => item.trim())
   .filter(Boolean);
 
+const cellPrimarySx = {
+  fontSize: 10.15,
+  lineHeight: 1.28,
+  fontWeight: 900,
+  color: "var(--mf-text)",
+  overflowWrap: "anywhere",
+};
+
+const cellSecondarySx = {
+  mt: 0.12,
+  fontSize: 8.75,
+  lineHeight: 1.32,
+  fontWeight: 700,
+  color: "var(--mf-text-muted)",
+  overflowWrap: "anywhere",
+};
+
+const dateText = (value) => (value ? toDateTime(value) : "—");
+
 const pageCellValue = (row, key, type) => {
-  if (key === "task") return (
-    <Box>
-      <Typography sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{row.taskTitle || "—"}</Typography>
-      <Typography sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.taskNo || row.taskKey || readable(row.taskType || "")}</Typography>
+  if (key === "identity") return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={cellPrimarySx}>{row.productName || "Unnamed Product"}</Typography>
+      <Typography sx={cellSecondarySx}>
+        PD {row.projectCode || "—"}
+        {row.productionFileNo ? ` · File ${row.productionFileNo}` : ""}
+        {row.drawingNo ? ` · DWG ${row.drawingNo}` : ""}
+      </Typography>
     </Box>
   );
-  if (key === "status") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: reportStatusColor(row) }}>{reportStatusLabel(type, row.status)}</Typography>;
-  if (key === "stage") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: reportStatusColor(row) }}>{readable(row.stage || "—")}</Typography>;
-  if (["receivedAt", "dueAt", "startedAt", "completedAt", "updatedAt", "productionReleasedAt"].includes(key)) {
-    return <Typography sx={{ fontSize: 9.6, color: "var(--mf-text-secondary)", whiteSpace: "nowrap" }}>{toDateTime(row[key])}</Typography>;
+
+  if (key === "context") return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>{row.clientName || "—"}</Typography>
+      <Typography sx={cellSecondarySx}>{row.projectName || "—"}</Typography>
+    </Box>
+  );
+
+  if (key === "task") return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={cellPrimarySx}>{row.taskTitle || "—"}</Typography>
+      <Typography sx={cellSecondarySx}>
+        {row.taskNo || row.taskKey || readable(row.taskType || "") || "—"}
+        {row.taskType && row.taskNo ? ` · ${readable(row.taskType)}` : ""}
+      </Typography>
+      {type === REPORTS.QUERIES && row.description && (
+        <Typography sx={{ ...cellSecondarySx, mt: 0.18 }}>{row.description}</Typography>
+      )}
+    </Box>
+  );
+
+  if (key === "assignment") {
+    const primaryValue = row.assignee || row.ppcOwner || row.currentOwner || "Unassigned";
+    let secondaryValue = "";
+    if (type === REPORTS.DESIGN) secondaryValue = `Assigned by ${row.assignedBy || "—"}`;
+    else if (type === REPORTS.ENGINEERING && row.completedBy) secondaryValue = `Completed by ${row.completedBy}`;
+    else if (type === REPORTS.QUERIES && row.respondedBy) secondaryValue = `Latest response · ${row.respondedBy}`;
+
+    return (
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>{primaryValue}</Typography>
+        {secondaryValue && <Typography sx={cellSecondarySx}>{secondaryValue}</Typography>}
+      </Box>
+    );
   }
-  if (key === "plannedProductionReleaseDate") return <Typography sx={{ fontSize: 9.8, color: "var(--mf-text-secondary)" }}>{row[key] || "—"}</Typography>;
-  if (["ppcGate1Decision", "ppcGate2Decision", "priority"].includes(key)) return <Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(row[key] || "—")}</Typography>;
-  return <Typography sx={{ fontSize: 10, fontWeight: ["productName", "projectCode"].includes(key) ? 900 : 750, color: ["productName", "projectCode"].includes(key) ? "var(--mf-text)" : "var(--mf-text-secondary)" }}>{row[key] || "—"}</Typography>;
+
+  if (key === "status") return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ ...cellPrimarySx, color: reportStatusColor(row) }}>
+        {reportStatusLabel(type, row.status)}
+      </Typography>
+      {row.priority && (
+        <Typography sx={cellSecondarySx}>Priority · {readable(row.priority)}</Typography>
+      )}
+    </Box>
+  );
+
+  if (key === "workflow") return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ ...cellPrimarySx, color: reportStatusColor(row) }}>{readable(row.stage || "—")}</Typography>
+      <Typography sx={cellSecondarySx}>
+        {row.ppcOwner || row.currentOwner ? `Owner · ${row.ppcOwner || row.currentOwner}` : "Owner · —"}
+      </Typography>
+    </Box>
+  );
+
+  if (key === "gates") return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>G1 · {readable(row.ppcGate1Decision || "—")}</Typography>
+      <Typography sx={cellSecondarySx}>G2 · {readable(row.ppcGate2Decision || "—")}</Typography>
+    </Box>
+  );
+
+  if (key === "timeline") {
+    if (type === REPORTS.DESIGN) return (
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>Due · {dateText(row.dueAt)}</Typography>
+        <Typography sx={cellSecondarySx}>Received · {dateText(row.receivedAt)}</Typography>
+        {row.completedAt && <Typography sx={cellSecondarySx}>Completed · {dateText(row.completedAt)}</Typography>}
+      </Box>
+    );
+    if (type === REPORTS.ENGINEERING) return (
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>Due · {dateText(row.dueAt)}</Typography>
+        <Typography sx={cellSecondarySx}>Started · {dateText(row.startedAt)}</Typography>
+        {row.completedAt && <Typography sx={cellSecondarySx}>Completed · {dateText(row.completedAt)}</Typography>}
+      </Box>
+    );
+    if (type === REPORTS.QUERIES) return (
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>Due · {dateText(row.dueAt)}</Typography>
+        <Typography sx={cellSecondarySx}>Updated · {dateText(row.updatedAt)}</Typography>
+        {row.respondedAt && <Typography sx={cellSecondarySx}>Response · {dateText(row.respondedAt)}</Typography>}
+      </Box>
+    );
+    return (
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ ...cellPrimarySx, fontWeight: 850 }}>
+          Planned · {row.plannedProductionReleaseDate || "—"}
+        </Typography>
+        <Typography sx={cellSecondarySx}>Released · {dateText(row.productionReleasedAt)}</Typography>
+        {row.updatedAt && <Typography sx={cellSecondarySx}>Updated · {dateText(row.updatedAt)}</Typography>}
+      </Box>
+    );
+  }
+
+  return <Typography sx={{ ...cellPrimarySx, fontWeight: 750 }}>{row[key] || "—"}</Typography>;
 };
 
 export function MatFlowReportsPage() {
@@ -515,7 +610,6 @@ export function MatFlowReportsPage() {
   const reportLabel = availableReports.find((item) => item.value === reportType)?.label || "Report";
   const visibleColumns = useMemo(() => pageColumns(reportType), [reportType]);
   const tableTemplate = useMemo(() => visibleColumns.map((column) => column.width).join(" "), [visibleColumns]);
-  const tableMinWidth = useMemo(() => reportTableMinWidth(reportType), [reportType]);
 
   if (loading && !rows.length) return <LoadingBlock />;
 
@@ -701,64 +795,140 @@ export function MatFlowReportsPage() {
         </Box>
       ) : (
         <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none", minWidth: 0 }}>
-          <Box sx={{ overflowX: "auto", overflowY: "hidden", width: "100%", scrollbarGutter: "stable" }}>
-            <Box sx={{ width: "100%", minWidth: tableMinWidth }}>
+          {/* Compact List mode: used automatically when browser zoom reduces the effective viewport. */}
+          <Box sx={{ display: { xs: "grid", md: "none" }, gap: 0, minWidth: 0 }}>
+            {filtered.map((row, index) => (
               <Box
+                key={`${row.productionFileId || "file"}-${row.taskNo || row.taskKey || row.stage}-${index}`}
                 sx={{
-                  px: 1.1,
-                  py: 0.75,
+                  p: 0.9,
+                  minWidth: 0,
                   display: "grid",
-                  gridTemplateColumns: tableTemplate,
-                  gap: 0.9,
-                  alignItems: "center",
-                  background: "var(--mf-table-head)",
-                  borderBottom: "1px solid var(--mf-border-strong)",
-                  position: "sticky",
-                  top: 0,
-                  zIndex: 1,
+                  gap: 0.65,
+                  borderBottom: "1px solid var(--mf-border)",
+                  boxShadow: `inset 3px 0 0 ${reportRowAccent(row)}`,
+                  background: "var(--mf-panel-solid)",
+                  "&:last-child": { borderBottom: 0 },
                 }}
               >
-                {visibleColumns.map((column) => (
-                  <Typography key={column.key} sx={{ minWidth: 0, textAlign: column.align || "left", fontSize: 8.6, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
-                    {column.label}
-                  </Typography>
-                ))}
+                <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0,1.25fr) minmax(0,.75fr)", gap: 0.7, minWidth: 0 }}>
+                  <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "identity", reportType)}</Box>
+                  <Box sx={{ minWidth: 0 }}>{pageCellValue(row, reportType === REPORTS.PPC ? "workflow" : "status", reportType)}</Box>
+                </Box>
+
+                {reportType === REPORTS.PPC ? (
+                  <>
+                    <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 0.7, minWidth: 0 }}>
+                      <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "context", reportType)}</Box>
+                      <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "gates", reportType)}</Box>
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "timeline", reportType)}</Box>
+                  </>
+                ) : (
+                  <>
+                    <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "task", reportType)}</Box>
+                    <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 0.7, minWidth: 0 }}>
+                      <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "context", reportType)}</Box>
+                      <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "assignment", reportType)}</Box>
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>{pageCellValue(row, "timeline", reportType)}</Box>
+                  </>
+                )}
+
+                <Box sx={{ display: "flex", justifyContent: "flex-end", pt: 0.15 }}>
+                  <Button
+                    size="small"
+                    endIcon={<OpenInNewOutlinedIcon />}
+                    onClick={() => navigate(reportWorkPath(reportType, row))}
+                    sx={secondaryBtnSx}
+                  >
+                    {reportType === REPORTS.QUERIES ? "Open chat" : "Open"}
+                  </Button>
+                </Box>
               </Box>
-              {filtered.map((row, index) => (
-                <Box
-                  key={`${row.productionFileId || "file"}-${row.taskNo || row.taskKey || row.stage}-${index}`}
+            ))}
+          </Box>
+
+          {/* Desktop/zoomed-out List mode: one shared grid template for header + rows, no forced min-width. */}
+          <Box sx={{ display: { xs: "none", md: "block" }, width: "100%", minWidth: 0 }}>
+            <Box
+              sx={{
+                px: 1.05,
+                py: 0.72,
+                display: "grid",
+                gridTemplateColumns: tableTemplate,
+                gap: 0.65,
+                alignItems: "center",
+                background: "var(--mf-table-head)",
+                borderBottom: "1px solid var(--mf-border-strong)",
+                position: "sticky",
+                top: 0,
+                zIndex: 1,
+                minWidth: 0,
+              }}
+            >
+              {visibleColumns.map((column) => (
+                <Typography
+                  key={column.key}
                   sx={{
-                    px: 1.1,
-                    py: 0.85,
-                    display: "grid",
-                    gridTemplateColumns: tableTemplate,
-                    gap: 0.9,
-                    alignItems: "center",
-                    borderBottom: "1px solid var(--mf-border)",
-                    boxShadow: `inset 3px 0 0 ${reportRowAccent(row)}`,
-                    background: "var(--mf-panel-solid)",
-                    "&:last-child": { borderBottom: 0 },
-                    "&:hover": { background: "var(--mf-table-hover)" },
+                    minWidth: 0,
+                    textAlign: column.align || "left",
+                    fontSize: 8.45,
+                    lineHeight: 1.2,
+                    fontWeight: 950,
+                    letterSpacing: ".03em",
+                    textTransform: "uppercase",
+                    color: "var(--mf-text-muted)",
+                    overflowWrap: "anywhere",
                   }}
                 >
-                  {visibleColumns.map((column) => column.key === "action" ? (
-                    <Button
-                      key={column.key}
-                      size="small"
-                      endIcon={<OpenInNewOutlinedIcon />}
-                      onClick={() => navigate(reportWorkPath(reportType, row))}
-                      sx={{ ...secondaryBtnSx, justifySelf: "end" }}
-                    >
-                      {reportType === REPORTS.QUERIES ? "Open chat" : "Open"}
-                    </Button>
-                  ) : (
-                    <Box key={column.key} sx={{ minWidth: 0 }}>
-                      {pageCellValue(row, column.key, reportType)}
-                    </Box>
-                  ))}
-                </Box>
+                  {column.label}
+                </Typography>
               ))}
             </Box>
+
+            {filtered.map((row, index) => (
+              <Box
+                key={`${row.productionFileId || "file"}-${row.taskNo || row.taskKey || row.stage}-${index}`}
+                sx={{
+                  px: 1.05,
+                  py: 0.78,
+                  display: "grid",
+                  gridTemplateColumns: tableTemplate,
+                  gap: 0.65,
+                  alignItems: "center",
+                  minWidth: 0,
+                  borderBottom: "1px solid var(--mf-border)",
+                  boxShadow: `inset 3px 0 0 ${reportRowAccent(row)}`,
+                  background: "var(--mf-panel-solid)",
+                  "&:last-child": { borderBottom: 0 },
+                  "&:hover": { background: "var(--mf-table-hover)" },
+                }}
+              >
+                {visibleColumns.map((column) => column.key === "action" ? (
+                  <Button
+                    key={column.key}
+                    size="small"
+                    endIcon={<OpenInNewOutlinedIcon />}
+                    onClick={() => navigate(reportWorkPath(reportType, row))}
+                    sx={{
+                      ...secondaryBtnSx,
+                      justifySelf: "end",
+                      minWidth: 0,
+                      px: 0.8,
+                      whiteSpace: "nowrap",
+                      "& .MuiButton-endIcon": { ml: 0.35 },
+                    }}
+                  >
+                    {reportType === REPORTS.QUERIES ? "Chat" : "Open"}
+                  </Button>
+                ) : (
+                  <Box key={column.key} sx={{ minWidth: 0, overflow: "hidden" }}>
+                    {pageCellValue(row, column.key, reportType)}
+                  </Box>
+                ))}
+              </Box>
+            ))}
           </Box>
         </Card>
       )}
