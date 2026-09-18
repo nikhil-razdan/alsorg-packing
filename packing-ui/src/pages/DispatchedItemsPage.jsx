@@ -6066,16 +6066,226 @@ export default function DispatchedItemsPage() {
 		}
 	};
 
-	const formatSiteGps = (latitude, longitude, accuracy) => {
+	const getSiteLocationView = (latitude, longitude, accuracy) => {
 		const lat = Number(latitude);
 		const lon = Number(longitude);
 		const acc = Number(accuracy);
 
-		if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "—";
+		const validCoordinates =
+			Number.isFinite(lat) &&
+			Number.isFinite(lon) &&
+			lat >= -90 &&
+			lat <= 90 &&
+			lon >= -180 &&
+			lon <= 180 &&
+			!(Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001);
 
-		return `${lat.toFixed(6)}, ${lon.toFixed(6)}${
-			Number.isFinite(acc) ? ` • ±${Math.round(acc)} m` : ""
-		}`;
+		if (!validCoordinates) return null;
+
+		const latitudeSpan = 0.0035;
+		const latitudeRadians = (lat * Math.PI) / 180;
+		const longitudeScale = Math.max(
+			0.35,
+			Math.abs(Math.cos(latitudeRadians))
+		);
+		const longitudeSpan = latitudeSpan / longitudeScale;
+
+		const west = lon - longitudeSpan;
+		const south = lat - latitudeSpan;
+		const east = lon + longitudeSpan;
+		const north = lat + latitudeSpan;
+		const coordinateQuery = `${lat.toFixed(7)},${lon.toFixed(7)}`;
+
+		return {
+			accuracy:
+				Number.isFinite(acc) && acc > 0
+					? Math.round(acc)
+					: null,
+			coordinateLabel: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+			googleMapsUrl:
+				`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coordinateQuery)}`,
+			openStreetMapEmbedUrl:
+				`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${west},${south},${east},${north}`)}&layer=mapnik&marker=${encodeURIComponent(`${lat},${lon}`)}`,
+		};
+	};
+
+	const openSiteLocationInMaps = (location) => {
+		if (!location?.googleMapsUrl) return;
+
+		window.open(
+			location.googleMapsUrl,
+			"_blank",
+			"noopener,noreferrer"
+		);
+	};
+
+	const renderSiteLocationCard = (
+		label,
+		latitude,
+		longitude,
+		accuracy
+	) => {
+		const location = getSiteLocationView(
+			latitude,
+			longitude,
+			accuracy
+		);
+
+		return (
+			<Box
+				sx={{
+					p: 1.25,
+					borderRadius: 2.2,
+					background: "var(--pf-surface-alt)",
+					border: "1px solid var(--pf-border-soft)",
+					minWidth: 0,
+				}}
+			>
+				<Box
+					sx={{
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "space-between",
+						gap: 1,
+						mb: location ? 1 : 0,
+					}}
+				>
+					<Box>
+						<Box
+							sx={{
+								color: "var(--pf-text-muted)",
+								fontSize: 9.5,
+								fontWeight: 950,
+								textTransform: "uppercase",
+								letterSpacing: ".06em",
+							}}
+						>
+							{label}
+						</Box>
+
+						<Box
+							sx={{
+								mt: 0.35,
+								color: location
+									? "var(--dispatch-green-text)"
+									: "var(--pf-text-muted)",
+								fontSize: 11.5,
+								fontWeight: 900,
+							}}
+						>
+							{location ? "Location captured" : "Not captured"}
+						</Box>
+					</Box>
+
+					{location?.accuracy ? (
+						<Box
+							sx={{
+								px: 1,
+								py: 0.45,
+								borderRadius: 999,
+								color: "var(--dispatch-blue-text)",
+								background: "rgba(59,130,246,.08)",
+								border: "1px solid rgba(59,130,246,.18)",
+								fontSize: 9.5,
+								fontWeight: 950,
+								whiteSpace: "nowrap",
+							}}
+						>
+							±{location.accuracy} m accuracy
+						</Box>
+					) : null}
+				</Box>
+
+				{location ? (
+					<>
+						<Box
+							component="iframe"
+							title={`${label} map`}
+							src={location.openStreetMapEmbedUrl}
+							loading="lazy"
+							referrerPolicy="no-referrer"
+							sx={{
+								width: "100%",
+								height: 190,
+								border: "1px solid var(--pf-border-soft)",
+								borderRadius: 2,
+								background: "var(--pf-surface)",
+							}}
+						/>
+
+						<Box
+							sx={{
+								mt: 1,
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "space-between",
+								gap: 1,
+								flexWrap: "wrap",
+							}}
+						>
+							<Box sx={{ minWidth: 0 }}>
+								<Box
+									sx={{
+										color: "var(--pf-text-strong)",
+										fontSize: 11,
+										fontWeight: 850,
+									}}
+								>
+									Site proof location
+								</Box>
+								<Box
+									sx={{
+										mt: 0.2,
+										color: "var(--pf-text-muted)",
+										fontSize: 9.5,
+										fontWeight: 700,
+									}}
+								>
+									Coordinates retained for audit: {location.coordinateLabel}
+								</Box>
+							</Box>
+
+							<Button
+								onClick={() => openSiteLocationInMaps(location)}
+								sx={{
+									height: 34,
+									px: 1.4,
+									borderRadius: "9px",
+									textTransform: "none",
+									fontSize: 10.5,
+									fontWeight: 900,
+									color: "#fff",
+									background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+									border: "1px solid rgba(37,99,235,.28)",
+									boxShadow: "0 5px 12px rgba(37,99,235,.14)",
+									"&:hover": {
+										background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+									},
+								}}
+							>
+								Open in Google Maps ↗
+							</Button>
+						</Box>
+					</>
+				) : (
+					<Box
+						sx={{
+							mt: 0.9,
+							p: 1.1,
+							borderRadius: 1.7,
+							color: "var(--pf-text-muted)",
+							background: "var(--pf-surface)",
+							border: "1px dashed var(--pf-border-soft)",
+							fontSize: 10.5,
+							fontWeight: 750,
+							lineHeight: 1.45,
+						}}
+					>
+						No valid GPS proof was stored for this stage.
+					</Box>
+				)}
+			</Box>
+		);
 	};
 
 	const getDispatchRowPlantDisplayLabel = (row) =>
@@ -30557,10 +30767,8 @@ export default function DispatchedItemsPage() {
 														["Delivered At", formatDispatchTableDateTime(siteProofDetail.deliveredAt)],
 														["Delivered By", siteProofDetail.deliveredBy || "—"],
 														["Receiver", [siteProofDetail.receiverName, siteProofDetail.receiverPhone].filter(Boolean).join(" • ") || "—"],
-														["Delivery GPS", formatSiteGps(siteProofDetail.deliveryLatitude, siteProofDetail.deliveryLongitude, siteProofDetail.deliveryAccuracy)],
 														["Opened At", formatDispatchTableDateTime(siteProofDetail.openedAt)],
 														["Opened By", siteProofDetail.openedBy || "—"],
-														["Opening GPS", formatSiteGps(siteProofDetail.openingLatitude, siteProofDetail.openingLongitude, siteProofDetail.openingAccuracy)],
 													].map(([label, value]) => (
 														<Box key={label} sx={{ p: 1.15, borderRadius: 2, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" }}>
 															<Box sx={{ color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</Box>
@@ -30568,6 +30776,32 @@ export default function DispatchedItemsPage() {
 														</Box>
 													))}
 												</Box>
+
+														<Box
+															sx={{
+																mt: 1.2,
+																display: "grid",
+																gridTemplateColumns: {
+																	xs: "minmax(0,1fr)",
+																	lg: "repeat(2,minmax(0,1fr))",
+																},
+																gap: 1,
+															}}
+														>
+															{renderSiteLocationCard(
+																"Delivery Location",
+																siteProofDetail.deliveryLatitude,
+																siteProofDetail.deliveryLongitude,
+																siteProofDetail.deliveryAccuracy
+															)}
+
+															{renderSiteLocationCard(
+																"Opening Location",
+																siteProofDetail.openingLatitude,
+																siteProofDetail.openingLongitude,
+																siteProofDetail.openingAccuracy
+															)}
+														</Box>
 
 												{(siteProofDetail.deliveryRemarks || siteProofDetail.openingRemarks) && (
 													<Box sx={{ mt: 1.2, p: 1.2, borderRadius: 2, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" }}>
