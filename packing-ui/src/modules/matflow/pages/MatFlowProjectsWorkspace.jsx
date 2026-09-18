@@ -1043,7 +1043,7 @@ export function MatFlowProjectsPage() {
               </Box>
             </Box>
 
-            <Box sx={sidePanelBodySx}>
+            <Box className="mf-side-panel-scroll" sx={sidePanelBodySx}>
               <Card sx={{ ...panelSx, p: 1.15, boxShadow: "none" }}>
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 0.75 }}>
                   <Meta label="Plant" value={selectedProject.plantCode} />

@@ -1454,7 +1454,7 @@ export function MatFlowWorkWorkspacePage() {
           </IconButton>
         </Box>
 
-        <Box sx={sidePanelBodySx}>
+        <Box className="mf-side-panel-scroll" sx={sidePanelBodySx}>
           {detailLoading && !detail ? (
             <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Production File…</Card>
           ) : !detail || !file ? (

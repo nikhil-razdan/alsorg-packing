@@ -2202,6 +2202,12 @@ export const sidePanelPaperSx = {
   },
   maxWidth: "100vw",
   minWidth: 0,
+  // A right Drawer must own the viewport height. Without an explicit height/maxHeight,
+  // a tall flex child can make Paper grow with its content and overflow the document
+  // instead of creating the intended internal scroll surface.
+  height: "100dvh",
+  maxHeight: "100dvh",
+  minHeight: 0,
   display: "flex",
   flexDirection: "column",
   color: "var(--mf-text)",
@@ -2210,6 +2216,7 @@ export const sidePanelPaperSx = {
   borderLeft: "1px solid var(--mf-border-strong)",
   boxShadow: "var(--mf-modal-shadow)",
   overflow: "hidden",
+  overscrollBehavior: "contain",
 };
 
 export const sidePanelHeaderSx = {
@@ -2227,11 +2234,19 @@ export const sidePanelHeaderSx = {
 
 export const sidePanelBodySx = {
   minWidth: 0,
-  flex: 1,
+  // Critical for a scrollable flex child: min-height:auto would otherwise let this
+  // element grow to the full content height and prevent overflowY from engaging.
+  minHeight: 0,
+  height: 0,
+  flex: "1 1 auto",
   overflowY: "auto",
   overflowX: "hidden",
+  overscrollBehavior: "contain",
+  WebkitOverflowScrolling: "touch",
+  scrollbarGutter: "stable",
   p: { xs: 1, sm: 1.2 },
   display: "grid",
+  gridAutoRows: "max-content",
   alignContent: "start",
   gap: 1,
 };
