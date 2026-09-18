@@ -561,15 +561,14 @@ public class SiteLifecycleService {
         if (currentUserService.isAdmin(user)) return;
 
         /*
-         * DRIVER delivery scanning is intentionally packet-by-packet and stateless.
-         * There is no mobile challan cart, no packet-count lock and no bulk/single
-         * mode. The authorization boundary is simply the driver assignment saved
-         * on the dispatched packet/challan.
+         * Driver authorization is intentionally evaluated per physical packet.
+         * The mobile app may collect many authorized packet QRs in one continuous
+         * scan session, including packets from different challans, but there is no
+         * challan-number lock and no expected challan packet count.
          *
-         * DispatchChallanService writes the selected driverId to every item in a
-         * generated challan. Therefore validating the scanned row's driverId is the
-         * correct and minimal way to ensure a DRIVER can work only on challans that
-         * are assigned to that Driver master profile.
+         * DispatchChallanService writes the selected driverId to each dispatched
+         * row. Therefore the stable authorization boundary is the scanned row's
+         * driverId, not the mobile scan session or challan number.
          *
          * Unassigned challans are NOT claimable by arbitrary DRIVER accounts. If a
          * physical delivery must be handled by a different/external driver, Dispatch
