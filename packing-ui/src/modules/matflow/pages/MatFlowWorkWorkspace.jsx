@@ -1943,65 +1943,174 @@ function ChecklistRow({ item, area, canEdit, working, onSave }) {
 }
 
 function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onStatus }) {
+  const [taskFilter, setTaskFilter] = useState("ALL");
+
+  const taskStats = useMemo(() => {
+    const source = Array.isArray(items) ? items : [];
+    const now = new Date();
+    const pending = source.filter((item) => designTaskStatusGroup(item.status) === "PENDING").length;
+    const wip = source.filter((item) => designTaskStatusGroup(item.status) === "WIP").length;
+    const completed = source.filter((item) => designTaskStatusGroup(item.status) === "COMPLETED").length;
+    const overdue = source.filter((item) => {
+      if (!item.dueAt || designTaskStatusGroup(item.status) === "COMPLETED") return false;
+      const due = new Date(item.dueAt);
+      return !Number.isNaN(due.getTime()) && due < now;
+    }).length;
+    return { total: source.length, pending, wip, completed, overdue };
+  }, [items]);
+
+  const visibleItems = useMemo(() => {
+    const now = new Date();
+    const source = Array.isArray(items) ? items : [];
+    return source
+      .filter((item) => {
+        if (taskFilter === "ALL") return true;
+        if (taskFilter === "OVERDUE") {
+          if (!item.dueAt || designTaskStatusGroup(item.status) === "COMPLETED") return false;
+          const due = new Date(item.dueAt);
+          return !Number.isNaN(due.getTime()) && due < now;
+        }
+        return designTaskStatusGroup(item.status) === taskFilter;
+      })
+      .slice()
+      .sort((left, right) => {
+        const leftDone = designTaskStatusGroup(left.status) === "COMPLETED";
+        const rightDone = designTaskStatusGroup(right.status) === "COMPLETED";
+        if (leftDone !== rightDone) return leftDone ? 1 : -1;
+        const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        return leftDue - rightDue;
+      });
+  }, [items, taskFilter]);
+
+  const completion = Number(progress?.percent ?? (taskStats.total ? Math.round((taskStats.completed / taskStats.total) * 100) : 0));
+  const filters = [
+    ["ALL", "All", taskStats.total],
+    ["PENDING", "Pending", taskStats.pending],
+    ["WIP", "WIP", taskStats.wip],
+    ["COMPLETED", "Done", taskStats.completed],
+    ["OVERDUE", "Overdue", taskStats.overdue],
+  ];
+
   return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", mb: 1 }}>
-        <Box>
-          <Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Design Department Tasks</Typography>
-          <Typography sx={{ mt: 0.2, fontSize: 10.2, color: "var(--mf-text-muted)" }}>Designer supplies the requirement; Design Head delegates work to one or many Junior Designer / Design team members.</Typography>
+    <Box sx={{ display: "grid", gap: 0.9 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: { xs: "flex-start", sm: "center" }, flexWrap: "wrap" }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 950, color: "var(--mf-text)" }}>Design Tasks</Typography>
+          <Typography sx={{ mt: 0.12, fontSize: 9.5, color: "var(--mf-text-muted)" }}>
+            Assignment, ownership and due dates for this Product / Production File.
+          </Typography>
         </Box>
-        {canHead && <Button startIcon={<AddOutlinedIcon />} onClick={onCreate} sx={primaryBtnSx}>Delegate Task</Button>}
+        <Box sx={{ display: "flex", gap: 0.55, alignItems: "center", flexWrap: "wrap" }}>
+          <Box sx={{ minWidth: 138, px: 0.85, py: 0.6, border: "1px solid var(--mf-border)", borderRadius: 1.4, background: "var(--mf-surface)" }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
+              <Typography sx={{ fontSize: 8.5, fontWeight: 900, color: "var(--mf-text-muted)" }}>COMPLETION</Typography>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 950, color: completion >= 100 ? "var(--mf-success-text)" : "var(--mf-primary-text)" }}>{completion}%</Typography>
+            </Box>
+            <Box sx={{ mt: 0.45, height: 4, borderRadius: 999, background: "var(--mf-border)", overflow: "hidden" }}>
+              <Box sx={{ width: `${Math.max(0, Math.min(100, completion))}%`, height: "100%", borderRadius: 999, background: completion >= 100 ? "var(--mf-success-text)" : "var(--mf-primary)" }} />
+            </Box>
+          </Box>
+          {canHead && <Button size="small" startIcon={<AddOutlinedIcon />} onClick={onCreate} sx={primaryBtnSx}>Delegate Task</Button>}
+        </Box>
       </Box>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5,1fr)" }, gap: 0.8, mb: 1 }}>
-        <SummaryCard label="Pending / Yet To Start" value={items.filter((item) => designTaskStatusGroup(item.status) === "PENDING").length} />
-        <SummaryCard label="WIP" value={items.filter((item) => designTaskStatusGroup(item.status) === "WIP").length} />
-        <SummaryCard label="Completed" value={items.filter((item) => designTaskStatusGroup(item.status) === "COMPLETED").length} tone="success" />
-        <SummaryCard label="Overdue" value={progress?.overdue || 0} tone={progress?.overdue ? "danger" : "success"} />
-        <SummaryCard label="Completion" value={`${progress?.percent || 0}%`} tone="success" />
+      <Box sx={{ display: "flex", gap: 0.45, flexWrap: "wrap", alignItems: "center" }}>
+        {filters.map(([value, label, count]) => {
+          const selected = taskFilter === value;
+          const danger = value === "OVERDUE" && Number(count) > 0;
+          return (
+            <Button
+              key={value}
+              size="small"
+              onClick={() => setTaskFilter(value)}
+              sx={{
+                minHeight: 28,
+                px: 0.95,
+                py: 0.35,
+                borderRadius: 1.2,
+                border: `1px solid ${selected ? (danger ? "var(--mf-danger-border)" : "var(--mf-primary-border)") : "var(--mf-border)"}`,
+                background: selected ? (danger ? "var(--mf-danger-soft)" : "var(--mf-primary-soft)") : "var(--mf-panel-solid)",
+                color: danger ? "var(--mf-danger-text)" : selected ? "var(--mf-primary-text)" : "var(--mf-text-secondary)",
+                fontSize: 9.2,
+                fontWeight: 900,
+                "&:hover": { background: selected ? (danger ? "var(--mf-danger-soft)" : "var(--mf-primary-soft)") : "var(--mf-hover)" },
+              }}
+            >
+              {label} · {count}
+            </Button>
+          );
+        })}
       </Box>
 
-      {items.length === 0 ? (
-        <Card sx={{ ...panelSx, p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Design tasks delegated yet.</Card>
+      {!visibleItems.length ? (
+        <Card sx={{ ...panelSx, p: 2.4, textAlign: "center", color: "var(--mf-text-muted)", boxShadow: "none" }}>
+          {items.length ? "No tasks match this status." : "No Design tasks delegated yet."}
+        </Card>
       ) : (
-        <Box sx={{ display: "grid", gap: 0.8 }}>
-          {items.map((item) => {
-            const active = designTaskStatusGroup(item.status) !== "COMPLETED";
+        <Box sx={{ display: "grid", gap: 0.65 }}>
+          {visibleItems.map((item) => {
+            const group = designTaskStatusGroup(item.status);
+            const completed = group === "COMPLETED";
+            const due = item.dueAt ? new Date(item.dueAt) : null;
+            const overdue = !completed && due && !Number.isNaN(due.getTime()) && due < new Date();
+            const accent = overdue ? "var(--mf-danger-text)" : designTaskStatusAccent(item.status);
+            const assignees = Array.isArray(item.assignees) ? item.assignees : [];
             return (
-              <Card key={item.id} sx={{ ...panelSx, p: 1.3 }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
+              <Card
+                key={item.id}
+                sx={{
+                  ...panelSx,
+                  p: 0,
+                  overflow: "hidden",
+                  boxShadow: "none",
+                  borderLeft: `3px solid ${accent}`,
+                  background: completed ? "linear-gradient(90deg,var(--mf-success-soft),var(--mf-panel-solid) 18%)" : "var(--mf-panel-solid)",
+                }}
+              >
+                <Box sx={{ px: { xs: 0.95, sm: 1.1 }, py: 0.85, display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0,1.45fr) minmax(190px,.75fr) auto" }, gap: 0.85, alignItems: "center" }}>
                   <Box sx={{ minWidth: 0 }}>
-                    <Box sx={{ display: "flex", gap: 0.6, alignItems: "center", flexWrap: "wrap" }}>
-                      <Typography sx={{ fontSize: 11.8, fontWeight: 950, color: "var(--mf-text)" }}>{item.taskNo}</Typography>
-                      <Chip label={readable(item.taskType)} sx={statusSx} />
-                      <Chip label={designTaskStatusLabel(item.status)} sx={{ ...statusSx, color: designTaskStatusAccent(item.status) }} />
-                      {item.blocking && <Chip label="Handoff blocking" sx={{ ...statusSx, color: "var(--mf-danger-text)" }} />}
+                    <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", flexWrap: "wrap" }}>
+                      {completed && <CheckCircleOutlineRoundedIcon sx={{ fontSize: 15, color: "var(--mf-success-text)" }} />}
+                      <Typography noWrap sx={{ fontSize: 11.7, fontWeight: 950, color: "var(--mf-text)" }}>{item.title || "Untitled task"}</Typography>
+                      <Chip label={designTaskStatusLabel(item.status)} size="small" sx={{ ...statusSx, height: 21, color: accent }} />
+                      {item.blocking && <Chip label="Handoff blocking" size="small" sx={{ ...statusSx, height: 21, color: "var(--mf-danger-text)", background: "var(--mf-danger-soft)", borderColor: "var(--mf-danger-border)" }} />}
                     </Box>
-                    <Typography sx={{ mt: 0.55, fontSize: 12.5, fontWeight: 900, color: "var(--mf-text)" }}>{item.title}</Typography>
-                    {item.description && <Typography sx={{ mt: 0.25, fontSize: 10, color: "var(--mf-text-muted)" }}>{item.description}</Typography>}
+                    <Typography noWrap sx={{ mt: 0.18, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
+                      {item.taskNo || "Task"} · {readable(item.taskType || "OTHER")}
+                      {item.description ? ` · ${item.description}` : ""}
+                    </Typography>
                   </Box>
-                  {canHead && active && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(item)} sx={secondaryBtnSx}>Edit</Button>}
+
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 8.3, fontWeight: 900, color: "var(--mf-text-muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>Assigned team</Typography>
+                    <Box sx={{ mt: 0.25, display: "flex", gap: 0.35, alignItems: "center", flexWrap: "wrap" }}>
+                      {assignees.length ? assignees.slice(0, 3).map((assignee) => <Chip key={assignee} label={assignee} size="small" sx={{ ...statusSx, height: 21, background: "var(--mf-primary-soft)", borderColor: "var(--mf-primary-border)", color: "var(--mf-primary-text)" }} />) : <Typography sx={{ fontSize: 9.4, color: "var(--mf-text-muted)" }}>Unassigned</Typography>}
+                      {assignees.length > 3 && <Typography sx={{ fontSize: 8.7, fontWeight: 850, color: "var(--mf-text-muted)" }}>+{assignees.length - 3}</Typography>}
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ minWidth: 150, display: "grid", justifyItems: { xs: "start", md: "end" }, gap: 0.2 }}>
+                    <Typography sx={{ fontSize: 9.3, fontWeight: 900, color: overdue ? "var(--mf-danger-text)" : "var(--mf-text-secondary)" }}>
+                      {overdue ? "Overdue · " : "Due · "}{toDateTime(item.dueAt)}
+                    </Typography>
+                    <Typography sx={{ fontSize: 8.5, color: "var(--mf-text-muted)" }}>
+                      From {item.assignedBy || item.designer1 || "—"} · Received {toDateTime(item.receivedAt)}
+                    </Typography>
+                  </Box>
                 </Box>
 
-                <Box sx={{ mt: 1, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.7 }}>
-                  <Mini label="Designer-1" value={item.designer1 || "—"} />
-                  <Mini label="Assigned by" value={item.assignedBy || "—"} />
-                  <Mini label="Received" value={toDateTime(item.receivedAt)} />
-                  <Mini label="Due" value={toDateTime(item.dueAt)} />
-                </Box>
-
-                <Box sx={{ mt: 0.8, display: "flex", gap: 0.5, alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography sx={{ fontSize: 9.5, fontWeight: 850, color: "var(--mf-text-muted)" }}>Designer-2 / team:</Typography>
-                  {(item.assignees || []).map((assignee) => <Chip key={assignee} label={assignee} sx={statusSx} />)}
-                </Box>
-
-                {item.remarks && <Typography sx={{ mt: 0.6, fontSize: 9.8, color: "var(--mf-text-muted)" }}>Remarks: {item.remarks}</Typography>}
-
-                {canWork && active && (
-                  <Box sx={{ mt: 0.9, display: "flex", gap: 0.55, flexWrap: "wrap" }}>
-                    {designTaskStatusGroup(item.status) === "PENDING" && <Button size="small" onClick={() => onStatus(item, "WIP")} sx={primaryBtnSx}>Start WIP</Button>}
-                    {designTaskStatusGroup(item.status) === "WIP" && <Button size="small" onClick={() => onStatus(item, "PENDING")} sx={secondaryBtnSx}>Move to Pending</Button>}
-                    {designTaskStatusGroup(item.status) !== "COMPLETED" && <Button size="small" onClick={() => onStatus(item, "COMPLETED")} sx={primaryBtnSx}>Mark Completed</Button>}
+                {(item.remarks || (canHead && !completed) || (canWork && !completed)) && (
+                  <Box sx={{ px: { xs: 0.95, sm: 1.1 }, py: 0.65, borderTop: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 0.8, alignItems: "center", flexWrap: "wrap", background: "var(--mf-surface)" }}>
+                    <Typography noWrap sx={{ minWidth: 0, flex: "1 1 240px", fontSize: 8.9, color: "var(--mf-text-muted)" }}>
+                      {item.remarks ? `Note: ${item.remarks}` : `${item.designer1 ? `Originator: ${item.designer1}` : "No additional note"}`}
+                    </Typography>
+                    <Box sx={{ display: "flex", gap: 0.4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      {canHead && !completed && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(item)} sx={secondaryBtnSx}>Edit</Button>}
+                      {canWork && group === "PENDING" && <Button size="small" onClick={() => onStatus(item, "WIP")} sx={secondaryBtnSx}>Start</Button>}
+                      {canWork && group === "WIP" && <Button size="small" onClick={() => onStatus(item, "PENDING")} sx={secondaryBtnSx}>Pause</Button>}
+                      {canWork && !completed && <Button size="small" startIcon={<CheckCircleOutlineRoundedIcon />} onClick={() => onStatus(item, "COMPLETED")} sx={primaryBtnSx}>Complete</Button>}
+                    </Box>
                   </Box>
                 )}
               </Card>
@@ -2011,10 +2120,6 @@ function DesignTasks({ items, progress, canHead, canWork, onCreate, onEdit, onSt
       )}
     </Box>
   );
-}
-
-function Mini({ label, value }) {
-  return <Box sx={{ p: 0.8, border: "1px solid var(--mf-border)", borderRadius: 1.2, background: "var(--mf-surface)" }}><Typography sx={{ fontSize: 8.8, color: "var(--mf-text-muted)", fontWeight: 850 }}>{label}</Typography><Typography sx={{ mt: 0.2, fontSize: 10.3, color: "var(--mf-text-secondary)", fontWeight: 800 }}>{value}</Typography></Box>;
 }
 
 function IssueChat({
@@ -2284,6 +2389,8 @@ function IssueChat({
 }
 
 function Tasks({ items, canManage, canCreateSelf, canCreate, canWork, setAction }) {
+  const [taskFilter, setTaskFilter] = useState("OPEN");
+
   const openCreate = () => setAction({
     ...EMPTY_ACTION,
     kind: "TASK_CREATE",
@@ -2293,49 +2400,152 @@ function Tasks({ items, canManage, canCreateSelf, canCreate, canWork, setAction 
     priority: "NORMAL",
   });
 
+  const stats = useMemo(() => {
+    const source = Array.isArray(items) ? items : [];
+    const closed = new Set(["COMPLETE", "NOT_APPLICABLE", "CANCELLED"]);
+    return {
+      total: source.length,
+      open: source.filter((item) => !closed.has(String(item.status || "").toUpperCase())).length,
+      inProgress: source.filter((item) => String(item.status || "").toUpperCase() === "IN_PROGRESS").length,
+      blocked: source.filter((item) => String(item.status || "").toUpperCase() === "BLOCKED").length,
+      done: source.filter((item) => closed.has(String(item.status || "").toUpperCase())).length,
+    };
+  }, [items]);
+
+  const visibleItems = useMemo(() => {
+    const closed = new Set(["COMPLETE", "NOT_APPLICABLE", "CANCELLED"]);
+    return (Array.isArray(items) ? items : [])
+      .filter((item) => {
+        const status = String(item.status || "").toUpperCase();
+        if (taskFilter === "ALL") return true;
+        if (taskFilter === "OPEN") return !closed.has(status);
+        if (taskFilter === "DONE") return closed.has(status);
+        return status === taskFilter;
+      })
+      .slice()
+      .sort((left, right) => {
+        const leftClosed = closed.has(String(left.status || "").toUpperCase());
+        const rightClosed = closed.has(String(right.status || "").toUpperCase());
+        if (leftClosed !== rightClosed) return leftClosed ? 1 : -1;
+        const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        return leftDue - rightDue;
+      });
+  }, [items, taskFilter]);
+
+  const engineeringAccent = (status) => {
+    const value = String(status || "").toUpperCase();
+    if (value === "BLOCKED") return "var(--mf-danger-text)";
+    if (value === "IN_PROGRESS") return "var(--mf-primary-text)";
+    if (["COMPLETE", "NOT_APPLICABLE"].includes(value)) return "var(--mf-success-text)";
+    if (value === "CANCELLED") return "var(--mf-text-muted)";
+    return "var(--mf-warning-text)";
+  };
+
+  const filters = [
+    ["OPEN", "Open", stats.open],
+    ["IN_PROGRESS", "In progress", stats.inProgress],
+    ["BLOCKED", "Blocked", stats.blocked],
+    ["DONE", "Done", stats.done],
+    ["ALL", "All", stats.total],
+  ];
+
   return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, mb: 1 }}>
+    <Box sx={{ display: "grid", gap: 0.9 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 1, flexWrap: "wrap" }}>
         <Box>
-          <Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Engineering Tasks</Typography>
-          <Typography sx={{ mt: 0.15, fontSize: 9.7, color: "var(--mf-text-muted)" }}>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 950, color: "var(--mf-text)" }}>Engineering Tasks</Typography>
+          <Typography sx={{ mt: 0.12, fontSize: 9.5, color: "var(--mf-text-muted)" }}>
             {canCreateSelf && !canManage
-              ? "Add your own non-blocking work items; senior Engineering users control delegated/release-blocking tasks."
-              : "Engineering Head / Engineer can delegate work; Junior Engineers can maintain their own tasks."}
+              ? "Your engineering work items for this Production File."
+              : "Delegated engineering work, ownership and release-blocking status."}
           </Typography>
         </Box>
         {canCreate && (
-          <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={openCreate}>
+          <Button size="small" startIcon={<AddOutlinedIcon />} sx={canCreateSelf && !canManage ? secondaryBtnSx : primaryBtnSx} onClick={openCreate}>
             {canCreateSelf && !canManage ? "Add My Task" : "Add Task"}
           </Button>
         )}
       </Box>
-      {!items.length ? (
-        <Box sx={{ p: 2.2, textAlign: "center", color: "var(--mf-text-muted)", fontSize: 10.5 }}>No Engineering tasks yet.</Box>
+
+      <Box sx={{ display: "flex", gap: 0.45, flexWrap: "wrap", alignItems: "center" }}>
+        {filters.map(([value, label, count]) => {
+          const selected = taskFilter === value;
+          const danger = value === "BLOCKED" && Number(count) > 0;
+          return (
+            <Button
+              key={value}
+              size="small"
+              onClick={() => setTaskFilter(value)}
+              sx={{
+                minHeight: 28,
+                px: 0.95,
+                py: 0.35,
+                borderRadius: 1.2,
+                border: `1px solid ${selected ? (danger ? "var(--mf-danger-border)" : "var(--mf-primary-border)") : "var(--mf-border)"}`,
+                background: selected ? (danger ? "var(--mf-danger-soft)" : "var(--mf-primary-soft)") : "var(--mf-panel-solid)",
+                color: danger ? "var(--mf-danger-text)" : selected ? "var(--mf-primary-text)" : "var(--mf-text-secondary)",
+                fontSize: 9.2,
+                fontWeight: 900,
+              }}
+            >
+              {label} · {count}
+            </Button>
+          );
+        })}
+      </Box>
+
+      {!visibleItems.length ? (
+        <Card sx={{ ...panelSx, p: 2.4, textAlign: "center", color: "var(--mf-text-muted)", boxShadow: "none" }}>
+          {items.length ? "No Engineering tasks match this status." : "No Engineering tasks yet."}
+        </Card>
       ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 0.8 }}>
-          {items.map((item) => (
-            <Card key={item.id} sx={{ ...panelSx, p: 1.2, boxShadow: "none" }}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                <Box>
-                  <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography>
-                  <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>{item.key} · {item.blocking ? "Release blocking" : "Personal / non-blocking"}</Typography>
+        <Box sx={{ display: "grid", gap: 0.65 }}>
+          {visibleItems.map((item) => {
+            const status = String(item.status || "").toUpperCase();
+            const closed = ["COMPLETE", "NOT_APPLICABLE", "CANCELLED"].includes(status);
+            const accent = engineeringAccent(status);
+            const due = item.dueAt ? new Date(item.dueAt) : null;
+            const overdue = !closed && due && !Number.isNaN(due.getTime()) && due < new Date();
+            return (
+              <Card key={item.id} sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none", borderLeft: `3px solid ${overdue ? "var(--mf-danger-text)" : accent}` }}>
+                <Box sx={{ px: { xs: 0.95, sm: 1.1 }, py: 0.85, display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0,1.4fr) minmax(170px,.6fr) auto" }, gap: 0.8, alignItems: "center" }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", flexWrap: "wrap" }}>
+                      {status === "COMPLETE" && <CheckCircleOutlineRoundedIcon sx={{ fontSize: 15, color: "var(--mf-success-text)" }} />}
+                      <Typography noWrap sx={{ fontSize: 11.7, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography>
+                      <Chip label={readable(item.status)} size="small" sx={{ ...statusSx, height: 21, color: accent }} />
+                      {item.blocking && <Chip label="Release blocking" size="small" sx={{ ...statusSx, height: 21, color: "var(--mf-danger-text)", background: "var(--mf-danger-soft)", borderColor: "var(--mf-danger-border)" }} />}
+                    </Box>
+                    <Typography noWrap sx={{ mt: 0.18, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
+                      {item.key || "Engineering task"} · {item.blocking ? "Required for handoff" : "Non-blocking work"}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: 8.3, fontWeight: 900, color: "var(--mf-text-muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>Owner</Typography>
+                    <Typography noWrap sx={{ mt: 0.15, fontSize: 9.6, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{item.assignedTo || "Unassigned"}</Typography>
+                  </Box>
+                  <Box sx={{ minWidth: 155, display: "grid", justifyItems: { xs: "start", md: "end" }, gap: 0.15 }}>
+                    <Typography sx={{ fontSize: 9.3, fontWeight: 900, color: overdue ? "var(--mf-danger-text)" : "var(--mf-text-secondary)" }}>
+                      {overdue ? "Overdue · " : "Due · "}{toDateTime(item.dueAt)}
+                    </Typography>
+                    <Typography sx={{ fontSize: 8.5, color: "var(--mf-text-muted)" }}>
+                      {item.completedAt ? `Completed ${toDateTime(item.completedAt)}` : item.startedAt ? `Started ${toDateTime(item.startedAt)}` : "Not started"}
+                    </Typography>
+                  </Box>
                 </Box>
-                <Chip label={readable(item.status)} sx={statusSx} />
-              </Box>
-              <Typography sx={{ mt: 0.7, fontSize: 10, color: "var(--mf-text-muted)" }}>Owner: {item.assignedTo || "Unassigned"} · Due: {toDateTime(item.dueAt)}</Typography>
-              <Typography sx={{ mt: 0.25, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Started: {toDateTime(item.startedAt)} · Completed: {toDateTime(item.completedAt)}</Typography>
-              {canWork && !["COMPLETE", "NOT_APPLICABLE", "CANCELLED"].includes(item.status) && (
-                <Box sx={{ mt: 0.8, display: "flex", gap: 0.5, flexWrap: "wrap" }}>
-                  {["IN_PROGRESS", "BLOCKED", "COMPLETE", "NOT_APPLICABLE"].map((status) => (
-                    <Button key={status} size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: ${readable(status)}`, decision: status, item })}>
-                      {readable(status)}
-                    </Button>
-                  ))}
-                </Box>
-              )}
-            </Card>
-          ))}
+
+                {canWork && !closed && (
+                  <Box sx={{ px: { xs: 0.95, sm: 1.1 }, py: 0.6, borderTop: "1px solid var(--mf-border)", display: "flex", justifyContent: "flex-end", gap: 0.4, flexWrap: "wrap", background: "var(--mf-surface)" }}>
+                    {status !== "IN_PROGRESS" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: In Progress`, decision: "IN_PROGRESS", item })}>Start</Button>}
+                    {status !== "BLOCKED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: Blocked`, decision: "BLOCKED", item })}>Block</Button>}
+                    <Button size="small" startIcon={<CheckCircleOutlineRoundedIcon />} sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: Complete`, decision: "COMPLETE", item })}>Complete</Button>
+                    <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: Not Applicable`, decision: "NOT_APPLICABLE", item })}>N/A</Button>
+                  </Box>
+                )}
+              </Card>
+            );
+          })}
         </Box>
       )}
     </Box>
