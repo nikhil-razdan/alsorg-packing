@@ -64,7 +64,7 @@ const projectBlank = {
   plantCode: "",
   requiredDate: "",
   priority: "NORMAL",
-  projectManager: "Director Reference",
+  projectManager: "",
   designer1: "",
   designHead: "",
   remarks: "",
@@ -504,6 +504,7 @@ export function MatFlowProjectsPage() {
     MATFLOW_ROLES.MANAGER,
     MATFLOW_ROLES.DESIGN_HEAD,
     MATFLOW_ROLES.DESIGNER,
+    MATFLOW_ROLES.DESIGNER_JUNIOR,
     MATFLOW_ROLES.ENGINEERING_HEAD,
     MATFLOW_ROLES.ENGINEERING
   );
@@ -682,7 +683,7 @@ export function MatFlowProjectsPage() {
 
   const openNewProject = () => {
     setActiveProject(null);
-    setProjectForm({ ...projectBlank, projectManager: "Director Reference", plantCode: selectedPlantParam || availablePlants?.[0] || "" });
+    setProjectForm({ ...projectBlank, plantCode: selectedPlantParam || availablePlants?.[0] || "" });
     setDialog("project-new");
   };
 
@@ -787,8 +788,8 @@ export function MatFlowProjectsPage() {
     <Box sx={pageSx}>
       <PageHero
         badge="MASTER PD / PROJECT PRODUCTION FILE"
-        title={juniorDesignerOnly ? "My Assigned PDs" : "Projects"}
-        subtitle={juniorDesignerOnly ? "Your assigned PD / Projects with Product subtasks inside each shared Project Production File." : (canSeeEngineeringReference ? "One Production File per PD / Project. Products and drawings are child work inside the same departmental handoff." : "PD / Project workflow with child Product / Drawing context and one shared Production File.")}
+        title={juniorDesignerOnly ? "My PD / Projects" : "Projects"}
+        subtitle={juniorDesignerOnly ? "Create and manage your own PD / Projects. Each one is automatically assigned to you and remains visible to the Design Head for tracking and control." : (canSeeEngineeringReference ? "One Production File per PD / Project. Products and drawings are child work inside the same departmental handoff." : "PD / Project workflow with child Product / Drawing context and one shared Production File.")}
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
@@ -818,8 +819,8 @@ export function MatFlowProjectsPage() {
       </Card>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1 }}>
-        <Summary label={juniorDesignerOnly ? "Assigned PDs" : "Projects"} value={summary.projects} />
-        <Summary label={juniorDesignerOnly ? "Assigned Products" : "Products / Drawings"} value={summary.products} />
+        <Summary label={juniorDesignerOnly ? "My PDs" : "Projects"} value={summary.projects} />
+        <Summary label={juniorDesignerOnly ? "My Products" : "Products / Drawings"} value={summary.products} />
         <Summary label="Project Files" value={summary.productionFiles} />
         {juniorDesignerOnly
           ? <Summary label="Clients" value={summary.clients} />
@@ -841,7 +842,7 @@ export function MatFlowProjectsPage() {
               { key: "products", label: "Products / Project File", width: "160px" },
               { key: "workflow", label: "Workflow / Health", width: "minmax(230px,1fr)" },
               { key: "completion", label: "Tentative Completion", width: "145px" },
-              { key: "owner", label: "Source / Designer", width: "170px" },
+              { key: "owner", label: "Director Ref. / Designer", width: "180px" },
               { key: "actions", label: "", width: "100px", align: "right" },
             ]}
             rows={filteredRows}
@@ -1028,11 +1029,11 @@ export function MatFlowProjectsPage() {
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(118px,1fr))", gap: 0.5 }}>
                   <Meta label="Priority" value={selectedProject.priority || "NORMAL"} />
                   <Meta label="Tentative Completion" value={selectedProject.requiredDate ? formatDate(selectedProject.requiredDate) : "Not set"} />
-                  {juniorDesignerOnly ? <Meta label="Client" value={selectedProject.clientName || "—"} /> : <Meta label="Project Manager / Source" value={selectedProject.projectManager || "—"} />}
-                  {!juniorDesignerOnly && <Meta label="Designer" value={selectedProject.designer1 || "—"} />}
-                  {!juniorDesignerOnly && <Meta label="Design Head" value={selectedProject.designHead || "—"} />}
+                  <Meta label="Director Reference" value={selectedProject.projectManager || "—"} />
+                  <Meta label={juniorDesignerOnly ? "Assigned Junior" : "Designer"} value={selectedProject.designer1 || (juniorDesignerOnly ? "You" : "—")} />
+                  <Meta label="Design Head" value={selectedProject.designHead || "—"} />
                 </Box>
-                {!juniorDesignerOnly && selectedProject.remarks && (
+                {selectedProject.remarks && (
                   <Typography sx={{ mt: 0.8, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Project remarks: {selectedProject.remarks}</Typography>
                 )}
               </Card>
@@ -1115,9 +1116,33 @@ export function MatFlowProjectsPage() {
               helperText="Optional — leave blank if the Project completion date is not yet committed."
               sx={fieldSx}
             />
-            <TextField label="Project Manager / Source" value={projectForm.projectManager || ""} onChange={(e) => setProjectForm({ ...projectForm, projectManager: e.target.value })} sx={fieldSx} />
-            <TextField label="Designer-1 / Client Project Designer" value={projectForm.designer1 || ""} onChange={(e) => setProjectForm({ ...projectForm, designer1: e.target.value })} sx={fieldSx} />
-            <TextField label="Design Head" value={projectForm.designHead || ""} onChange={(e) => setProjectForm({ ...projectForm, designHead: e.target.value })} sx={fieldSx} />
+            <TextField
+              label="Director Reference"
+              placeholder="Enter Director reference"
+              value={projectForm.projectManager || ""}
+              onChange={(e) => setProjectForm({ ...projectForm, projectManager: e.target.value })}
+              helperText="Free-text reference entered for this PD / Project. 'Director Reference' is never saved as a default value."
+              sx={fieldSx}
+            />
+            {juniorDesignerOnly ? (
+              <Box sx={{ px: 1.2, py: 1, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)" }}>
+                <Typography sx={{ fontSize: 8.4, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--mf-text-muted)" }}>Design Owner</Typography>
+                <Typography sx={{ mt: 0.15, fontSize: 10.2, fontWeight: 900, color: "var(--mf-text)" }}>You · automatic self-assignment</Typography>
+                <Typography sx={{ mt: 0.1, fontSize: 8.8, color: "var(--mf-text-muted)" }}>A Junior Designer can create a Project / PD only for their own account. The Design Head can still view, track and edit it.</Typography>
+              </Box>
+            ) : (
+              <TextField
+                label="Junior Designer / Design Owner"
+                value={projectForm.designer1 || ""}
+                onChange={(e) => setProjectForm({ ...projectForm, designer1: e.target.value })}
+                disabled={dialog === "project-edit"}
+                helperText={dialog === "project-edit"
+                  ? "Use the Design PD workspace to reassign an existing Project / PD."
+                  : "When entered during creation, this PD is immediately assigned to that Design owner."}
+                sx={fieldSx}
+              />
+            )}
+            {!juniorDesignerOnly && <TextField label="Design Head" value={projectForm.designHead || ""} onChange={(e) => setProjectForm({ ...projectForm, designHead: e.target.value })} sx={fieldSx} />}
             <TextField label="Remarks" multiline minRows={2} value={projectForm.remarks || ""} onChange={(e) => setProjectForm({ ...projectForm, remarks: e.target.value })} sx={{ ...fieldSx, gridColumn: { md: "1/-1" } }} />
           </Box>
         </DialogContent>

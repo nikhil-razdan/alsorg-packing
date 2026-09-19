@@ -561,7 +561,7 @@ export default function MatFlowDesignWorkspace() {
                 {tab === "overview" && (
                   <Box sx={{ p: 1, display: "grid", gap: 0.8 }}>
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2,minmax(0,1fr))" }, gap: 0.7 }}>
-                      {[["Client", selected.clientName], ["PD No.", displayPd(selected)], ["Project Manager / Source", selected.projectManager || "Director Reference"], ["Design Head", selected.designHead || "—"], ["Assigned Junior", selected.assignedJunior || "—"], ["Tentative Completion", formatDate(selected.tentativeCompletionDate)]].map(([label, value]) => (
+                      {[["Client", selected.clientName], ["PD No.", displayPd(selected)], ["Director Reference", selected.projectManager || "—"], ["Design Head", selected.designHead || "—"], ["Assigned Junior", selected.assignedJunior || "—"], ["Tentative Completion", formatDate(selected.tentativeCompletionDate)]].map(([label, value]) => (
                         <Box key={label} sx={{ px: 0.9, py: 0.7, border: "1px solid var(--mf-border)", borderRadius: 1 }}>
                           <Typography sx={{ fontSize: 8.1, fontWeight: 900, color: "var(--mf-text-muted)", textTransform: "uppercase" }}>{label}</Typography>
                           <Typography sx={{ mt: 0.1, fontSize: 10, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{value}</Typography>

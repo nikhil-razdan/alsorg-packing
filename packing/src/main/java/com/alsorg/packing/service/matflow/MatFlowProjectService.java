@@ -97,6 +97,12 @@ public class MatFlowProjectService {
     @Transactional
     public void reconcileCanonicalProjectProductionFilesOnStartup() {
         for (MatFlowProject project : projectRepository.findAllByOrderByUpdatedAtDesc()) {
+            /* Remove the old UI placeholder if it was ever persisted as real data. */
+            if ("DIRECTOR REFERENCE".equalsIgnoreCase(clean(project.getProjectManager()))) {
+                project.setProjectManager(null);
+                project.setUpdatedBy(MIGRATION_ACTOR);
+                projectRepository.save(project);
+            }
             MatFlowProductionFile file = ensureCanonicalProductionFile(project, MIGRATION_ACTOR);
             prepareCanonicalWorkflowAfterCutover(project, file, MIGRATION_ACTOR);
             retireLegacyProductFiles(project, MIGRATION_ACTOR);
@@ -185,34 +191,73 @@ public class MatFlowProjectService {
 
     @Transactional
     public ProjectResponse create(ProjectRequest request) {
-        accessService.requireProjectWrite();
+        accessService.requireProjectCreate();
         validateProjectRequest(request);
         String plant = upperOrNull(request.plantCode());
         accessService.requirePlantAccess(plant);
         String pdNo = upperOrNull(request.projectCode());
         requirePdNoAvailable(plant, pdNo, null);
 
+        String actor = accessService.actor();
+        boolean juniorDesigner = accessService.isJuniorDesignerOnly();
         MatFlowProject row = new MatFlowProject();
         applyProject(row, request);
-        row.setCreatedBy(accessService.actor());
-        row.setUpdatedBy(accessService.actor());
+
+        /*
+         * A Junior Designer can create only for themselves. Never trust designer1
+         * supplied by a Junior client; the authenticated username is authoritative.
+         */
+        if (juniorDesigner) {
+            row.setDesigner1(actor);
+            row.setDesignHead(null);
+            row.setActive(true);
+        }
+
+        row.setCreatedBy(actor);
+        row.setUpdatedBy(actor);
         row = projectRepository.save(row);
 
-        MatFlowProductionFile file = ensureCanonicalProductionFile(row, accessService.actor());
-        designProjectService.initializeNewProject(row);
+        /*
+         * Establish the PD-level Design owner at creation. This makes a Junior's
+         * self-created PD immediately visible in My Assigned PDs and lets a Design
+         * Head create the same record already assigned to the requested Junior.
+         */
+        String initialDesignAssignee = accessService.hasAnyRole(
+                "ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR")
+                ? row.getDesigner1()
+                : null;
+        designProjectService.initializeNewProject(row, initialDesignAssignee);
+        MatFlowProductionFile file = ensureCanonicalProductionFile(row, actor);
         auditService.log("PROJECT", row.getId(), "PROJECT_CREATED", file,
                 auditService.details("projectCode", row.getProjectCode(), "plantCode", row.getPlantCode(),
-                        "productionFileNo", file.getProductionFileNo(), "scope", "WHOLE_PD_PROJECT"));
+                        "productionFileNo", file.getProductionFileNo(), "scope", "WHOLE_PD_PROJECT",
+                        "assignedDesigner", row.getDesigner1(), "createdByJunior", juniorDesigner));
         return toProject(row);
     }
 
     @Transactional
     public ProjectResponse update(UUID projectId, ProjectRequest request) {
-        accessService.requireProjectWrite();
+        accessService.requireProjectEdit();
         validateProjectRequest(request);
         MatFlowProject row = requireProject(projectId);
         accessService.requirePlantAccess(row.getPlantCode());
         requireVersion(row.getRowVersion(), request.rowVersion());
+
+        String actor = accessService.actor();
+        boolean juniorDesigner = accessService.isJuniorDesignerOnly();
+        String preservedDesignHead = row.getDesignHead();
+        boolean preservedActive = row.isActive();
+
+        if (juniorDesigner) {
+            if (!designProjectService.isAssignedTo(projectId, actor)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "You can edit only the Project / PD assigned to your Junior Designer account");
+            }
+            MatFlowProductionFile currentFile = ensureCanonicalProductionFile(row, actor);
+            if (!Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(currentFile.getStage())) {
+                throw conflict("A Junior Designer can edit the Project / PD only while it is inside Design");
+            }
+        }
 
         String plant = upperOrNull(request.plantCode());
         accessService.requirePlantAccess(plant);
@@ -220,18 +265,24 @@ public class MatFlowProjectService {
         requirePdNoAvailable(plant, pdNo, row.getId());
 
         applyProject(row, request);
-        row.setUpdatedBy(accessService.actor());
+        if (juniorDesigner) {
+            /* Ownership and Design Head control cannot be reassigned by a Junior edit. */
+            row.setDesigner1(actor);
+            row.setDesignHead(preservedDesignHead);
+            row.setActive(preservedActive);
+        }
+        row.setUpdatedBy(actor);
         row = projectRepository.save(row);
 
         /* Keep legacy Product snapshot columns aligned with the parent Project. */
         for (MatFlowProjectDrawing product : productsOf(row.getId())) {
             product.setProject(row);
-            product.setUpdatedBy(accessService.actor());
+            product.setUpdatedBy(actor);
             productRepository.save(product);
         }
 
-        MatFlowProductionFile file = ensureCanonicalProductionFile(row, accessService.actor());
-        synchronizeCanonicalProductionFile(file, row, accessService.actor());
+        MatFlowProductionFile file = ensureCanonicalProductionFile(row, actor);
+        synchronizeCanonicalProductionFile(file, row, actor);
         productionFileRepository.save(file);
         auditService.log("PROJECT", row.getId(), "PROJECT_UPDATED", file,
                 auditService.details("projectCode", row.getProjectCode(), "scope", "WHOLE_PD_PROJECT"));
@@ -428,7 +479,7 @@ public class MatFlowProjectService {
                 file.setEngineeringDecision(EngineeringDecision.PENDING);
                 file.setDesignHeadDecision("PENDING");
                 file.setCurrentDepartment("DESIGN");
-                file.setCurrentOwner(clean(project.getDesignHead()) != null ? project.getDesignHead() : project.getDesigner1());
+                file.setCurrentOwner(clean(project.getDesigner1()) != null ? project.getDesigner1() : project.getDesignHead());
             } else {
                 copyLegacyWorkflowState(file, legacySource);
             }
@@ -467,7 +518,7 @@ public class MatFlowProjectService {
         if (file.getEngineeringDecision() == null) { file.setEngineeringDecision(EngineeringDecision.PENDING); changed = true; }
         if (clean(file.getCurrentDepartment()) == null) { file.setCurrentDepartment("DESIGN"); changed = true; }
         if (Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(file.getStage())) {
-            String owner = clean(project.getDesignHead()) != null ? project.getDesignHead() : project.getDesigner1();
+            String owner = clean(project.getDesigner1()) != null ? project.getDesigner1() : project.getDesignHead();
             if (!Objects.equals(clean(file.getCurrentOwner()), clean(owner))) { file.setCurrentOwner(owner); changed = true; }
             boolean designIdentityChanged = !Objects.equals(previousDesigner, clean(project.getDesigner1()))
                     || !Objects.equals(previousDesignHead, clean(project.getDesignHead()));
@@ -655,8 +706,8 @@ public class MatFlowProjectService {
                 .toList();
         return new ProjectResponse(
                 project.getId(), project.getProjectCode(), project.getProjectName(), project.getClientName(), project.getPlantCode(),
-                project.getRequiredDate(), project.getPriority(), junior ? null : project.getProjectManager(),
-                junior ? null : project.getDesigner1(), junior ? null : project.getDesignHead(), junior ? null : project.getRemarks(),
+                project.getRequiredDate(), project.getPriority(), directorReference(project.getProjectManager()),
+                project.getDesigner1(), project.getDesignHead(), project.getRemarks(),
                 project.isActive(),
                 file == null ? null : file.getId(), file == null ? null : file.getProductionFileNo(),
                 file == null ? null : file.getStage().name(), file == null || junior ? null : file.getReleaseHealth().name(),
@@ -746,7 +797,7 @@ public class MatFlowProjectService {
         row.setPlantCode(request.plantCode());
         row.setRequiredDate(request.requiredDate());
         row.setPriority(request.priority());
-        row.setProjectManager(request.projectManager());
+        row.setProjectManager(directorReference(request.projectManager()));
         row.setDesigner1(request.designer1());
         row.setDesignHead(request.designHead());
         row.setRemarks(request.remarks());
@@ -815,6 +866,11 @@ public class MatFlowProjectService {
     private void requireVersion(Long actual, Long supplied) {
         if (supplied == null || !supplied.equals(actual)) throw conflict("Record changed. Refresh and retry.");
     }
+    private String directorReference(String value) {
+        String next = clean(value);
+        return next != null && "DIRECTOR REFERENCE".equalsIgnoreCase(next) ? null : next;
+    }
+
     private String clean(String value) {
         if (value == null) return null;
         String next = value.trim();

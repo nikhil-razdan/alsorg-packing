@@ -140,6 +140,26 @@ public class MatFlowAccessService {
     }
 
     /**
+     * Creating a Project / PD is also allowed for a Junior Designer. The service
+     * automatically self-assigns a Junior-created Project so a Junior can never
+     * create a PD on behalf of another Design user.
+     */
+    public void requireProjectCreate() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER",
+                "MATFLOW_DESIGNER_JUNIOR", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+    }
+
+    /**
+     * Parent Project / PD editing includes Junior Designers, but ownership and
+     * Design-stage checks are enforced in MatFlowProjectService. Deactivation and
+     * broader administrative Project mutations continue to use requireProjectWrite().
+     */
+    public void requireProjectEdit() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER",
+                "MATFLOW_DESIGNER_JUNIOR", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+    }
+
+    /**
      * Product children are Design work/subtasks inside the Project Production File.
      * A Junior Designer may create/update Product children only for the PD actually
      * assigned to them; MatFlowProjectService enforces that ownership + Design-stage

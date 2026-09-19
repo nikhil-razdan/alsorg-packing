@@ -208,11 +208,40 @@ public class MatFlowDesignProjectService {
     /** New Projects enter the PD-level Design model immediately. */
     @Transactional
     public void initializeNewProject(MatFlowProject project) {
+        initializeNewProject(project, null);
+    }
+
+    /**
+     * Creation-time initializer used by the Project master. When a Design owner is
+     * supplied, the PD is assigned immediately instead of being created as a second,
+     * disconnected Project record that still waits for manual Design assignment.
+     *
+     * This intentionally does not replace the normal Design Head re-assignment flow;
+     * it only establishes the first owner of a newly-created Project / PD.
+     */
+    @Transactional
+    public void initializeNewProject(MatFlowProject project, String initialAssignee) {
         if (project == null || project.getId() == null) return;
         MatFlowDesignProjectWork work = ensure(project, true);
+        boolean changed = false;
+        String actor = safeActor();
+
         if (!work.isWorkflowEnabled()) {
             work.setWorkflowEnabled(true);
-            work.setUpdatedBy(safeActor());
+            changed = true;
+        }
+
+        String assignee = clean(initialAssignee);
+        if (assignee != null && clean(work.getAssignedJunior()) == null) {
+            work.setAssignedJunior(assignee);
+            work.setAssignedBy(actor);
+            work.setAssignedAt(now());
+            appendLog(work, "ASSIGNMENT", "Project / PD assigned to " + assignee + " at creation", actor);
+            changed = true;
+        }
+
+        if (changed) {
+            work.setUpdatedBy(actor);
             repository.save(work);
         }
     }
@@ -515,7 +544,7 @@ public class MatFlowDesignProjectService {
         return new DesignProjectResponse(
                 project.getId(), project.getProjectCode(), clean(project.getProjectCode()) == null,
                 project.getProjectName(), project.getClientName(), project.getPlantCode(), project.getRequiredDate(), project.getPriority(),
-                project.getProjectManager(), project.getDesignHead(), work.isWorkflowEnabled(), work.getAssignedJunior(), work.getAssignedBy(),
+                directorReference(project.getProjectManager()), project.getDesignHead(), work.isWorkflowEnabled(), work.getAssignedJunior(), work.getAssignedBy(),
                 work.getAssignedAt(), work.getDueAt(), work.getBrief(), status, overdue, work.isChecklistLocked(), work.getChecklistLockedBy(),
                 work.getChecklistLockedAt(), storedChecklist.size(), complete, na, pending, percent, checklistReady,
                 products.size(), done, checklistRows, products, logs, blockers,
@@ -712,6 +741,10 @@ public class MatFlowDesignProjectService {
     }
 
     private LocalDateTime now() { return LocalDateTime.now(TimeZoneConfig.APP_ZONE); }
+    private static String directorReference(String value) {
+        String x = clean(value);
+        return x != null && "DIRECTOR REFERENCE".equalsIgnoreCase(x) ? null : x;
+    }
     private static String clean(String value) { if (value == null) return null; String x=value.trim(); return x.isEmpty()?null:x; }
     private static String upper(String value) { String x=clean(value); return x==null?"":x.toUpperCase(Locale.ROOT); }
     private static String upperOrNull(String value) { String x=clean(value); return x==null?null:x.toUpperCase(Locale.ROOT); }
