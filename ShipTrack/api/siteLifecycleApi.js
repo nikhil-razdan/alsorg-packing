@@ -591,3 +591,69 @@ export async function submitSiteOpening({
 
   return response?.data || {};
 }
+
+export async function fetchDriverDeliveryChallans() {
+  const response = await api.get(
+    "/api/site-lifecycle/driver/challans",
+    {
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  return Array.isArray(response?.data)
+    ? response.data
+    : [];
+}
+
+export async function submitDriverChallanDelivery({
+  challanNumber,
+  location,
+  receiverName = "",
+  receiverPhone = "",
+  remarks = "",
+  photos = [],
+}) {
+  const cleanChallan = clean(challanNumber);
+
+  if (!cleanChallan) {
+    throw new Error("Challan number is required.");
+  }
+
+  if (!Array.isArray(photos) || photos.length < 1) {
+    throw new Error("Take at least one delivery photo.");
+  }
+
+  const formData = new FormData();
+  formData.append("challanNumber", cleanChallan);
+  appendLocation(formData, location);
+  formData.append("receiverName", clean(receiverName));
+  formData.append("receiverPhone", clean(receiverPhone));
+  formData.append("remarks", clean(remarks));
+
+  photos
+    .slice(0, 4)
+    .forEach((photo, index) =>
+      appendFile(
+        formData,
+        photo,
+        index,
+        "challan_delivery"
+      )
+    );
+
+  const response = await api.post(
+    "/api/site-lifecycle/driver/challan/deliver",
+    formData,
+    {
+      timeout: 90000,
+      headers: {
+        Accept: "application/json",
+      },
+    }
+  );
+
+  return response?.data || {};
+}
+

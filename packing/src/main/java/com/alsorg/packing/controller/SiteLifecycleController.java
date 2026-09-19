@@ -22,6 +22,7 @@ import com.alsorg.packing.domain.site.PacketSiteEvidence;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.SiteLifecycleService;
+import com.alsorg.packing.service.SiteLifecycleService.DriverChallanSummary;
 
 @RestController
 @RequestMapping("/api/site-lifecycle")
@@ -35,6 +36,40 @@ public class SiteLifecycleController {
             CurrentUserService currentUserService) {
         this.service = service;
         this.currentUserService = currentUserService;
+    }
+
+
+    @GetMapping(value = "/driver/challans", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<DriverChallanSummary>> driverChallans() {
+        User user = currentUserService.requireCurrentUser();
+        return noStore(ResponseEntity.ok(service.driverChallans(user)));
+    }
+
+    @PostMapping(
+            value = "/driver/challan/deliver",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<DriverChallanSummary> deliverChallan(
+            @RequestParam String challanNumber,
+            @RequestParam Double latitude,
+            @RequestParam Double longitude,
+            @RequestParam Double accuracy,
+            @RequestParam(required = false) String receiverName,
+            @RequestParam(required = false) String receiverPhone,
+            @RequestParam(required = false) String remarks,
+            @RequestParam("photos") List<MultipartFile> photos) {
+        User user = currentUserService.requireCurrentUser();
+        DriverChallanSummary row = service.deliverChallan(
+                challanNumber,
+                latitude,
+                longitude,
+                accuracy,
+                receiverName,
+                receiverPhone,
+                remarks,
+                photos,
+                user);
+        return noStore(ResponseEntity.ok(row));
     }
 
     @PostMapping(value = "/resolve", consumes = MediaType.APPLICATION_JSON_VALUE)

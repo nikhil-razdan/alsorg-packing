@@ -26,6 +26,7 @@ import BulkScanScreen from "../screens/BulkScanScreen";
 import TripsScreen from "../screens/TripsScreen";
 import TripItemScreen from "../screens/TripItemScreen";
 import SiteLifecycleScreen from "../screens/SiteLifecycleScreen";
+import DriverDeliveriesScreen from "../screens/DriverDeliveriesScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -57,9 +58,8 @@ function HomeEntry(props) {
 
   if (pureDriver) {
     return (
-      <SiteLifecycleScreen
+      <DriverDeliveriesScreen
         {...props}
-        initialMode="DELIVERY"
       />
     );
   }
@@ -169,6 +169,14 @@ export default function AppNavigator() {
               component={TripItemScreen}
               options={{
                 title: "Dispatch Items",
+              }}
+            />
+
+            <Stack.Screen
+              name="DriverDeliveries"
+              component={DriverDeliveriesScreen}
+              options={{
+                title: "",
               }}
             />
 

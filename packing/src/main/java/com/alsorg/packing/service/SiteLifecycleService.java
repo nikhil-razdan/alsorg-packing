@@ -125,6 +125,289 @@ public class SiteLifecycleService {
         return toRow(item, packetItem, lifecycle, true);
     }
 
+
+    @Transactional(readOnly = true)
+    public List<DriverChallanSummary> driverChallans(User user) {
+        User actor = requireUser(user);
+
+        if (!currentUserService.isDriver(actor) && !currentUserService.isAdmin(actor)) {
+            throw new AccessDeniedException(
+                    "Assigned delivery challans require DRIVER access");
+        }
+
+        if (actor.getDriverId() == null) {
+            throw new AccessDeniedException(
+                    "Your DRIVER account is not linked to a Driver master profile.");
+        }
+
+        LocalDateTime recentCutoff = LocalDateTime.now(APP_ZONE).minusDays(1);
+
+        List<DispatchedItem> rows = entityManager.createQuery(
+                        "SELECT d FROM DispatchedItem d "
+                                + "WHERE d.driverId = :driverId "
+                                + "AND d.status = :status "
+                                + "AND d.chalaanNumber IS NOT NULL "
+                                + "AND (d.tripEndedAt IS NULL OR d.tripEndedAt >= :recentCutoff) "
+                                + "ORDER BY d.dispatchedAt DESC, d.zohoItemId ASC",
+                        DispatchedItem.class)
+                .setParameter("driverId", actor.getDriverId())
+                .setParameter("status", ItemDispatchStatus.DISPATCHED)
+                .setParameter("recentCutoff", recentCutoff)
+                .getResultList();
+
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
+        LinkedHashMap<String, List<DispatchedItem>> grouped = new LinkedHashMap<>();
+        for (DispatchedItem row : rows) {
+            String challan = clean(row.getChalaanNumber(), 255);
+            if (challan == null) continue;
+            grouped.computeIfAbsent(challan, ignored -> new ArrayList<>()).add(row);
+        }
+
+        List<DriverChallanSummary> result = new ArrayList<>();
+        for (Map.Entry<String, List<DispatchedItem>> entry : grouped.entrySet()) {
+            result.add(buildDriverChallanSummary(entry.getKey(), entry.getValue()));
+        }
+        return result;
+    }
+
+    @Transactional
+    public DriverChallanSummary deliverChallan(
+            String rawChallanNumber,
+            Double latitude,
+            Double longitude,
+            Double accuracy,
+            String receiverName,
+            String receiverPhone,
+            String remarks,
+            List<MultipartFile> photos,
+            User user) {
+        User actor = requireUser(user);
+
+        if (!currentUserService.isDriver(actor) && !currentUserService.isAdmin(actor)) {
+            throw new AccessDeniedException(
+                    "Challan delivery proof requires the assigned DRIVER account");
+        }
+
+        String challan = clean(rawChallanNumber, 255);
+        if (challan == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Challan number is required");
+        }
+
+        List<DispatchedItem> challanItems = entityManager.createQuery(
+                        "SELECT d FROM DispatchedItem d "
+                                + "WHERE d.chalaanNumber = :challan "
+                                + "AND d.status = :status "
+                                + "ORDER BY d.zohoItemId ASC",
+                        DispatchedItem.class)
+                .setParameter("challan", challan)
+                .setParameter("status", ItemDispatchStatus.DISPATCHED)
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                .getResultList();
+
+        if (challanItems.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "No dispatched packets found for challan " + challan);
+        }
+
+        for (DispatchedItem row : challanItems) {
+            assertSiteLifecycleEligible(row);
+            assertDriverAssignment(actor, row);
+
+            if (row.getPacketItemId() == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Challan " + challan
+                                + " contains a legacy dispatch row without a physical Packet Item link.");
+            }
+        }
+
+        Map<UUID, PacketSiteLifecycle> existingByPacket = loadLifecycles(challanItems);
+
+        boolean everyPacketAlreadyDelivered = true;
+        boolean tripAlreadyEnded = true;
+
+        for (DispatchedItem row : challanItems) {
+            PacketSiteLifecycle lifecycle = existingByPacket.get(row.getPacketItemId());
+            if (lifecycle == null || lifecycle.getDeliveredAt() == null) {
+                everyPacketAlreadyDelivered = false;
+            }
+            if (row.getTripEndedAt() == null) {
+                tripAlreadyEnded = false;
+            }
+        }
+
+        /*
+         * A mobile retry after a successful commit must be safe. Do not create
+         * duplicate photos, lifecycle rows, or audit events.
+         */
+        if (everyPacketAlreadyDelivered && tripAlreadyEnded) {
+            return buildDriverChallanSummary(challan, challanItems);
+        }
+
+        validateCoordinates(latitude, longitude, accuracy);
+        List<ValidatedImage> images = validateImages(
+                photos,
+                1,
+                MAX_DELIVERY_PHOTOS,
+                MAX_DELIVERY_TOTAL_BYTES,
+                "Challan delivery");
+
+        LocalDateTime now = LocalDateTime.now(APP_ZONE);
+        String username = safeActor(actor.getUsername());
+
+        List<PacketSiteLifecycle> changedLifecycles = new ArrayList<>();
+        PacketSiteLifecycle proofOwner = null;
+
+        for (DispatchedItem item : challanItems) {
+            PacketSiteLifecycle lifecycle = existingByPacket.get(item.getPacketItemId());
+
+            if (lifecycle == null) {
+                lifecycle = new PacketSiteLifecycle();
+                lifecycle.setId(UUID.randomUUID());
+                lifecycle.setPacketItemId(item.getPacketItemId());
+                lifecycle.setZohoItemId(item.getZohoItemId());
+                lifecycle.setCreatedAt(now);
+            }
+
+            boolean wasAlreadyDelivered = lifecycle.getDeliveredAt() != null;
+
+            if (!wasAlreadyDelivered) {
+                lifecycle.setChallanNumber(challan);
+                lifecycle.setSiteStatus(SiteLifecycleStatus.DELIVERED);
+                lifecycle.setDeliveredAt(now);
+                lifecycle.setDeliveredBy(username);
+                lifecycle.setDeliveryLatitude(latitude);
+                lifecycle.setDeliveryLongitude(longitude);
+                lifecycle.setDeliveryAccuracy(accuracy);
+                lifecycle.setReceiverName(clean(receiverName, 300));
+                lifecycle.setReceiverPhone(clean(receiverPhone, 100));
+                lifecycle.setDeliveryRemarks(clean(remarks, 2000));
+                lifecycle.setUpdatedAt(now);
+                changedLifecycles.add(lifecycle);
+
+                if (proofOwner == null) {
+                    proofOwner = lifecycle;
+                }
+
+                item.setDeliveredAt(now);
+                item.setReceiverName(clean(receiverName, 300));
+                item.setReceiverPhone(clean(receiverPhone, 100));
+                item.setDeliveryLatitude(latitude);
+                item.setDeliveryLongitude(longitude);
+                item.setDeliveryLocationAccuracy(accuracy);
+                item.setDeliveryRemarks(clean(remarks, 1500));
+
+                auditLogService.log(
+                        item.getZohoItemId(),
+                        "Packet delivered on site through one-tap challan confirmation | Challan: "
+                                + challan,
+                        username,
+                        "SITE_DELIVERY");
+
+                activityLogService.log(
+                        item.getZohoItemId(),
+                        "SITE DELIVERED",
+                        username,
+                        "DRIVER",
+                        "DISPATCHED",
+                        "DELIVERED_ON_SITE",
+                        challan);
+            }
+
+            if (item.getTripEndedAt() == null) {
+                item.setTripEndedAt(now);
+            }
+        }
+
+        if (!changedLifecycles.isEmpty()) {
+            lifecycleRepository.saveAll(changedLifecycles);
+            lifecycleRepository.flush();
+        }
+
+        /*
+         * Store the challan-level photo set only once instead of duplicating the
+         * same image bytes for every packet. detail() falls back to this proof for
+         * the other packets in the same challan, while metadata counts the photos
+         * only once at challan level.
+         */
+        if (proofOwner != null) {
+            saveEvidence(
+                    proofOwner,
+                    SiteEvidenceStage.DELIVERY,
+                    images,
+                    username,
+                    now);
+        }
+
+        dispatchedItemRepository.saveAll(challanItems);
+        dispatchedItemRepository.flush();
+
+        return buildDriverChallanSummary(challan, challanItems);
+    }
+
+    private DriverChallanSummary buildDriverChallanSummary(
+            String challanNumber,
+            List<DispatchedItem> items) {
+        if (items == null || items.isEmpty()) {
+            return new DriverChallanSummary(
+                    challanNumber,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    0,
+                    0,
+                    false);
+        }
+
+        DispatchedItem first = items.get(0);
+        Map<UUID, PacketSiteLifecycle> lifecycles = loadLifecycles(items);
+        EvidenceAggregate evidence = loadEvidenceAggregate(lifecycles.values());
+
+        int deliveredPackets = 0;
+        long deliveryPhotos = 0L;
+        boolean ended = true;
+
+        for (DispatchedItem item : items) {
+            PacketSiteLifecycle lifecycle = item.getPacketItemId() == null
+                    ? null
+                    : lifecycles.get(item.getPacketItemId());
+
+            if (lifecycle != null && lifecycle.getDeliveredAt() != null) {
+                deliveredPackets++;
+                deliveryPhotos += evidence.count(
+                        lifecycle.getId(),
+                        SiteEvidenceStage.DELIVERY);
+            }
+
+            if (item.getTripEndedAt() == null) {
+                ended = false;
+            }
+        }
+
+        return new DriverChallanSummary(
+                challanNumber,
+                clean(first.getClientName(), 300),
+                clean(first.getDriverName(), 300),
+                clean(first.getVehicleNumber(), 120),
+                first.getDispatchedAt(),
+                first.getTripStartedAt(),
+                first.getTripEndedAt(),
+                items.size(),
+                deliveredPackets,
+                deliveryPhotos,
+                ended);
+    }
+
     @Transactional
     public SiteLifecycleRow deliver(
             String rawScanText,
@@ -922,9 +1205,86 @@ public class SiteLifecycleService {
             PacketSiteLifecycle lifecycle,
             boolean loadEvidence) {
         EvidenceAggregate evidence = loadEvidence
-                ? loadEvidenceAggregate(lifecycle == null ? List.of() : List.of(lifecycle))
+                ? loadEvidenceForDetail(item, lifecycle)
                 : new EvidenceAggregate(Map.of(), Map.of());
         return toRow(item, packetItem, lifecycle, evidence);
+    }
+
+    private EvidenceAggregate loadEvidenceForDetail(
+            DispatchedItem item,
+            PacketSiteLifecycle lifecycle) {
+        if (lifecycle == null || lifecycle.getId() == null) {
+            return new EvidenceAggregate(Map.of(), Map.of());
+        }
+
+        EvidenceAggregate own =
+                loadEvidenceAggregate(List.of(lifecycle));
+
+        if (own.count(lifecycle.getId(), SiteEvidenceStage.DELIVERY) > 0) {
+            return own;
+        }
+
+        String challan = item == null
+                ? null
+                : clean(item.getChalaanNumber(), 255);
+
+        if (challan == null) {
+            return own;
+        }
+
+        List<PacketSiteLifecycle> challanLifecycles = entityManager.createQuery(
+                        "SELECT l FROM PacketSiteLifecycle l "
+                                + "WHERE l.challanNumber = :challan "
+                                + "ORDER BY l.createdAt ASC",
+                        PacketSiteLifecycle.class)
+                .setParameter("challan", challan)
+                .getResultList();
+
+        LinkedHashSet<UUID> lifecycleIds = new LinkedHashSet<>();
+        for (PacketSiteLifecycle row : challanLifecycles) {
+            if (row != null && row.getId() != null) {
+                lifecycleIds.add(row.getId());
+            }
+        }
+
+        if (lifecycleIds.isEmpty()) {
+            return own;
+        }
+
+        List<UUID> sharedDeliveryEvidenceIds = entityManager.createQuery(
+                        "SELECT e.id FROM PacketSiteEvidence e "
+                                + "WHERE e.lifecycleId IN :lifecycleIds "
+                                + "AND e.stage = :stage "
+                                + "ORDER BY e.capturedAt ASC, e.ordinal ASC",
+                        UUID.class)
+                .setParameter("lifecycleIds", lifecycleIds)
+                .setParameter("stage", SiteEvidenceStage.DELIVERY)
+                .getResultList();
+
+        if (sharedDeliveryEvidenceIds.isEmpty()) {
+            return own;
+        }
+
+        Map<String, Long> counts =
+                new HashMap<>(own.counts());
+
+        counts.put(
+                evidenceKey(lifecycle.getId(), SiteEvidenceStage.DELIVERY),
+                (long) sharedDeliveryEvidenceIds.size());
+
+        Map<UUID, List<UUID>> ids =
+                new HashMap<>(own.evidenceIds());
+
+        List<UUID> combined = new ArrayList<>(sharedDeliveryEvidenceIds);
+        for (UUID ownId : own.ids(lifecycle.getId())) {
+            if (!combined.contains(ownId)) {
+                combined.add(ownId);
+            }
+        }
+
+        ids.put(lifecycle.getId(), combined);
+
+        return new EvidenceAggregate(counts, ids);
     }
 
     private SiteLifecycleRow toRow(
@@ -1027,6 +1387,20 @@ public class SiteLifecycleService {
         List<UUID> ids(UUID lifecycleId) {
             return evidenceIds.getOrDefault(lifecycleId, List.of());
         }
+    }
+
+    public record DriverChallanSummary(
+            String challanNumber,
+            String clientName,
+            String driverName,
+            String vehicleNumber,
+            LocalDateTime dispatchedAt,
+            LocalDateTime tripStartedAt,
+            LocalDateTime tripEndedAt,
+            int totalPackets,
+            int deliveredPackets,
+            long deliveryPhotoCount,
+            boolean tripEnded) {
     }
 
     public record RegisterResult(
