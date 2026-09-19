@@ -30,6 +30,7 @@ import {
   LoadingBlock,
   PageHero,
   EmptyState,
+  MATFLOW_ROLES,
   MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
   MatFlowViewToggle,
@@ -439,6 +440,8 @@ export function MatFlowBomListPage() {
 
 export function MatFlowBomDetailPage() {
   const { bomId } = useParams();
+  const { hasRole } = useMatFlow();
+  const canPermanentDelete = hasRole(MATFLOW_ROLES.ADMIN);
   const [viewMode, setViewMode] = useMatFlowViewMode("bom-detail", "LIST");
   const nav = useNavigate();
 
@@ -451,6 +454,8 @@ export function MatFlowBomDetailPage() {
   const [lineDialog, setLineDialog] = useState({ open: false, mode: "add" });
   const [line, setLine] = useState(lineBlank);
   const [deleteLine, setDeleteLine] = useState(null);
+  const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState("");
   const [openSections, setOpenSections] = useState({});
 
   const load = useCallback(async () => {
@@ -670,6 +675,28 @@ export function MatFlowBomDetailPage() {
     }
   };
 
+  const closePermanentDelete = () => {
+    if (working) return;
+    setPermanentDeleteOpen(false);
+    setPermanentDeleteConfirm("");
+  };
+
+  const permanentlyDeleteBom = async () => {
+    if (!canPermanentDelete || permanentDeleteConfirm.trim().toUpperCase() !== "DELETE") return;
+    setWorking(true);
+    setError("");
+    try {
+      await matflowApi.permanentlyDeleteBom(bomId);
+      setPermanentDeleteOpen(false);
+      setPermanentDeleteConfirm("");
+      nav("/matflow/boms", { replace: true });
+    } catch (requestError) {
+      setError(readMatFlowError(requestError, "Unable to permanently delete BOM."));
+    } finally {
+      setWorking(false);
+    }
+  };
+
   if (loading) return <LoadingBlock />;
 
   if (!bom) {
@@ -712,6 +739,16 @@ export function MatFlowBomDetailPage() {
             >
               {exporting ? "Preparing…" : "Download BOM"}
             </Button>
+            {canPermanentDelete && (
+              <Button
+                startIcon={<DeleteOutlineOutlinedIcon />}
+                onClick={() => { setPermanentDeleteConfirm(""); setPermanentDeleteOpen(true); }}
+                disabled={working}
+                sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: "var(--mf-danger-soft)" }}
+              >
+                Permanent Delete
+              </Button>
+            )}
             {editable && (
               <Button
                 startIcon={<AddOutlinedIcon />}
@@ -763,7 +800,7 @@ export function MatFlowBomDetailPage() {
               <Chip label="Current revision" size="small" sx={softChipSx} />
             )}
             {bom.legacyImported && (
-              <Chip label="Legacy BOM · preserved" size="small" sx={softChipSx} />
+              <Chip label="Legacy BOM · historical" size="small" sx={softChipSx} />
             )}
           </Box>
           <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>
@@ -1019,6 +1056,44 @@ export function MatFlowBomDetailPage() {
               : lineDialog.mode === "edit"
               ? "Save Changes"
               : "Add Material"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={permanentDeleteOpen}
+        onClose={closePermanentDelete}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{ sx: dialogPaperSx }}
+      >
+        <DialogTitle sx={dialogTitleSx}>ADMIN · Permanently Delete BOM?</DialogTitle>
+        <DialogContent sx={dialogContentSx}>
+          <Box sx={{ display: "grid", gap: 1, pt: 0.5 }}>
+            <Typography sx={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--mf-danger-text)", fontWeight: 850 }}>
+              This action cannot be undone.
+            </Typography>
+            <Typography sx={{ fontSize: 10.5, lineHeight: 1.6, color: "var(--mf-text-secondary)" }}>
+              {bom?.bomNumber || "This BOM"} · Revision {bom?.revisionNo || "—"} will be physically removed. If this is an imported legacy BOM, its old mf_boms / mf_bom_lines record and the current compatibility copy are removed together. Any dependent MatFlow rows are purged first.
+            </Typography>
+            <TextField
+              label="Type DELETE to confirm"
+              value={permanentDeleteConfirm}
+              onChange={(event) => setPermanentDeleteConfirm(event.target.value)}
+              autoComplete="off"
+              sx={fieldSx}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={dialogActionsSx}>
+          <Button onClick={closePermanentDelete} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+          <Button
+            onClick={permanentlyDeleteBom}
+            disabled={working || permanentDeleteConfirm.trim().toUpperCase() !== "DELETE"}
+            startIcon={<DeleteOutlineOutlinedIcon />}
+            sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: "var(--mf-danger-soft)" }}
+          >
+            {working ? "Deleting..." : "Permanently Delete"}
           </Button>
         </DialogActions>
       </Dialog>

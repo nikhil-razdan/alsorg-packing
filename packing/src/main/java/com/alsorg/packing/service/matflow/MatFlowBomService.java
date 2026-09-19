@@ -428,7 +428,11 @@ public class MatFlowBomService {
 
     @Transactional
     public void deleteDraft(UUID id, Long rowVersion) {
-        accessService.requireEngineeringWrite();
+        /* Physical BOM deletion is ADMIN-only. Engineering can revise/edit but cannot hard-delete. */
+        if (!accessService.hasAnyRole("ADMIN")) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only ADMIN can permanently delete a BOM");
+        }
         MatFlowBom bom = requireBom(id);
         requireVersion(bom.getRowVersion(), rowVersion);
         requireEditable(bom);

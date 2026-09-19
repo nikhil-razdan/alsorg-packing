@@ -405,7 +405,7 @@ function ProjectProductionFilePanel({ project, onOpen }) {
   );
 }
 
-function ProductMasterRow({ project, product, boms, canEdit, showEngineering, onEdit, onImage, onOpenBom }) {
+function ProductMasterRow({ project, product, boms, canEdit, canPermanentDelete, showEngineering, onEdit, onImage, onOpenBom, onPermanentDelete }) {
   const [expanded, setExpanded] = useState(false);
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
 
@@ -440,13 +440,25 @@ function ProductMasterRow({ project, product, boms, canEdit, showEngineering, on
             <Meta label="Remarks" value={product.remarks || "—"} />
           </Box>
 
-          {canEdit && (
+          {(canEdit || canPermanentDelete) && (
             <Box sx={productUtilityRowSx}>
-              <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(project, product)} sx={secondaryBtnSx}>Edit Product</Button>
-              <Button size="small" component="label" startIcon={<ImageOutlinedIcon />} sx={secondaryBtnSx}>
-                {product.productImageAvailable ? "Replace Image" : "Attach Image"}
-                <input hidden type="file" accept="image/*" onChange={(event) => onImage(project, product, event.target.files?.[0])} />
-              </Button>
+              {canEdit && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => onEdit(project, product)} sx={secondaryBtnSx}>Edit Product</Button>}
+              {canEdit && (
+                <Button size="small" component="label" startIcon={<ImageOutlinedIcon />} sx={secondaryBtnSx}>
+                  {product.productImageAvailable ? "Replace Image" : "Attach Image"}
+                  <input hidden type="file" accept="image/*" onChange={(event) => onImage(project, product, event.target.files?.[0])} />
+                </Button>
+              )}
+              {canPermanentDelete && (
+                <Button
+                  size="small"
+                  startIcon={<DeleteOutlineOutlinedIcon />}
+                  onClick={() => onPermanentDelete({ kind: "PRODUCT", project, product })}
+                  sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: "var(--mf-danger-soft)" }}
+                >
+                  Permanent Delete
+                </Button>
+              )}
             </Box>
           )}
 
@@ -502,6 +514,7 @@ export function MatFlowProjectsPage() {
     MATFLOW_ROLES.MANAGER,
     MATFLOW_ROLES.DESIGN_HEAD
   );
+  const canPermanentDelete = hasRole(MATFLOW_ROLES.ADMIN);
 
   const canSeeEngineeringReference = hasRole(
     MATFLOW_ROLES.ADMIN,
@@ -534,6 +547,8 @@ export function MatFlowProjectsPage() {
   const [clientCreateForm, setClientCreateForm] = useState({ name: "", address: "" });
   const [clientCreateError, setClientCreateError] = useState("");
   const [clientCreating, setClientCreating] = useState(false);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -872,6 +887,39 @@ export function MatFlowProjectsPage() {
 
   const openBom = (bom) => navigate(`/matflow/boms/${bom.id}`);
 
+  const openPermanentDelete = (target) => {
+    if (!canPermanentDelete || !target) return;
+    setPermanentDeleteConfirm("");
+    setPermanentDeleteTarget(target);
+  };
+
+  const closePermanentDelete = () => {
+    if (working) return;
+    setPermanentDeleteTarget(null);
+    setPermanentDeleteConfirm("");
+  };
+
+  const confirmPermanentDelete = async () => {
+    const target = permanentDeleteTarget;
+    if (!canPermanentDelete || !target || permanentDeleteConfirm.trim().toUpperCase() !== "DELETE") return;
+
+    const ok = await run(async () => {
+      if (target.kind === "PROJECT") {
+        await matflowApi.permanentlyDeleteProject(target.project.id);
+      } else if (target.kind === "PRODUCT") {
+        await matflowApi.permanentlyDeleteProjectProduct(target.project.id, target.product.id);
+      }
+    });
+
+    if (ok) {
+      const deletingProjectId = target.project?.id;
+      if (target.kind === "PROJECT" && selectedProjectId === deletingProjectId) closeProjectDetails();
+      setPermanentDeleteTarget(null);
+      setPermanentDeleteConfirm("");
+      await refresh();
+    }
+  };
+
   if (loading && !rows.length) return <LoadingBlock />;
 
   return (
@@ -1065,6 +1113,7 @@ export function MatFlowProjectsPage() {
                     {canSeeEngineeringReference ? `${productsWithBom}/${products.length || 0} with BOM` : `${readable(project.priority || "NORMAL")} priority`}
                   </Typography>
                   {canProjectWrite && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(project)} sx={{ ...secondaryBtnSx, px: 0.75 }}>Edit</Button>}
+                  {canPermanentDelete && <Button size="small" startIcon={<DeleteOutlineOutlinedIcon />} onClick={() => openPermanentDelete({ kind: "PROJECT", project })} sx={{ ...secondaryBtnSx, px: 0.75, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)" }}>Delete</Button>}
                   {canProjectWrite && <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(project)} sx={{ ...primaryBtnSx, px: 0.75 }}>Add</Button>}
                   <Button size="small" disabled={!project.productionFileId} endIcon={<OpenInNewOutlinedIcon />} onClick={() => openProjectProductionFile(project)} sx={{ ...secondaryBtnSx, px: 0.8 }}>Workflow</Button>
                   <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => openProjectDetails(project)} sx={{ ...secondaryBtnSx, px: 0.8 }}>Details</Button>
@@ -1106,6 +1155,7 @@ export function MatFlowProjectsPage() {
               </Box>
               <Box sx={{ display: "flex", gap: 0.55, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                 {canProjectWrite && <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEditProject(selectedProject)} sx={secondaryBtnSx}>Edit PD</Button>}
+                {canPermanentDelete && <Button size="small" startIcon={<DeleteOutlineOutlinedIcon />} onClick={() => openPermanentDelete({ kind: "PROJECT", project: selectedProject })} sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: "var(--mf-danger-soft)" }}>Permanent Delete</Button>}
                 {canProjectWrite && <Button size="small" startIcon={<AddOutlinedIcon />} onClick={() => openBulkProducts(selectedProject)} sx={primaryBtnSx}>Add Product</Button>}
                 <Button size="small" disabled={!selectedProject.productionFileId} endIcon={<OpenInNewOutlinedIcon />} onClick={() => openProjectProductionFile(selectedProject)} sx={secondaryBtnSx}>Open PD / Project File</Button>
                 <IconButton aria-label="Close project details" onClick={closeProjectDetails} sx={{ color: "var(--mf-text-secondary)", border: "1px solid var(--mf-border)" }}>
@@ -1159,10 +1209,12 @@ export function MatFlowProjectsPage() {
                           product={product}
                           boms={bomsByProduct.get(product.id) || []}
                           canEdit={canProjectWrite}
+                          canPermanentDelete={canPermanentDelete}
                           showEngineering={canSeeEngineeringReference}
                           onEdit={openProductEdit}
                           onImage={uploadImage}
                           onOpenBom={openBom}
+                          onPermanentDelete={openPermanentDelete}
                         />
                       ))}
                     </Box>
@@ -1326,6 +1378,47 @@ export function MatFlowProjectsPage() {
         <DialogActions sx={dialogActionsSx}>
           <Button onClick={() => setClientCreateOpen(false)} disabled={clientCreating} sx={secondaryBtnSx}>Cancel</Button>
           <Button onClick={saveClientFromProject} disabled={clientCreating || !String(clientCreateForm.name || "").trim()} sx={primaryBtnSx}>{clientCreating ? "Creating..." : "Create & Select"}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(permanentDeleteTarget)}
+        onClose={closePermanentDelete}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{ sx: dialogPaperSx }}
+      >
+        <DialogTitle sx={dialogTitleSx}>ADMIN · Permanent Delete</DialogTitle>
+        <DialogContent sx={dialogContentSx}>
+          <Box sx={{ display: "grid", gap: 1, pt: 0.5 }}>
+            <Typography sx={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--mf-danger-text)", fontWeight: 850 }}>
+              This action is irreversible.
+            </Typography>
+            <Typography sx={{ fontSize: 10.5, lineHeight: 1.6, color: "var(--mf-text-secondary)" }}>
+              {permanentDeleteTarget?.kind === "PROJECT"
+                ? `PD / Project ${permanentDeleteTarget?.project?.projectCode || permanentDeleteTarget?.project?.projectName || "selected record"} will be permanently removed together with its Products, current and legacy BOMs, Production File workflow records, revisions/attachments and MatFlow audit/history that depends on it.`
+                : `Product ${permanentDeleteTarget?.product?.productName || "selected record"} will be permanently removed together with all current and legacy BOM revisions and Product-specific MatFlow history.`}
+            </Typography>
+            <Typography sx={{ fontSize: 9.4, color: "var(--mf-text-muted)" }}>Shared masters such as Users, Client Directory, Plants and Materials are not deleted.</Typography>
+            <TextField
+              label='Type DELETE to confirm'
+              value={permanentDeleteConfirm}
+              onChange={(event) => setPermanentDeleteConfirm(event.target.value)}
+              autoComplete="off"
+              sx={fieldSx}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={dialogActionsSx}>
+          <Button onClick={closePermanentDelete} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+          <Button
+            onClick={confirmPermanentDelete}
+            disabled={working || permanentDeleteConfirm.trim().toUpperCase() !== "DELETE"}
+            startIcon={<DeleteOutlineOutlinedIcon />}
+            sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: "var(--mf-danger-soft)" }}
+          >
+            {working ? "Deleting..." : "Permanently Delete"}
+          </Button>
         </DialogActions>
       </Dialog>
 
