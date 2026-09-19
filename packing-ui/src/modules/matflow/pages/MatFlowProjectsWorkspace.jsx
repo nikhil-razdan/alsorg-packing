@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -29,6 +30,7 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import RadioButtonUncheckedOutlinedIcon from "@mui/icons-material/RadioButtonUncheckedOutlined";
 import { useNavigate } from "react-router-dom";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import API from "../../../services/api";
 import {
   ErrorBox,
   LoadingBlock,
@@ -78,17 +80,11 @@ const productBlank = {
   drawingNo: "",
   drawingRevision: "",
   unitQuantity: 1,
-  dimensionLength: "",
-  dimensionBreadth: "",
-  dimensionHeight: "",
   requiredDate: "",
   remarks: "",
   active: true,
   rowVersion: null,
 };
-
-const nullableNumber = (value) =>
-  value === "" || value === null || value === undefined ? null : Number(value);
 
 const cleanProjectBody = (value) => ({
   ...value,
@@ -98,9 +94,6 @@ const cleanProjectBody = (value) => ({
 const cleanProductBody = (value) => ({
   ...value,
   unitQuantity: Number(value.unitQuantity || 1),
-  dimensionLength: nullableNumber(value.dimensionLength),
-  dimensionBreadth: nullableNumber(value.dimensionBreadth),
-  dimensionHeight: nullableNumber(value.dimensionHeight),
   requiredDate: value.requiredDate || null,
 });
 
@@ -228,9 +221,6 @@ function ProductFields({ value, onChange, compact = false }) {
       <TextField size={compact ? "small" : "medium"} label="Current Drawing Revision" value={value.drawingRevision || ""} onChange={(e) => set("drawingRevision", e.target.value)} sx={fieldSx} />
       <TextField size={compact ? "small" : "medium"} type="number" inputProps={{ min: 1 }} label="Units" value={value.unitQuantity} onChange={(e) => set("unitQuantity", e.target.value)} sx={fieldSx} />
       <TextField size={compact ? "small" : "medium"} type="date" InputLabelProps={{ shrink: true }} label="Required Date" value={value.requiredDate || ""} onChange={(e) => set("requiredDate", e.target.value)} sx={fieldSx} />
-      <TextField size={compact ? "small" : "medium"} type="number" label="Length (mm)" value={value.dimensionLength ?? ""} onChange={(e) => set("dimensionLength", e.target.value)} sx={fieldSx} />
-      <TextField size={compact ? "small" : "medium"} type="number" label="Breadth (mm)" value={value.dimensionBreadth ?? ""} onChange={(e) => set("dimensionBreadth", e.target.value)} sx={fieldSx} />
-      <TextField size={compact ? "small" : "medium"} type="number" label="Height (mm)" value={value.dimensionHeight ?? ""} onChange={(e) => set("dimensionHeight", e.target.value)} sx={fieldSx} />
       <TextField size={compact ? "small" : "medium"} label="Remarks" value={value.remarks || ""} onChange={(e) => set("remarks", e.target.value)} sx={fieldSx} />
     </Box>
   );
@@ -429,7 +419,7 @@ function ProductMasterRow({ project, product, boms, canEdit, showEngineering, on
             {showEngineering && currentBom && <MatFlowStatusChip status={currentBom.status} />}
           </Box>
           <Typography sx={{ mt: 0.14, fontSize: 8.6, color: "var(--mf-text-muted)" }}>
-            Drawing {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""} · {product.unitQuantity || 1} unit{Number(product.unitQuantity || 1) === 1 ? "" : "s"}{product.dimensions ? ` · ${product.dimensions}` : ""}
+            Drawing {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""} · {product.unitQuantity || 1} unit{Number(product.unitQuantity || 1) === 1 ? "" : "s"}
           </Typography>
         </Box>
         <Button
@@ -446,7 +436,6 @@ function ProductMasterRow({ project, product, boms, canEdit, showEngineering, on
         <Box sx={productExpandedSx}>
           <Box sx={productInfoGridSx}>
             <Meta label="Required" value={formatDate(product.requiredDate || project.requiredDate)} />
-            <Meta label="Dimensions" value={product.dimensions || "Pending"} />
             <Meta label="Units" value={product.unitQuantity || 1} />
             <Meta label="Remarks" value={product.remarks || "—"} />
           </Box>
@@ -508,6 +497,12 @@ export function MatFlowProjectsPage() {
     MATFLOW_ROLES.ENGINEERING_HEAD,
     MATFLOW_ROLES.ENGINEERING
   );
+  const canChooseJuniorDesigner = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DESIGN_HEAD
+  );
+
   const canSeeEngineeringReference = hasRole(
     MATFLOW_ROLES.ADMIN,
     MATFLOW_ROLES.MANAGER,
@@ -530,6 +525,15 @@ export function MatFlowProjectsPage() {
   const [productForms, setProductForms] = useState([productBlank]);
   const [editProduct, setEditProduct] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [juniorDesignerOptions, setJuniorDesignerOptions] = useState([]);
+  const [juniorDesignerLoading, setJuniorDesignerLoading] = useState(false);
+  const [juniorDesignerError, setJuniorDesignerError] = useState("");
+  const [clientOptions, setClientOptions] = useState([]);
+  const [clientLoading, setClientLoading] = useState(false);
+  const [clientCreateOpen, setClientCreateOpen] = useState(false);
+  const [clientCreateForm, setClientCreateForm] = useState({ name: "", address: "" });
+  const [clientCreateError, setClientCreateError] = useState("");
+  const [clientCreating, setClientCreating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -569,6 +573,62 @@ export function MatFlowProjectsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let live = true;
+    const plantCode = String(projectForm.plantCode || "").trim();
+    if (!canChooseJuniorDesigner || !dialog.startsWith("project") || !plantCode) {
+      setJuniorDesignerOptions([]);
+      setJuniorDesignerError("");
+      return undefined;
+    }
+
+    setJuniorDesignerLoading(true);
+    setJuniorDesignerError("");
+    API.get("/matflow/users/junior-designers", { params: { plantCode } })
+      .then((response) => {
+        if (!live) return;
+        const usernames = (Array.isArray(response?.data) ? response.data : [])
+          .map((row) => String(row?.username || "").trim())
+          .filter(Boolean);
+        setJuniorDesignerOptions(Array.from(new Set(usernames)));
+      })
+      .catch((requestError) => {
+        if (!live) return;
+        setJuniorDesignerOptions([]);
+        setJuniorDesignerError(readMatFlowError(requestError, "Unable to load Junior Designers."));
+      })
+      .finally(() => { if (live) setJuniorDesignerLoading(false); });
+
+    return () => { live = false; };
+  }, [canChooseJuniorDesigner, dialog, projectForm.plantCode]);
+
+  useEffect(() => {
+    let live = true;
+    let timer = null;
+    const query = String(projectForm.clientName || "").trim();
+    if (!dialog.startsWith("project") || query.length < 2) {
+      setClientOptions([]);
+      setClientLoading(false);
+      return undefined;
+    }
+
+    setClientLoading(true);
+    timer = window.setTimeout(() => {
+      API.get("/client-master/search", { params: { q: query, limit: 20 } })
+        .then((response) => {
+          if (!live) return;
+          setClientOptions(Array.isArray(response?.data) ? response.data : []);
+        })
+        .catch(() => { if (live) setClientOptions([]); })
+        .finally(() => { if (live) setClientLoading(false); });
+    }, 220);
+
+    return () => {
+      live = false;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [dialog, projectForm.clientName]);
 
   useEffect(() => {
     if (!canSeeEngineeringReference) {
@@ -717,6 +777,36 @@ export function MatFlowProjectsPage() {
       setDialog("");
       setActiveProject(null);
       await refresh();
+    }
+  };
+
+  const saveClientFromProject = async () => {
+    const name = String(clientCreateForm.name || "").trim();
+    if (!name) {
+      setClientCreateError("Client Name is required.");
+      return;
+    }
+    setClientCreating(true);
+    setClientCreateError("");
+    try {
+      const response = await API.post("/client-master", {
+        name,
+        address: String(clientCreateForm.address || "").trim(),
+        active: true,
+      });
+      const created = response?.data || { name, address: clientCreateForm.address || "" };
+      const createdName = String(created?.name || name).trim();
+      setClientOptions((current) => {
+        const next = [created, ...current.filter((row) => String(row?.name || "").toLowerCase() !== createdName.toLowerCase())];
+        return next;
+      });
+      setProjectForm((current) => ({ ...current, clientName: createdName }));
+      setClientCreateOpen(false);
+      setClientCreateForm({ name: "", address: "" });
+    } catch (requestError) {
+      setClientCreateError(readMatFlowError(requestError, "Unable to create Client."));
+    } finally {
+      setClientCreating(false);
     }
   };
 
@@ -958,7 +1048,7 @@ export function MatFlowProjectsPage() {
                               DWG {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""}
                             </Typography>
                           </Box>
-                          {canSeeEngineeringReference && currentBom ? <MatFlowStatusChip status={currentBom.status} /> : <Typography sx={{ fontSize: 7.9, color: "var(--mf-text-muted)" }}>{product.dimensions || "Product"}</Typography>}
+                          {canSeeEngineeringReference && currentBom ? <MatFlowStatusChip status={currentBom.status} /> : <Typography sx={{ fontSize: 7.9, color: "var(--mf-text-muted)" }}>{product.productType || "Product"}</Typography>}
                         </Box>
                       );
                     })
@@ -1059,7 +1149,7 @@ export function MatFlowProjectsPage() {
                             <Typography noWrap sx={{ fontSize: 10.3, fontWeight: 950, color: "var(--mf-text)" }}>{product.productName || "Unnamed Product"}</Typography>
                             <Typography noWrap sx={{ mt: 0.06, fontSize: 8.3, color: "var(--mf-text-muted)" }}>DWG {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""}</Typography>
                           </Box>
-                          <Typography sx={{ fontSize: 8.8, color: "var(--mf-text-secondary)" }}>{product.dimensions || "Dimensions pending"} · Due {formatDate(product.requiredDate || selectedProject.requiredDate)}</Typography>
+                          <Typography sx={{ fontSize: 8.8, color: "var(--mf-text-secondary)" }}>Due {formatDate(product.requiredDate || selectedProject.requiredDate)}</Typography>
                           <Button size="small" onClick={() => openDesignPd(selectedProject)} sx={primaryBtnSx}>Open PD Work</Button>
                         </Box>
                       ) : (
@@ -1101,8 +1191,65 @@ export function MatFlowProjectsPage() {
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.2, pt: 0.5 }}>
             <TextField label="PD No. / Project Code (Optional)" value={projectForm.projectCode} onChange={(e) => setProjectForm({ ...projectForm, projectCode: e.target.value })} sx={fieldSx} />
             <TextField label="Project Name" value={projectForm.projectName} onChange={(e) => setProjectForm({ ...projectForm, projectName: e.target.value })} sx={fieldSx} />
-            <TextField label="Client Name" value={projectForm.clientName} onChange={(e) => setProjectForm({ ...projectForm, clientName: e.target.value })} sx={fieldSx} />
-            <TextField select label="Plant" value={projectForm.plantCode} onChange={(e) => setProjectForm({ ...projectForm, plantCode: e.target.value })} sx={fieldSx}>
+            <Autocomplete
+              freeSolo
+              options={clientOptions}
+              loading={clientLoading}
+              value={clientOptions.find((row) => String(row?.name || "").toLowerCase() === String(projectForm.clientName || "").toLowerCase()) || projectForm.clientName || null}
+              inputValue={projectForm.clientName || ""}
+              getOptionLabel={(option) => typeof option === "string" ? option : String(option?.name || "")}
+              isOptionEqualToValue={(option, value) => String(option?.id || option?.name || "") === String(value?.id || value?.name || value || "")}
+              filterOptions={(options, params) => {
+                const result = [...options];
+                const typed = String(params.inputValue || "").trim();
+                const exact = options.some((row) => String(row?.name || "").trim().toLowerCase() === typed.toLowerCase());
+                if (typed && !exact && canProjectWrite) {
+                  result.push({ id: `__create__:${typed}`, name: `Create client “${typed}”`, inputValue: typed, __create: true });
+                }
+                return result;
+              }}
+              onInputChange={(_event, value, reason) => {
+                if (reason === "input" || reason === "clear") {
+                  setProjectForm((current) => ({ ...current, clientName: value }));
+                }
+              }}
+              onChange={(_event, value) => {
+                if (!value) {
+                  setProjectForm((current) => ({ ...current, clientName: "" }));
+                  return;
+                }
+                if (typeof value === "string") {
+                  setProjectForm((current) => ({ ...current, clientName: value }));
+                  return;
+                }
+                if (value.__create) {
+                  setClientCreateForm({ name: value.inputValue || "", address: "" });
+                  setClientCreateError("");
+                  setClientCreateOpen(true);
+                  return;
+                }
+                setProjectForm((current) => ({ ...current, clientName: value.name || "" }));
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Client"
+                  helperText="Search the shared Client Directory. Type a new name and choose Create client to add it without leaving this PD."
+                  sx={fieldSx}
+                />
+              )}
+            />
+            <TextField
+              select
+              label="Plant"
+              value={projectForm.plantCode}
+              onChange={(e) => setProjectForm((current) => ({
+                ...current,
+                plantCode: e.target.value,
+                designer1: dialog === "project-new" && canChooseJuniorDesigner ? "" : current.designer1,
+              }))}
+              sx={fieldSx}
+            >
               {(availablePlants || []).map((plant) => (
                 <MenuItem key={plant} value={plant}>{plant}</MenuItem>
               ))}
@@ -1130,17 +1277,32 @@ export function MatFlowProjectsPage() {
                 <Typography sx={{ mt: 0.15, fontSize: 10.2, fontWeight: 900, color: "var(--mf-text)" }}>You · automatic self-assignment</Typography>
                 <Typography sx={{ mt: 0.1, fontSize: 8.8, color: "var(--mf-text-muted)" }}>A Junior Designer can create a Project / PD only for their own account. The Design Head can still view, track and edit it.</Typography>
               </Box>
-            ) : (
+            ) : canChooseJuniorDesigner ? (
               <TextField
+                select
                 label="Junior Designer / Design Owner"
                 value={projectForm.designer1 || ""}
                 onChange={(e) => setProjectForm({ ...projectForm, designer1: e.target.value })}
-                disabled={dialog === "project-edit"}
+                disabled={dialog === "project-edit" || juniorDesignerLoading}
                 helperText={dialog === "project-edit"
                   ? "Use the Design PD workspace to reassign an existing Project / PD."
-                  : "When entered during creation, this PD is immediately assigned to that Design owner."}
+                  : (juniorDesignerError || "Choose an enabled FlowSuite Junior Designer with MATFLOW access for this Plant.")}
                 sx={fieldSx}
-              />
+              >
+                <MenuItem value=""><em>Unassigned</em></MenuItem>
+                {projectForm.designer1 && !juniorDesignerOptions.includes(projectForm.designer1) && (
+                  <MenuItem value={projectForm.designer1} disabled>
+                    {projectForm.designer1} (not currently eligible for this Plant)
+                  </MenuItem>
+                )}
+                {!juniorDesignerOptions.length && !juniorDesignerLoading && <MenuItem disabled value="__NONE__">No Junior Designers available for this Plant</MenuItem>}
+                {juniorDesignerOptions.map((username) => <MenuItem key={username} value={username}>{username}</MenuItem>)}
+              </TextField>
+            ) : (
+              <Box sx={{ px: 1.2, py: 1, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)" }}>
+                <Typography sx={{ fontSize: 8.4, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--mf-text-muted)" }}>Junior Designer / Design Owner</Typography>
+                <Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-secondary)" }}>Design Head assigns the Junior Designer from the FlowSuite user directory.</Typography>
+              </Box>
             )}
             {!juniorDesignerOnly && <TextField label="Design Head" value={projectForm.designHead || ""} onChange={(e) => setProjectForm({ ...projectForm, designHead: e.target.value })} sx={fieldSx} />}
             <TextField label="Remarks" multiline minRows={2} value={projectForm.remarks || ""} onChange={(e) => setProjectForm({ ...projectForm, remarks: e.target.value })} sx={{ ...fieldSx, gridColumn: { md: "1/-1" } }} />
@@ -1149,6 +1311,21 @@ export function MatFlowProjectsPage() {
         <DialogActions sx={dialogActionsSx}>
           <Button onClick={() => setDialog("")} sx={secondaryBtnSx}>Cancel</Button>
           <Button disabled={working} onClick={saveProject} sx={primaryBtnSx}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={clientCreateOpen} onClose={() => !clientCreating && setClientCreateOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+        <DialogTitle sx={dialogTitleSx}>Create Client</DialogTitle>
+        <DialogContent sx={dialogContentSx}>
+          <Box sx={{ display: "grid", gap: 1, pt: 0.5 }}>
+            <TextField label="Client Name" value={clientCreateForm.name} onChange={(e) => setClientCreateForm((current) => ({ ...current, name: e.target.value }))} sx={fieldSx} />
+            <TextField label="Address (Optional)" multiline minRows={2} value={clientCreateForm.address} onChange={(e) => setClientCreateForm((current) => ({ ...current, address: e.target.value }))} sx={fieldSx} />
+            {clientCreateError && <Typography sx={{ fontSize: 9.2, color: "var(--mf-danger-text)" }}>{clientCreateError}</Typography>}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={dialogActionsSx}>
+          <Button onClick={() => setClientCreateOpen(false)} disabled={clientCreating} sx={secondaryBtnSx}>Cancel</Button>
+          <Button onClick={saveClientFromProject} disabled={clientCreating || !String(clientCreateForm.name || "").trim()} sx={primaryBtnSx}>{clientCreating ? "Creating..." : "Create & Select"}</Button>
         </DialogActions>
       </Dialog>
 

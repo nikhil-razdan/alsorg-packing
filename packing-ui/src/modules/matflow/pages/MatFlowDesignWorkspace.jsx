@@ -29,6 +29,7 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import { useSearchParams } from "react-router-dom";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import API from "../../../services/api";
 import {
   EmptyState,
   ErrorBox,
@@ -56,9 +57,6 @@ const PRODUCT_BLANK = {
   drawingNo: "",
   drawingRevision: "0",
   unitQuantity: 1,
-  dimensionLength: "",
-  dimensionBreadth: "",
-  dimensionHeight: "",
   requiredDate: "",
   remarks: "",
   active: true,
@@ -80,13 +78,9 @@ const formatDateTime = (value) => {
 };
 const inputDateTime = (value) => value ? String(value).slice(0, 16) : "";
 const displayPd = (row) => row?.pdNumberPending || !clean(row?.projectCode) ? "PD No. not assigned" : row.projectCode;
-const nullableNumber = (value) => value === "" || value == null ? null : Number(value);
 const cleanProductBody = (value) => ({
   ...value,
   unitQuantity: Number(value.unitQuantity || 1),
-  dimensionLength: nullableNumber(value.dimensionLength),
-  dimensionBreadth: nullableNumber(value.dimensionBreadth),
-  dimensionHeight: nullableNumber(value.dimensionHeight),
   requiredDate: value.requiredDate || null,
 });
 
@@ -124,9 +118,6 @@ function ProductForm({ value, onChange }) {
       <TextField label="Revision" value={value.drawingRevision} onChange={(e) => set("drawingRevision", e.target.value)} sx={fieldSx} />
       <TextField type="number" inputProps={{ min: 1 }} label="Units" value={value.unitQuantity} onChange={(e) => set("unitQuantity", e.target.value)} sx={fieldSx} />
       <TextField type="date" InputLabelProps={{ shrink: true }} label="Required Date" value={value.requiredDate} onChange={(e) => set("requiredDate", e.target.value)} sx={fieldSx} />
-      <TextField type="number" label="Length (mm)" value={value.dimensionLength} onChange={(e) => set("dimensionLength", e.target.value)} sx={fieldSx} />
-      <TextField type="number" label="Breadth (mm)" value={value.dimensionBreadth} onChange={(e) => set("dimensionBreadth", e.target.value)} sx={fieldSx} />
-      <TextField type="number" label="Height (mm)" value={value.dimensionHeight} onChange={(e) => set("dimensionHeight", e.target.value)} sx={fieldSx} />
       <TextField label="Work / Product note" value={value.remarks} onChange={(e) => set("remarks", e.target.value)} sx={fieldSx} />
     </Box>
   );
@@ -144,7 +135,7 @@ function ProductSubtaskRow({ row, canProgress, canEdit, working, onProgress, onE
             {row.productType && <Chip size="small" label={row.productType} sx={{ height: 21, fontSize: 8.4, fontWeight: 850 }} />}
           </Box>
           <Typography sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
-            Drawing {row.drawingNo || "Not assigned"} · Rev {row.drawingRevision || "0"}{row.dimensions ? ` · ${row.dimensions}` : ""}
+            Drawing {row.drawingNo || "Not assigned"} · Rev {row.drawingRevision || "0"}
           </Typography>
           {(row.note || row.productRemarks) && <Typography sx={{ mt: 0.22, fontSize: 9, color: "var(--mf-text-secondary)" }}>{row.note || row.productRemarks}</Typography>}
         </Box>
@@ -192,6 +183,9 @@ export default function MatFlowDesignWorkspace() {
   const [tab, setTab] = useState("overview");
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignForm, setAssignForm] = useState({ assignedJunior: "", dueAt: "", brief: "" });
+  const [juniorDesignerOptions, setJuniorDesignerOptions] = useState([]);
+  const [juniorDesignerLoading, setJuniorDesignerLoading] = useState(false);
+  const [juniorDesignerError, setJuniorDesignerError] = useState("");
   const [productOpen, setProductOpen] = useState(false);
   const [productEditingId, setProductEditingId] = useState("");
   const [productForm, setProductForm] = useState(PRODUCT_BLANK);
@@ -229,6 +223,35 @@ export default function MatFlowDesignWorkspace() {
 
   useEffect(() => { loadList(); }, [loadList]);
   useEffect(() => { if (selectedProjectId) loadDetail(selectedProjectId); else setSelected(null); }, [selectedProjectId, loadDetail]);
+
+  useEffect(() => {
+    let live = true;
+    const plantCode = String(selected?.plantCode || "").trim();
+    if (!canHead || !assignOpen || !plantCode) {
+      setJuniorDesignerOptions([]);
+      setJuniorDesignerError("");
+      return undefined;
+    }
+
+    setJuniorDesignerLoading(true);
+    setJuniorDesignerError("");
+    API.get("/matflow/users/junior-designers", { params: { plantCode } })
+      .then((response) => {
+        if (!live) return;
+        const usernames = (Array.isArray(response?.data) ? response.data : [])
+          .map((row) => String(row?.username || "").trim())
+          .filter(Boolean);
+        setJuniorDesignerOptions(Array.from(new Set(usernames)));
+      })
+      .catch((requestError) => {
+        if (!live) return;
+        setJuniorDesignerOptions([]);
+        setJuniorDesignerError(readMatFlowError(requestError, "Unable to load Junior Designers."));
+      })
+      .finally(() => { if (live) setJuniorDesignerLoading(false); });
+
+    return () => { live = false; };
+  }, [assignOpen, canHead, selected?.plantCode]);
 
   const refresh = async () => {
     await Promise.all([loadList({ quiet: true }), selectedProjectId ? loadDetail(selectedProjectId, { quiet: true }) : Promise.resolve()]);
@@ -318,9 +341,6 @@ export default function MatFlowDesignWorkspace() {
       drawingNo: product.drawingNo || "",
       drawingRevision: product.drawingRevision || "0",
       unitQuantity: product.unitQuantity || 1,
-      dimensionLength: product.dimensionLength ?? "",
-      dimensionBreadth: product.dimensionBreadth ?? "",
-      dimensionHeight: product.dimensionHeight ?? "",
       requiredDate: product.requiredDate || "",
       remarks: product.productRemarks || "",
       active: true,
@@ -645,7 +665,24 @@ export default function MatFlowDesignWorkspace() {
       <Dialog open={assignOpen} onClose={() => setAssignOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Assign PD / Project</DialogTitle>
         <DialogContent sx={{ display: "grid", gap: 1, pt: "12px !important" }}>
-          <TextField label="Junior Designer / Design team username" value={assignForm.assignedJunior} onChange={(e) => setAssignForm({ ...assignForm, assignedJunior: e.target.value })} sx={fieldSx} />
+          <TextField
+            select
+            label="Junior Designer / Design Owner"
+            value={assignForm.assignedJunior}
+            onChange={(e) => setAssignForm({ ...assignForm, assignedJunior: e.target.value })}
+            disabled={juniorDesignerLoading}
+            helperText={juniorDesignerError || "Choose an enabled FlowSuite user with MATFLOW_DESIGNER_JUNIOR access for this Plant."}
+            sx={fieldSx}
+          >
+            <MenuItem value=""><em>Select Junior Designer</em></MenuItem>
+            {assignForm.assignedJunior && !juniorDesignerOptions.includes(assignForm.assignedJunior) && (
+              <MenuItem value={assignForm.assignedJunior} disabled>
+                {assignForm.assignedJunior} (not currently eligible for this Plant)
+              </MenuItem>
+            )}
+            {!juniorDesignerOptions.length && !juniorDesignerLoading && <MenuItem disabled value="__NONE__">No Junior Designers available for this Plant</MenuItem>}
+            {juniorDesignerOptions.map((username) => <MenuItem key={username} value={username}>{username}</MenuItem>)}
+          </TextField>
           <TextField type="datetime-local" InputLabelProps={{ shrink: true }} label="Design due date" value={assignForm.dueAt} onChange={(e) => setAssignForm({ ...assignForm, dueAt: e.target.value })} sx={fieldSx} />
           <TextField multiline minRows={3} label="Design brief / mail instruction" value={assignForm.brief} onChange={(e) => setAssignForm({ ...assignForm, brief: e.target.value })} sx={fieldSx} />
         </DialogContent>

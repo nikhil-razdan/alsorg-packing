@@ -206,6 +206,54 @@ public class UserService {
                                                 "username"));
         }
 
+        /**
+         * Narrow directory used by MatFlow Design Head/Manager assignment UI.
+         *
+         * Only real FlowSuite Junior Designer identities are returned:
+         * - enabled account
+         * - MATFLOW_DESIGNER_JUNIOR authority
+         * - MATFLOW is the only web module assigned
+         * - MATFLOW_DESIGNER_JUNIOR is the only effective role
+         * - explicit access to the requested plant
+         *
+         * Keeping this filter in UserService means MatFlow reuses the canonical
+         * FlowSuite user directory instead of maintaining a second designer master.
+         */
+        @Transactional(readOnly = true)
+        public List<User> getMatFlowJuniorDesigners(
+                        String plantCode) {
+
+                String cleanPlant = plantCode == null
+                                ? ""
+                                : plantCode.trim().toUpperCase(Locale.ROOT);
+
+                if (cleanPlant.isBlank()) {
+                        throw new RuntimeException(
+                                        "Plant code is required for Junior Designer lookup");
+                }
+
+                if (!plantLocationService.isValidPlant(cleanPlant)) {
+                        throw new RuntimeException(
+                                        "Invalid plant access: " + cleanPlant);
+                }
+
+                return repo.findAll(
+                                Sort.by(
+                                                Sort.Direction.ASC,
+                                                "username"))
+                                .stream()
+                                .filter(java.util.Objects::nonNull)
+                                .filter(User::isEnabled)
+                                .filter(this::isPureMatFlowJuniorDesigner)
+                                .filter(user -> user.getEffectivePlantCodes() != null
+                                                && user.getEffectivePlantCodes()
+                                                                .stream()
+                                                                .filter(java.util.Objects::nonNull)
+                                                                .map(String::trim)
+                                                                .anyMatch(code -> cleanPlant.equalsIgnoreCase(code)))
+                                .toList();
+        }
+
         @Transactional
         public User updateUser(
                         Long id,
@@ -656,11 +704,44 @@ public class UserService {
         private boolean hasRole(
                         User user,
                         String requestedRole) {
-                return user != null &&
-                                user.getEffectiveRoles()
+                return user != null
+                                && requestedRole != null
+                                && user.getEffectiveRoles() != null
+                                && user.getEffectiveRoles()
                                                 .stream()
+                                                .filter(java.util.Objects::nonNull)
                                                 .anyMatch(role -> requestedRole.equalsIgnoreCase(
                                                                 role));
+        }
+
+        private boolean isPureMatFlowJuniorDesigner(
+                        User user) {
+                if (user == null
+                                || !hasRole(user, "MATFLOW_DESIGNER_JUNIOR")) {
+                        return false;
+                }
+
+                Set<String> roles = user.getEffectiveRoles();
+                if (roles == null
+                                || roles.isEmpty()
+                                || roles.stream()
+                                                .filter(java.util.Objects::nonNull)
+                                                .map(role -> role.trim().replaceFirst("(?i)^ROLE_", "").toUpperCase(Locale.ROOT))
+                                                .anyMatch(role -> !"MATFLOW_DESIGNER_JUNIOR".equals(role))) {
+                        return false;
+                }
+
+                Set<String> modules = user.getEffectiveModules();
+                return modules != null
+                                && modules.stream()
+                                                .filter(java.util.Objects::nonNull)
+                                                .map(module -> module.trim().toUpperCase(Locale.ROOT))
+                                                .filter(module -> !module.isBlank())
+                                                .allMatch("MATFLOW"::equals)
+                                && modules.stream()
+                                                .filter(java.util.Objects::nonNull)
+                                                .map(module -> module.trim().toUpperCase(Locale.ROOT))
+                                                .anyMatch("MATFLOW"::equals);
         }
 
 
