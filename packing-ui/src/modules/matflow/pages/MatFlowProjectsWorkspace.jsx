@@ -518,6 +518,7 @@ export function MatFlowProjectsPage() {
   const [viewMode, setViewMode] = useMatFlowViewMode("projects", "LIST");
   const [rows, setRows] = useState([]);
   const [boms, setBoms] = useState([]);
+  const [bomsLoaded, setBomsLoaded] = useState(!canSeeEngineeringReference);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -533,23 +534,58 @@ export function MatFlowProjectsPage() {
     setLoading(true);
     setError("");
     try {
-      const projectsPromise = matflowApi.listProjects({ active: true, plantCode: selectedPlantParam });
-      const bomsPromise = canSeeEngineeringReference ? matflowApi.listBoms() : Promise.resolve({ data: [] });
-      const [projectsResponse, bomsResponse] = await Promise.all([projectsPromise, bomsPromise]);
-      const projects = Array.isArray(projectsResponse?.data) ? projectsResponse.data : [];
-      const bomRows = canSeeEngineeringReference && Array.isArray(bomsResponse?.data) ? bomsResponse.data : [];
-      setRows(projects);
-      setBoms(bomRows);
+      const projectsResponse = await matflowApi.listProjects({ active: true, plantCode: selectedPlantParam });
+      setRows(Array.isArray(projectsResponse?.data) ? projectsResponse.data : []);
     } catch (requestError) {
       setError(readMatFlowError(requestError, "Unable to load MatFlow Projects."));
     } finally {
       setLoading(false);
     }
-  }, [selectedPlantParam, canSeeEngineeringReference]);
+  }, [selectedPlantParam]);
+
+  const loadBoms = useCallback(async ({ reportError = false } = {}) => {
+    if (!canSeeEngineeringReference) {
+      setBoms([]);
+      setBomsLoaded(true);
+      return;
+    }
+    try {
+      const response = await matflowApi.listBoms();
+      setBoms(Array.isArray(response?.data) ? response.data : []);
+    } catch (requestError) {
+      if (reportError) setError(readMatFlowError(requestError, "Unable to load Engineering BOM references."));
+    } finally {
+      setBomsLoaded(true);
+    }
+  }, [canSeeEngineeringReference]);
+
+  const refresh = useCallback(async () => {
+    matflowApi.clearReadCache();
+    setBomsLoaded(!canSeeEngineeringReference);
+    await Promise.all([load(), loadBoms({ reportError: true })]);
+  }, [load, loadBoms, canSeeEngineeringReference]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!canSeeEngineeringReference) {
+      setBoms([]);
+      setBomsLoaded(true);
+      return undefined;
+    }
+
+    // Projects are the primary screen data. Engineering BOM references are warmed
+    // just after first paint so they do not hold the entire Projects page hostage.
+    setBomsLoaded(false);
+    const timer = window.setTimeout(() => loadBoms(), 450);
+    return () => window.clearTimeout(timer);
+  }, [canSeeEngineeringReference, selectedPlantParam, loadBoms]);
+
+  useEffect(() => {
+    if (selectedProjectId && canSeeEngineeringReference && !bomsLoaded) loadBoms();
+  }, [selectedProjectId, canSeeEngineeringReference, bomsLoaded, loadBoms]);
 
   const bomsByProduct = useMemo(() => {
     const result = new Map();
@@ -679,7 +715,7 @@ export function MatFlowProjectsPage() {
     if (ok) {
       setDialog("");
       setActiveProject(null);
-      await load();
+      await refresh();
     }
   };
 
@@ -704,7 +740,7 @@ export function MatFlowProjectsPage() {
       setDialog("");
       setSelectedProjectId(projectId);
       setActiveProject(null);
-      await load();
+      await refresh();
     }
   };
 
@@ -723,14 +759,14 @@ export function MatFlowProjectsPage() {
       setDialog("");
       setEditProduct(null);
       setActiveProject(null);
-      await load();
+      await refresh();
     }
   };
 
   const uploadImage = async (project, product, file) => {
     if (!file) return;
     const ok = await run(() => matflowApi.uploadProductImage(project.id, product.id, file));
-    if (ok) await load();
+    if (ok) await refresh();
   };
 
   const openProjectProductionFile = (project) => {
@@ -756,7 +792,7 @@ export function MatFlowProjectsPage() {
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
             <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
-            <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>
+            <Button startIcon={<RefreshOutlinedIcon />} onClick={refresh} disabled={loading} sx={secondaryBtnSx}>
               Refresh
             </Button>
             {canProjectWrite && (

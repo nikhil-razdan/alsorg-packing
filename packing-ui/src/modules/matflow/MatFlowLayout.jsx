@@ -146,21 +146,30 @@ export default function MatFlowLayout() {
     }, [selectedPlantParam]);
 
     useEffect(() => {
-        loadNotifications();
+        // Do not compete with the first route payload. Notifications are secondary UI
+        // data and can warm immediately after the operational screen has painted.
+        const initialTimer = window.setTimeout(() => {
+            if (document.visibilityState === "visible") loadNotifications({ quiet: true });
+        }, 1000);
         const timer = window.setInterval(() => {
             if (document.visibilityState === "visible") loadNotifications({ quiet: true });
-        }, 10000);
+        }, 30000);
         const onVisible = () => {
             if (document.visibilityState === "visible") loadNotifications({ quiet: true });
         };
         window.addEventListener("focus", onVisible);
         document.addEventListener("visibilitychange", onVisible);
         return () => {
+            window.clearTimeout(initialTimer);
             window.clearInterval(timer);
             window.removeEventListener("focus", onVisible);
             document.removeEventListener("visibilitychange", onVisible);
         };
     }, [loadNotifications]);
+
+    useEffect(() => {
+        if (notificationsOpen) loadNotifications();
+    }, [notificationsOpen, loadNotifications]);
 
     const items = useMemo(
         () => NAV.filter((item) => canAccessMatFlowScreenForContext(

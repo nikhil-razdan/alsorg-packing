@@ -44,6 +44,7 @@ import {
   MATFLOW_ROLES,
   MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
+  MatFlowStatusChip,
   MatFlowViewToggle,
   MatFlowListGrid,
   PageHero,
@@ -735,6 +736,7 @@ function MatFlowOperationalWorkWorkspace() {
   const [revisionNo, setRevisionNo] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
   const [revisionFile, setRevisionFile] = useState(null);
+  const detailRequestRef = useRef(0);
 
   /*
    * Keep deep links live even when the user is already inside MatFlow Work and a
@@ -817,6 +819,7 @@ function MatFlowOperationalWorkWorkspace() {
   );
 
   const loadDetail = useCallback(async (id, { quiet = false } = {}) => {
+    const requestId = ++detailRequestRef.current;
     if (!id) {
       setDetail(null);
       setProjectContext(null);
@@ -824,22 +827,45 @@ function MatFlowOperationalWorkWorkspace() {
       setDetailLoading(false);
       return;
     }
-    if (!quiet) setDetailLoading(true);
+
+    if (!quiet) {
+      setDetailLoading(true);
+      setProjectContext(null);
+      setProjectBoms([]);
+    }
+
+    let nextDetail = null;
     try {
       const response = await matflowApi.getProductionFile(id);
-      const nextDetail = response?.data || null;
+      if (requestId !== detailRequestRef.current) return;
+      nextDetail = response?.data || null;
       setDetail(nextDetail);
-      const projectId = nextDetail?.productionFile?.projectId;
-      const [projectResponse, bomsResponse] = await Promise.all([
-        projectId ? matflowApi.getProject(projectId) : Promise.resolve({ data: null }),
-        matflowApi.listBoms({ productionFileId: id }),
-      ]);
-      setProjectContext(projectResponse?.data || null);
-      setProjectBoms(Array.isArray(bomsResponse?.data) ? bomsResponse.data : []);
-    } catch (requestError) {
-      if (!quiet) setError(readMatFlowError(requestError, "Unable to load PD / Project Production File."));
-    } finally {
+
+      // The core Production File is enough to paint the drawer. Product/BOM reference
+      // data is supporting context and must not block the first visible detail render.
       if (!quiet) setDetailLoading(false);
+    } catch (requestError) {
+      if (requestId !== detailRequestRef.current) return;
+      if (!quiet) {
+        setDetailLoading(false);
+        setError(readMatFlowError(requestError, "Unable to load PD / Project Production File."));
+      }
+      return;
+    }
+
+    const projectId = nextDetail?.productionFile?.projectId;
+    const contextResults = await Promise.allSettled([
+      projectId ? matflowApi.getProject(projectId) : Promise.resolve({ data: null }),
+      matflowApi.listBoms({ productionFileId: id }),
+    ]);
+    if (requestId !== detailRequestRef.current) return;
+
+    const [projectResult, bomsResult] = contextResults;
+    if (projectResult?.status === "fulfilled") {
+      setProjectContext(projectResult.value?.data || null);
+    }
+    if (bomsResult?.status === "fulfilled") {
+      setProjectBoms(Array.isArray(bomsResult.value?.data) ? bomsResult.value.data : []);
     }
   }, []);
 
@@ -964,6 +990,7 @@ function MatFlowOperationalWorkWorkspace() {
   };
 
   const refresh = async () => {
+    matflowApi.clearReadCache();
     await loadList({ quiet: true });
     await loadDetail(selectedId, { quiet: true });
   };

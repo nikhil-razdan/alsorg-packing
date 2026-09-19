@@ -85,18 +85,49 @@ public class MatFlowDesignProjectService {
         boolean juniorOnly = accessService.isJuniorDesignerOnly();
         String actor = accessService.actor();
 
+        Map<UUID, MatFlowDesignProjectWork> workByProject = new LinkedHashMap<>();
+        for (MatFlowDesignProjectWork work : repository.findAll()) {
+            if (work.getProject() != null && work.getProject().getId() != null) {
+                workByProject.put(work.getProject().getId(), work);
+            }
+        }
+
+        Map<UUID, List<MatFlowProjectDrawing>> productsByProject = new LinkedHashMap<>();
+        for (MatFlowProjectDrawing product : productRepository.findAll()) {
+            if (product.getProject() == null || product.getProject().getId() == null) continue;
+            productsByProject.computeIfAbsent(product.getProject().getId(), ignored -> new ArrayList<>()).add(product);
+        }
+        for (List<MatFlowProjectDrawing> products : productsByProject.values()) {
+            products.sort(Comparator.comparing(MatFlowProjectDrawing::getCreatedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder())));
+        }
+
+        Map<UUID, MatFlowProductionFile> fileByProject = canonicalFilesByProject();
+
         List<DesignProjectResponse> result = new ArrayList<>();
         for (MatFlowProject project : projectRepository.findAllByOrderByUpdatedAtDesc()) {
             if (!project.isActive() || !accessService.canAccessPlant(project.getPlantCode())) continue;
             if (plant != null && !plant.equalsIgnoreCase(project.getPlantCode())) continue;
-            MatFlowDesignProjectWork work = ensure(project, false);
+
+            MatFlowDesignProjectWork work = workByProject.get(project.getId());
+            if (work == null) {
+                // Compatibility fallback only. New Projects are initialized at creation.
+                work = ensure(project, false);
+                workByProject.put(project.getId(), work);
+            }
             if (juniorOnly && !same(work.getAssignedJunior(), actor)) continue;
             if (assignedFilter != null && !same(work.getAssignedJunior(), assignedFilter)) continue;
-            DesignProjectResponse response = toResponse(project, work);
+
+            DesignProjectResponse response = toResponse(
+                    project,
+                    work,
+                    productsByProject.getOrDefault(project.getId(), List.of()),
+                    fileByProject.get(project.getId()));
             if (statusFilter != null && !statusFilter.equalsIgnoreCase(response.status())) continue;
             if (q != null && !containsDesignProject(response, q)) continue;
             result.add(response);
         }
+
         result.sort(Comparator
                 .comparingInt((DesignProjectResponse row) -> statusRank(row.status()))
                 .thenComparing(DesignProjectResponse::overdue, Comparator.reverseOrder())
@@ -123,6 +154,55 @@ public class MatFlowDesignProjectService {
         MatFlowDesignProjectWork work = repository.findByProject_Id(projectId).orElse(null);
         if (project == null || work == null || !work.isWorkflowEnabled()) return null;
         return toResponse(project, work);
+    }
+
+    /**
+     * Batch snapshot used by dashboard/insight aggregation. It performs one read of
+     * Design work, Products and canonical Project Production Files instead of one
+     * repository round-trip per PD.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, DesignProjectResponse> findExistingForProjects(Set<UUID> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) return Map.of();
+
+        Map<UUID, MatFlowProject> projects = new LinkedHashMap<>();
+        for (MatFlowProject project : projectRepository.findAllById(projectIds)) {
+            projects.put(project.getId(), project);
+        }
+
+        Map<UUID, MatFlowDesignProjectWork> workByProject = new LinkedHashMap<>();
+        for (MatFlowDesignProjectWork work : repository.findAll()) {
+            if (work.getProject() == null || work.getProject().getId() == null || !work.isWorkflowEnabled()) continue;
+            UUID projectId = work.getProject().getId();
+            if (projectIds.contains(projectId)) workByProject.put(projectId, work);
+        }
+
+        Map<UUID, List<MatFlowProjectDrawing>> productsByProject = new LinkedHashMap<>();
+        for (MatFlowProjectDrawing product : productRepository.findAll()) {
+            if (product.getProject() == null || product.getProject().getId() == null) continue;
+            UUID projectId = product.getProject().getId();
+            if (projectIds.contains(projectId)) {
+                productsByProject.computeIfAbsent(projectId, ignored -> new ArrayList<>()).add(product);
+            }
+        }
+        for (List<MatFlowProjectDrawing> products : productsByProject.values()) {
+            products.sort(Comparator.comparing(MatFlowProjectDrawing::getCreatedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder())));
+        }
+
+        Map<UUID, MatFlowProductionFile> fileByProject = canonicalFilesByProject();
+        Map<UUID, DesignProjectResponse> result = new LinkedHashMap<>();
+        for (UUID projectId : projectIds) {
+            MatFlowProject project = projects.get(projectId);
+            MatFlowDesignProjectWork work = workByProject.get(projectId);
+            if (project == null || work == null) continue;
+            result.put(projectId, toResponse(
+                    project,
+                    work,
+                    productsByProject.getOrDefault(projectId, List.of()),
+                    fileByProject.get(projectId)));
+        }
+        return Map.copyOf(result);
     }
 
     /** New Projects enter the PD-level Design model immediately. */
@@ -313,6 +393,17 @@ public class MatFlowDesignProjectService {
     }
 
     @Transactional(readOnly = true)
+    public Set<UUID> workflowEnabledProjectIds(Set<UUID> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) return Set.of();
+        Set<UUID> enabled = new java.util.LinkedHashSet<>();
+        for (MatFlowDesignProjectWork work : repository.findAll()) {
+            if (!work.isWorkflowEnabled() || work.getProject() == null || work.getProject().getId() == null) continue;
+            if (projectIds.contains(work.getProject().getId())) enabled.add(work.getProject().getId());
+        }
+        return java.util.Collections.unmodifiableSet(enabled);
+    }
+
+    @Transactional(readOnly = true)
     public boolean isAssignedTo(UUID projectId, String username) {
         String actor = clean(username);
         if (projectId == null || actor == null) return false;
@@ -345,6 +436,13 @@ public class MatFlowDesignProjectService {
     }
 
     private List<String> handoffBlockers(MatFlowProject project, MatFlowDesignProjectWork work) {
+        return handoffBlockers(project, work, productsOf(project.getId()));
+    }
+
+    private List<String> handoffBlockers(
+            MatFlowProject project,
+            MatFlowDesignProjectWork work,
+            List<MatFlowProjectDrawing> projectProducts) {
         List<String> blockers = new ArrayList<>();
         if (clean(project.getDesignHead()) == null) blockers.add("Design Head is not assigned");
         if (clean(work.getAssignedJunior()) == null) blockers.add("Project / PD is not assigned to a Junior Designer / Design team member");
@@ -353,7 +451,7 @@ public class MatFlowDesignProjectService {
                 .filter(item -> !isResolved(item.status())).count();
         if (pendingChecklist > 0) blockers.add(pendingChecklist + " blocking PD Design checklist point" + (pendingChecklist == 1 ? " is" : "s are") + " pending");
 
-        List<MatFlowProjectDrawing> products = productsOf(project.getId()).stream().filter(MatFlowProjectDrawing::isActive).toList();
+        List<MatFlowProjectDrawing> products = projectProducts.stream().filter(MatFlowProjectDrawing::isActive).toList();
         if (products.isEmpty()) blockers.add("Add at least one Product before Design handoff");
         Map<String, StoredProductProgress> progress = productProgress(work);
         List<String> pendingProducts = products.stream()
@@ -369,6 +467,15 @@ public class MatFlowDesignProjectService {
     }
 
     private DesignProjectResponse toResponse(MatFlowProject project, MatFlowDesignProjectWork work) {
+        return toResponse(project, work, productsOf(project.getId()),
+                fileRepository.findFirstByProject_IdAndProductIsNullOrderByCreatedAtAsc(project.getId()).orElse(null));
+    }
+
+    private DesignProjectResponse toResponse(
+            MatFlowProject project,
+            MatFlowDesignProjectWork work,
+            List<MatFlowProjectDrawing> projectProducts,
+            MatFlowProductionFile file) {
         List<StoredChecklistItem> storedChecklist = checklist(work);
         int complete = (int) storedChecklist.stream().filter(item -> "COMPLETE".equals(upper(item.status()))).count();
         int na = (int) storedChecklist.stream().filter(item -> "NOT_APPLICABLE".equals(upper(item.status()))).count();
@@ -379,7 +486,7 @@ public class MatFlowDesignProjectService {
         Map<String, StoredProductProgress> progress = productProgress(work);
         List<ProductSubtaskResponse> products = new ArrayList<>();
         int done = 0;
-        for (MatFlowProjectDrawing product : productsOf(project.getId())) {
+        for (MatFlowProjectDrawing product : projectProducts) {
             if (!product.isActive()) continue;
             StoredProductProgress stored = progress.get(product.getId().toString());
             String productStatus = stored == null ? "TODO" : upper(stored.status());
@@ -393,9 +500,8 @@ public class MatFlowDesignProjectService {
                     product.getRowVersion()));
         }
 
-        MatFlowProductionFile file = fileRepository.findFirstByProject_IdAndProductIsNullOrderByCreatedAtAsc(project.getId()).orElse(null);
         boolean downstream = file != null && file.getStage() != null && !DESIGN_STAGES.contains(file.getStage());
-        List<String> blockers = handoffBlockers(project, work);
+        List<String> blockers = handoffBlockers(project, work, projectProducts);
         String status = designStatus(work, products, downstream, blockers.isEmpty());
         boolean overdue = work.getDueAt() != null && work.getDueAt().isBefore(now()) && !downstream;
 
@@ -469,6 +575,21 @@ public class MatFlowDesignProjectService {
         MatFlowProjectDrawing product = productRepository.findById(productId).orElseThrow(() -> notFound("Product not found"));
         if (product.getProject() == null || !projectId.equals(product.getProject().getId())) throw notFound("Product not found in this Project / PD");
         return product;
+    }
+
+    private Map<UUID, MatFlowProductionFile> canonicalFilesByProject() {
+        Map<UUID, MatFlowProductionFile> result = new LinkedHashMap<>();
+        for (MatFlowProductionFile file : fileRepository.findAll()) {
+            if (file.getProject() == null || file.getProject().getId() == null || file.getProduct() != null) continue;
+            UUID projectId = file.getProject().getId();
+            MatFlowProductionFile existing = result.get(projectId);
+            if (existing == null
+                    || (file.getCreatedAt() != null
+                        && (existing.getCreatedAt() == null || file.getCreatedAt().isBefore(existing.getCreatedAt())))) {
+                result.put(projectId, file);
+            }
+        }
+        return result;
     }
 
     private MatFlowProductionFile canonicalFile(UUID projectId) {

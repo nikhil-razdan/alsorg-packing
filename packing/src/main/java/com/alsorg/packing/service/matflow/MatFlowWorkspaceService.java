@@ -115,14 +115,65 @@ public class MatFlowWorkspaceService {
         final String term = q;
         boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         Set<UUID> juniorVisibleFiles = juniorDesignerOnly ? juniorDesignerVisibleFileIds() : Set.of();
-        return fileRepository.findAllByOrderByUpdatedAtDesc().stream()
+
+        List<MatFlowProductionFile> files = fileRepository.findAllByOrderByUpdatedAtDesc().stream()
                 .filter(f -> f.isActive() && f.getProduct() == null && accessService.canAccessPlant(f.getPlantCode()))
                 .filter(f -> plant == null || plant.equalsIgnoreCase(f.getPlantCode()))
                 .filter(f -> !juniorDesignerOnly || juniorVisibleFiles.contains(f.getId()))
                 .filter(f -> stageFilter == null || f.getStage() == stageFilter)
                 .filter(f -> healthFilter == null || f.getReleaseHealth() == healthFilter)
-                .filter(f -> term.isBlank() || productionFileContains(f, term))
-                .map(this::toFileResponse).toList();
+                .toList();
+
+        Set<UUID> projectIds = new LinkedHashSet<>();
+        for (MatFlowProductionFile file : files) {
+            if (file.getProject() != null && file.getProject().getId() != null) {
+                projectIds.add(file.getProject().getId());
+            }
+        }
+        Map<UUID, List<MatFlowProjectDrawing>> productsByProject = new HashMap<>();
+        for (MatFlowProjectDrawing product : productRepository.findAll()) {
+            if (product.getProject() == null || product.getProject().getId() == null) continue;
+            UUID projectId = product.getProject().getId();
+            if (projectIds.contains(projectId)) {
+                productsByProject.computeIfAbsent(projectId, ignored -> new ArrayList<>()).add(product);
+            }
+        }
+
+        if (!term.isBlank()) {
+            files = files.stream()
+                    .filter(file -> productionFileContains(file, term,
+                            file.getProject() == null
+                                    ? List.of()
+                                    : productsByProject.getOrDefault(file.getProject().getId(), List.of())))
+                    .toList();
+        }
+
+        Set<UUID> fileIds = new LinkedHashSet<>();
+        for (MatFlowProductionFile file : files) fileIds.add(file.getId());
+        Map<UUID, List<MatFlowWorkItem>> workByFile = new HashMap<>();
+        for (MatFlowWorkItem item : workRepository.findAll()) {
+            if (item.getProductionFile() == null || !fileIds.contains(item.getProductionFile().getId())) continue;
+            workByFile.computeIfAbsent(item.getProductionFile().getId(), ignored -> new ArrayList<>()).add(item);
+        }
+
+        Map<UUID, List<MatFlowDesignTask>> designTasksByFile = new HashMap<>();
+        for (MatFlowDesignTask task : designTaskRepository.findAllForQueue()) {
+            if (task.getProductionFile() == null || !fileIds.contains(task.getProductionFile().getId())) continue;
+            designTasksByFile.computeIfAbsent(task.getProductionFile().getId(), ignored -> new ArrayList<>()).add(task);
+        }
+
+        Set<UUID> enabledDesignProjects = designProjectService.workflowEnabledProjectIds(projectIds);
+        List<ProductionFileResponse> result = new ArrayList<>(files.size());
+        for (MatFlowProductionFile file : files) {
+            boolean pdDesignWorkflow = file.getProject() != null
+                    && enabledDesignProjects.contains(file.getProject().getId());
+            result.add(toFileResponse(
+                    file,
+                    workByFile.getOrDefault(file.getId(), List.of()),
+                    designTasksByFile.getOrDefault(file.getId(), List.of()),
+                    pdDesignWorkflow));
+        }
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -1228,8 +1279,21 @@ public class MatFlowWorkspaceService {
 
     private ReleaseHealth releaseHealth(ChecklistProgress p){ if(p.criticalPending()>0)return ReleaseHealth.RED; if(p.requiredPending()>0)return ReleaseHealth.AMBER; return ReleaseHealth.GREEN; }
     private ChecklistProgress progress(UUID fileId, WorkItemType type){
-        List<MatFlowWorkItem> rows=items(fileId,type).stream().filter(x->x.getStatus()!=WorkItemStatus.CANCELLED).toList(); int complete=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.COMPLETE).count(); int na=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.NOT_APPLICABLE).count(); int pending=rows.size()-complete-na;
-        int critical=(int)rows.stream().filter(x->x.getCriticality()==Criticality.CRITICAL&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int required=(int)rows.stream().filter(x->x.getCriticality()==Criticality.REQUIRED&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int percent=rows.isEmpty()?0:(int)Math.round(((complete+na)*100.0)/rows.size()); return new ChecklistProgress(rows.size(),complete,na,pending,critical,required,percent);
+        return progress(items(fileId, type), type);
+    }
+
+    private ChecklistProgress progress(List<MatFlowWorkItem> source, WorkItemType type){
+        List<MatFlowWorkItem> rows = source.stream()
+                .filter(x -> x.getItemType() == type)
+                .filter(x -> x.getStatus() != WorkItemStatus.CANCELLED)
+                .toList();
+        int complete=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.COMPLETE).count();
+        int na=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.NOT_APPLICABLE).count();
+        int pending=rows.size()-complete-na;
+        int critical=(int)rows.stream().filter(x->x.getCriticality()==Criticality.CRITICAL&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count();
+        int required=(int)rows.stream().filter(x->x.getCriticality()==Criticality.REQUIRED&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count();
+        int percent=rows.isEmpty()?0:(int)Math.round(((complete+na)*100.0)/rows.size());
+        return new ChecklistProgress(rows.size(),complete,na,pending,critical,required,percent);
     }
 
     private ProductionFileDetailResponse toDetail(MatFlowProductionFile file){
@@ -1302,6 +1366,69 @@ public class MatFlowWorkspaceService {
                 designBlockers.isEmpty(), designBlockers, gate2.isEmpty(), gate2);
     }
 
+    private ProductionFileResponse toFileResponse(
+            MatFlowProductionFile file,
+            List<MatFlowWorkItem> allItems,
+            List<MatFlowDesignTask> allDesignTasks,
+            boolean pdDesignWorkflow) {
+        boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
+        String actor = accessService.actor();
+
+        List<MatFlowWorkItem> engineeringTasks = allItems.stream()
+                .filter(item -> item.getItemType() == WorkItemType.ENGINEERING_TASK)
+                .toList();
+        int completed = juniorDesignerOnly ? 0 : (int) engineeringTasks.stream()
+                .filter(item -> Set.of(WorkItemStatus.COMPLETE, WorkItemStatus.NOT_APPLICABLE).contains(item.getStatus()))
+                .count();
+        int pending = juniorDesignerOnly ? 0 : engineeringTasks.size() - completed;
+
+        List<MatFlowDesignTask> visibleDesignTasks = juniorDesignerOnly
+                ? allDesignTasks.stream().filter(task -> isDesignTaskAssignedTo(task, actor)).toList()
+                : allDesignTasks;
+        DesignTaskProgress designProgress = designTaskProgress(visibleDesignTasks, null);
+
+        int visibleQueries = (int) allItems.stream()
+                .filter(item -> item.getItemType() == WorkItemType.ENGINEERING_QUERY)
+                .filter(item -> OPEN_QUERY_STATUSES.contains(item.getStatus()))
+                .filter(item -> !juniorDesignerOnly || isQueryRelatedToActor(item, actor))
+                .count();
+
+        ChecklistProgress visibleDesignChecklistProgress = (!juniorDesignerOnly && !pdDesignWorkflow)
+                ? progress(allItems, WorkItemType.DESIGN_CHECK)
+                : null;
+        ChecklistProgress engineeringChecklistProgress = juniorDesignerOnly
+                ? null
+                : progress(allItems, WorkItemType.ENGINEERING_CHECK);
+
+        return new ProductionFileResponse(
+                file.getId(), file.getProductionFileNo(), file.getProject().getId(), null,
+                file.getProjectCode(), file.getProjectName(), file.getClientName(), file.getProjectName(), null, file.getPlantCode(),
+                file.getStage().name(), juniorDesignerOnly ? null : file.getReleaseHealth().name(),
+                juniorDesignerOnly ? null : file.getEngineeringDecision().name(),
+                juniorDesignerOnly ? "DESIGN" : file.getCurrentDepartment(),
+                juniorDesignerOnly ? actor : file.getCurrentOwner(),
+                juniorDesignerOnly ? null : file.getDesigner(), juniorDesignerOnly ? null : file.getDesignHead(),
+                juniorDesignerOnly ? null : file.getDesignHeadDecision(),
+                juniorDesignerOnly ? null : file.getDesignHeadReviewedBy(),
+                juniorDesignerOnly ? null : file.getDesignHeadReviewedAt(),
+                juniorDesignerOnly ? null : file.getDesignHeadRemarks(),
+                juniorDesignerOnly ? null : file.getPpcOwner(),
+                juniorDesignerOnly ? null : file.getEngineeringHead(),
+                juniorDesignerOnly ? null : file.getAssignedEngineer(),
+                juniorDesignerOnly ? null : file.getControlledReleaseReason(),
+                juniorDesignerOnly ? null : file.getPlannedProductionReleaseDate(),
+                juniorDesignerOnly ? null : file.getPlannedDispatchDate(),
+                juniorDesignerOnly ? null : file.getPpcGate1Decision(),
+                juniorDesignerOnly ? null : file.getPpcGate2Decision(),
+                juniorDesignerOnly ? false : file.isRevisionReviewRequired(),
+                juniorDesignerOnly ? null : file.getDownstreamWorkflowKey(),
+                juniorDesignerOnly ? null : file.getDownstreamWorkflowStatus(),
+                juniorDesignerOnly ? null : file.getProductionReleasedAt(),
+                file.getProjectCode(),
+                visibleDesignChecklistProgress, designProgress, engineeringChecklistProgress,
+                visibleQueries, pending, completed, null, null, file.getRowVersion(), file.getUpdatedAt());
+    }
+
     private ProductionFileResponse toFileResponse(MatFlowProductionFile file){
         boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         String actor = accessService.actor();
@@ -1372,7 +1499,11 @@ public class MatFlowWorkspaceService {
     }
 
     private DesignTaskProgress designTaskProgress(UUID fileId, String assignee) {
-        List<MatFlowDesignTask> rows = designTasks(fileId).stream()
+        return designTaskProgress(designTasks(fileId), assignee);
+    }
+
+    private DesignTaskProgress designTaskProgress(List<MatFlowDesignTask> source, String assignee) {
+        List<MatFlowDesignTask> rows = source.stream()
                 .filter(task -> assignee == null || isDesignTaskAssignedTo(task, assignee))
                 .toList();
         int need=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.NEED_TO_START).count();
@@ -1469,12 +1600,19 @@ public class MatFlowWorkspaceService {
     }
 
     private boolean productionFileContains(MatFlowProductionFile file, String term) {
+        return productionFileContains(file, term, projectProducts(file));
+    }
+
+    private boolean productionFileContains(
+            MatFlowProductionFile file,
+            String term,
+            List<MatFlowProjectDrawing> projectProducts) {
         return contains(file.getProductionFileNo(), term)
                 || contains(file.getProjectCode(), term)
                 || contains(file.getProjectName(), term)
                 || contains(file.getClientName(), term)
                 || contains(file.getCurrentOwner(), term)
-                || projectProducts(file).stream().anyMatch(product ->
+                || projectProducts.stream().anyMatch(product ->
                         contains(product.getProductName(), term)
                                 || contains(product.getDrawingNo(), term)
                                 || contains(product.getProductType(), term));

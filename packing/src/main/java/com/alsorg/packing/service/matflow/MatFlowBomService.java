@@ -297,10 +297,9 @@ public class MatFlowBomService {
         return rehomedBoms + importedBoms;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<BomResponse> list(String search, String status, UUID productionFileId) {
         accessService.requireEngineeringRead();
-        reconcileLegacyBoms();
         String q = clean(search);
         q = q == null ? "" : q.toLowerCase(Locale.ROOT);
         final String term = q;
@@ -325,10 +324,9 @@ public class MatFlowBomService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public BomResponse get(UUID id) {
         accessService.requireEngineeringRead();
-        reconcileLegacyBoms();
         MatFlowBom b = requireBom(id);
         return toResponse(b);
     }
@@ -336,7 +334,6 @@ public class MatFlowBomService {
     @Transactional
     public BomResponse create(BomCreateRequest request) {
         accessService.requireEngineeringWrite();
-        reconcileLegacyBoms();
         if (request == null || request.productionFileId() == null) throw badRequest("Production File is required");
         if (request.productId() == null) throw badRequest("Product is required for a BOM");
 

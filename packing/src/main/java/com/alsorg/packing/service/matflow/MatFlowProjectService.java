@@ -18,8 +18,12 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -108,23 +112,62 @@ public class MatFlowProjectService {
         q = q == null ? "" : q.toLowerCase(Locale.ROOT);
         final String term = q;
         String actor = accessService.actor();
+        boolean junior = accessService.isJuniorDesignerOnly();
 
-        return projectRepository.findAllByOrderByUpdatedAtDesc().stream()
-                .filter(project -> accessService.canAccessPlant(project.getPlantCode()))
-                .filter(project -> plant == null || plant.equalsIgnoreCase(project.getPlantCode()))
-                .peek(project -> ensureCanonicalProductionFile(project, actor))
-                .filter(project -> active == null || project.isActive() == active)
-                .filter(project -> !accessService.isJuniorDesignerOnly() || juniorDesignerCanAccessProject(project.getId()))
-                .filter(project -> term.isBlank()
-                        || contains(project.getProjectCode(), term)
-                        || contains(project.getProjectName(), term)
-                        || contains(project.getClientName(), term)
-                        || productsOf(project.getId()).stream().anyMatch(product ->
-                                contains(product.getProductName(), term)
-                                        || contains(product.getDrawingNo(), term)
-                                        || contains(product.getProductType(), term)))
-                .map(this::toProject)
-                .toList();
+        /*
+         * Projects used to issue several repository calls per Project and another
+         * canonical-file lookup per Product. Preload both child collections once for
+         * this request so the Projects screen remains O(1) repository round-trips.
+         */
+        Map<UUID, List<MatFlowProjectDrawing>> productsByProject = new LinkedHashMap<>();
+        for (MatFlowProjectDrawing product : productRepository.findAll()) {
+            if (product.getProject() == null || product.getProject().getId() == null) continue;
+            productsByProject.computeIfAbsent(product.getProject().getId(), ignored -> new ArrayList<>()).add(product);
+        }
+        for (List<MatFlowProjectDrawing> products : productsByProject.values()) {
+            products.sort(Comparator.comparing(MatFlowProjectDrawing::getCreatedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder())));
+        }
+
+        Map<UUID, MatFlowProductionFile> canonicalByProject = new LinkedHashMap<>();
+        for (MatFlowProductionFile file : productionFileRepository.findAll()) {
+            if (file.getProject() == null || file.getProject().getId() == null || file.getProduct() != null) continue;
+            UUID projectId = file.getProject().getId();
+            MatFlowProductionFile existing = canonicalByProject.get(projectId);
+            if (existing == null
+                    || (file.getCreatedAt() != null
+                        && (existing.getCreatedAt() == null || file.getCreatedAt().isBefore(existing.getCreatedAt())))) {
+                canonicalByProject.put(projectId, file);
+            }
+        }
+
+        List<ProjectResponse> result = new ArrayList<>();
+        for (MatFlowProject project : projectRepository.findAllByOrderByUpdatedAtDesc()) {
+            if (!accessService.canAccessPlant(project.getPlantCode())) continue;
+            if (plant != null && !plant.equalsIgnoreCase(project.getPlantCode())) continue;
+            if (active != null && project.isActive() != active) continue;
+            if (junior && !juniorDesignerCanAccessProject(project.getId())) continue;
+
+            List<MatFlowProjectDrawing> products = productsByProject.getOrDefault(project.getId(), List.of());
+            if (!term.isBlank()
+                    && !contains(project.getProjectCode(), term)
+                    && !contains(project.getProjectName(), term)
+                    && !contains(project.getClientName(), term)
+                    && products.stream().noneMatch(product ->
+                            contains(product.getProductName(), term)
+                                    || contains(product.getDrawingNo(), term)
+                                    || contains(product.getProductType(), term))) {
+                continue;
+            }
+
+            MatFlowProductionFile file = canonicalByProject.get(project.getId());
+            if (file == null) {
+                file = ensureCanonicalProductionFile(project, actor);
+                canonicalByProject.put(project.getId(), file);
+            }
+            result.add(toProject(project, products, file, junior));
+        }
+        return result;
     }
 
     @Transactional
@@ -597,9 +640,19 @@ public class MatFlowProjectService {
     }
 
     private ProjectResponse toProject(MatFlowProject project) {
-        List<ProductResponse> products = productsOf(project.getId()).stream().map(this::toProduct).toList();
         boolean junior = accessService.isJuniorDesignerOnly();
         MatFlowProductionFile file = canonicalFile(project.getId());
+        return toProject(project, productsOf(project.getId()), file, junior);
+    }
+
+    private ProjectResponse toProject(
+            MatFlowProject project,
+            List<MatFlowProjectDrawing> projectProducts,
+            MatFlowProductionFile file,
+            boolean junior) {
+        List<ProductResponse> products = projectProducts.stream()
+                .map(product -> toProduct(product, file, junior))
+                .toList();
         return new ProjectResponse(
                 project.getId(), project.getProjectCode(), project.getProjectName(), project.getClientName(), project.getPlantCode(),
                 project.getRequiredDate(), project.getPriority(), junior ? null : project.getProjectManager(),
@@ -612,7 +665,10 @@ public class MatFlowProjectService {
 
     private ProductResponse toProduct(MatFlowProjectDrawing product) {
         MatFlowProductionFile file = canonicalFile(product.getProject().getId());
-        boolean junior = accessService.isJuniorDesignerOnly();
+        return toProduct(product, file, accessService.isJuniorDesignerOnly());
+    }
+
+    private ProductResponse toProduct(MatFlowProjectDrawing product, MatFlowProductionFile file, boolean junior) {
         return new ProductResponse(
                 product.getId(), product.getProject().getId(), product.getProductName(), product.getProductType(),
                 product.getDrawingNo(), product.getDrawingRevision(), product.getUnitQuantity() == null ? 1 : product.getUnitQuantity(),

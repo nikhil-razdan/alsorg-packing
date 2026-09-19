@@ -68,6 +68,32 @@ public class MatFlowInsightService {
         boolean juniorDesignerOnly = accessService.isJuniorDesignerOnly();
         String actor = accessService.actor();
         List<MatFlowProductionFile> files = readableFiles(plant, true);
+        Set<java.util.UUID> fileIds = new java.util.LinkedHashSet<>();
+        for (MatFlowProductionFile file : files) fileIds.add(file.getId());
+
+        Map<java.util.UUID, List<MatFlowWorkItem>> workByFile = new LinkedHashMap<>();
+        for (MatFlowWorkItem item : workRepository.findAll()) {
+            if (item.getProductionFile() == null || !fileIds.contains(item.getProductionFile().getId())) continue;
+            workByFile.computeIfAbsent(item.getProductionFile().getId(), ignored -> new ArrayList<>()).add(item);
+        }
+
+        Set<java.util.UUID> projectIds = new java.util.LinkedHashSet<>();
+        for (MatFlowProductionFile file : files) {
+            if (file.getProject() != null && file.getProject().getId() != null) {
+                projectIds.add(file.getProject().getId());
+            }
+        }
+        Map<java.util.UUID, DesignProjectResponse> designByProject =
+                designProjectService.findExistingForProjects(projectIds);
+
+        Map<java.util.UUID, List<MatFlowDesignTask>> legacyDesignTasksByFile = new LinkedHashMap<>();
+        for (MatFlowDesignTask task : designTaskRepository.findAllForQueue()) {
+            if (task.getProductionFile() == null || !fileIds.contains(task.getProductionFile().getId())) continue;
+            legacyDesignTasksByFile
+                    .computeIfAbsent(task.getProductionFile().getId(), ignored -> new ArrayList<>())
+                    .add(task);
+        }
+
         Map<String, Long> stageCounts = new LinkedHashMap<>();
         for (ProductionFileStage stage : ProductionFileStage.values()) {
             stageCounts.put(stage.name(), files.stream().filter(file -> file.getStage() == stage).count());
@@ -78,7 +104,7 @@ public class MatFlowInsightService {
         List<ProductionRiskRow> attention = new ArrayList<>();
 
         for (MatFlowProductionFile file : files) {
-            List<MatFlowWorkItem> items = workRepository.findByProductionFile_IdOrderByDisplayOrderAscCreatedAtAsc(file.getId());
+            List<MatFlowWorkItem> items = workByFile.getOrDefault(file.getId(), List.of());
             long queries = items.stream()
                     .filter(item -> item.getItemType() == WorkItemType.ENGINEERING_QUERY)
                     .filter(item -> !juniorDesignerOnly || isQueryRelatedToActor(item, actor))
@@ -95,7 +121,7 @@ public class MatFlowInsightService {
 
             DesignProjectResponse pdDesign = file.getProject() == null
                     ? null
-                    : designProjectService.findExisting(file.getProject().getId());
+                    : designByProject.get(file.getProject().getId());
             long pendingDesignTasks;
             long overdueDesignTasks;
             if (pdDesign != null) {
@@ -103,7 +129,7 @@ public class MatFlowInsightService {
                 overdueDesignTasks = pdDesign.overdue() ? 1 : 0;
             } else {
                 /* Historical fallback for pre-cut-over Design-task Projects only. */
-                List<MatFlowDesignTask> designTasks = designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(file.getId()).stream()
+                List<MatFlowDesignTask> designTasks = legacyDesignTasksByFile.getOrDefault(file.getId(), List.of()).stream()
                         .filter(task -> !juniorDesignerOnly || isDesignTaskAssignedTo(task, actor))
                         .toList();
                 pendingDesignTasks = designTasks.stream()
@@ -202,10 +228,11 @@ public class MatFlowInsightService {
                 .count();
         long approved = files.stream().filter(file -> file.getEngineeringDecision() == EngineeringDecision.APPROVED).count();
 
-        List<MatFlowWorkItem> all = new ArrayList<>();
-        for (MatFlowProductionFile file : files) {
-            all.addAll(workRepository.findByProductionFile_IdOrderByDisplayOrderAscCreatedAtAsc(file.getId()));
-        }
+        Set<java.util.UUID> fileIds = new java.util.LinkedHashSet<>();
+        for (MatFlowProductionFile file : files) fileIds.add(file.getId());
+        List<MatFlowWorkItem> all = workRepository.findAll().stream()
+                .filter(item -> item.getProductionFile() != null && fileIds.contains(item.getProductionFile().getId()))
+                .toList();
 
         long queries = all.stream()
                 .filter(item -> item.getItemType() == WorkItemType.ENGINEERING_QUERY)
