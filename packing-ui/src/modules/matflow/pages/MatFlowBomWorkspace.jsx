@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Chip,
   Collapse,
   Dialog,
@@ -124,7 +125,8 @@ const validateLine = (line) => {
 /* -------------------------------------------------------------------------- */
 
 export function MatFlowBomListPage() {
-  const { selectedPlantParam } = useMatFlow();
+  const { selectedPlantParam, hasRole } = useMatFlow();
+  const canPermanentDelete = hasRole(MATFLOW_ROLES.ADMIN);
   const [viewMode, setViewMode] = useMatFlowViewMode("boms", "LIST");
   const nav = useNavigate();
 
@@ -139,6 +141,9 @@ export function MatFlowBomListPage() {
   const [open, setOpen] = useState(false);
   const [fileId, setFileId] = useState("");
   const [productId, setProductId] = useState("");
+  const [selectedBomDeleteIds, setSelectedBomDeleteIds] = useState([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -180,6 +185,33 @@ export function MatFlowBomListPage() {
       return matchesSearch && (!status || row.status === status);
     });
   }, [rows, search, status]);
+
+  const visibleBomIds = useMemo(() => filteredRows.map((row) => row.id).filter(Boolean), [filteredRows]);
+  const visibleSelectedBomCount = visibleBomIds.filter((idValue) => selectedBomDeleteIds.includes(idValue)).length;
+  const allVisibleBomsSelected = Boolean(visibleBomIds.length)
+    && visibleSelectedBomCount === visibleBomIds.length;
+
+  useEffect(() => {
+    const valid = new Set(rows.map((row) => row.id));
+    setSelectedBomDeleteIds((current) => current.filter((idValue) => valid.has(idValue)));
+  }, [rows]);
+
+  const toggleBomSelection = (bomId) => {
+    if (!canPermanentDelete || !bomId) return;
+    setSelectedBomDeleteIds((current) => current.includes(bomId)
+      ? current.filter((idValue) => idValue !== bomId)
+      : [...current, bomId]);
+  };
+
+  const toggleVisibleBomSelection = () => {
+    if (!canPermanentDelete || !visibleBomIds.length) return;
+    setSelectedBomDeleteIds((current) => {
+      const next = new Set(current);
+      if (allVisibleBomsSelected) visibleBomIds.forEach((idValue) => next.delete(idValue));
+      else visibleBomIds.forEach((idValue) => next.add(idValue));
+      return Array.from(next);
+    });
+  };
 
   const activeBomKeys = useMemo(() => new Set(
     rows
@@ -256,6 +288,35 @@ export function MatFlowBomListPage() {
     }
   };
 
+  const openBulkDelete = () => {
+    if (!canPermanentDelete || !selectedBomDeleteIds.length) return;
+    setBulkDeleteConfirm("");
+    setBulkDeleteOpen(true);
+  };
+
+  const closeBulkDelete = () => {
+    if (working) return;
+    setBulkDeleteOpen(false);
+    setBulkDeleteConfirm("");
+  };
+
+  const permanentlyDeleteSelectedBoms = async () => {
+    if (!canPermanentDelete || !selectedBomDeleteIds.length || bulkDeleteConfirm.trim().toUpperCase() !== "DELETE") return;
+    setWorking(true);
+    setError("");
+    try {
+      await matflowApi.permanentlyDeleteBoms([...selectedBomDeleteIds]);
+      setSelectedBomDeleteIds([]);
+      setBulkDeleteOpen(false);
+      setBulkDeleteConfirm("");
+      await load();
+    } catch (requestError) {
+      setError(readMatFlowError(requestError, "Unable to permanently delete selected BOMs."));
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const readinessText = (item) => {
     if (!item.product) return "Add at least one Product to this PD / Project first";
     if (item.eligible) return "Ready to start this Product BOM";
@@ -302,13 +363,56 @@ export function MatFlowBomListPage() {
         </Box>
       </Card>
 
+      {canPermanentDelete && filteredRows.length > 0 && (
+        <Card sx={{ ...panelSx, p: 0.8, display: "flex", alignItems: "center", gap: 0.6, flexWrap: "wrap", borderColor: selectedBomDeleteIds.length ? "var(--mf-danger-border)" : "var(--mf-border)" }}>
+          <Checkbox
+            size="small"
+            checked={allVisibleBomsSelected}
+            indeterminate={visibleSelectedBomCount > 0 && !allVisibleBomsSelected}
+            onChange={toggleVisibleBomSelection}
+            inputProps={{ "aria-label": "Select all visible BOMs for permanent delete" }}
+            sx={{ p: 0.35, color: "var(--mf-text-muted)", "&.Mui-checked, &.MuiCheckbox-indeterminate": { color: "var(--mf-danger-text)" } }}
+          />
+          <Typography sx={{ fontSize: 9.2, fontWeight: 900, color: selectedBomDeleteIds.length ? "var(--mf-danger-text)" : "var(--mf-text-secondary)" }}>
+            {selectedBomDeleteIds.length ? `${selectedBomDeleteIds.length} BOM${selectedBomDeleteIds.length === 1 ? "" : "s"} selected` : "ADMIN multi-select permanent delete"}
+          </Typography>
+          <Box sx={{ ml: { xs: 0, sm: "auto" }, display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+            {selectedBomDeleteIds.length > 0 && <Button size="small" onClick={() => setSelectedBomDeleteIds([])} sx={secondaryBtnSx}>Clear</Button>}
+            <Button
+              size="small"
+              disabled={!selectedBomDeleteIds.length || working}
+              startIcon={<DeleteOutlineOutlinedIcon />}
+              onClick={openBulkDelete}
+              sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: selectedBomDeleteIds.length ? "var(--mf-danger-soft)" : undefined }}
+            >
+              Delete Selected{selectedBomDeleteIds.length ? ` (${selectedBomDeleteIds.length})` : ""}
+            </Button>
+          </Box>
+        </Card>
+      )}
+
       {!filteredRows.length ? (
         <Card sx={{ ...panelSx, p: 0 }}><EmptyState>No BOMs found.</EmptyState></Card>
       ) : viewMode === "CARD" ? (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
           {filteredRows.map((row) => (
-            <Card key={row.id} onClick={() => nav(`/matflow/boms/${row.id}`)} sx={{ ...panelSx, p: 1.15, cursor: "pointer" }}>
-              <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+            <Card key={row.id} onClick={() => nav(`/matflow/boms/${row.id}`)} sx={{ ...panelSx, p: 1.15, cursor: "pointer", borderColor: selectedBomDeleteIds.includes(row.id) ? "var(--mf-danger-border)" : "var(--mf-border)" }}>
+              <Box sx={{ display: "flex", gap: 0.5, alignItems: "flex-start" }}>
+                {canPermanentDelete && (
+                  <Box onClick={(event) => event.stopPropagation()}>
+                    <Checkbox
+                      size="small"
+                      checked={selectedBomDeleteIds.includes(row.id)}
+                      onChange={() => toggleBomSelection(row.id)}
+                      inputProps={{ "aria-label": `Select BOM ${row.bomNumber || "record"} for permanent delete` }}
+                      sx={{ p: 0.3, color: "var(--mf-text-muted)", "&.Mui-checked": { color: "var(--mf-danger-text)" } }}
+                    />
+                  </Box>
+                )}
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+                </Box>
+              </Box>
               <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                 <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>Revision {row.revisionNo}</Typography></Box>
                 <MatFlowStatusChip status={row.status} />
@@ -319,6 +423,7 @@ export function MatFlowBomListPage() {
       ) : (
         <MatFlowListGrid
           columns={[
+            ...(canPermanentDelete ? [{ key: "select", label: "", width: "48px", align: "center" }] : []),
             { key: "product", label: "Product / PD", width: "300px" },
             { key: "bom", label: "BOM / Drawing", width: "minmax(330px,1.4fr)" },
             { key: "revision", label: "Revision", width: "110px" },
@@ -326,11 +431,22 @@ export function MatFlowBomListPage() {
             { key: "updated", label: "Updated", width: "190px" },
           ]}
           rows={filteredRows}
-          minWidth={1120}
+          minWidth={canPermanentDelete ? 1168 : 1120}
           getRowKey={(row) => row.id}
           onRowClick={(row) => nav(`/matflow/boms/${row.id}`)}
           rowAriaLabel={(row) => `Open BOM ${row.bomNumber || ""}`}
           renderCell={(row, column) => {
+            if (column.key === "select") return (
+              <Box onClick={(event) => event.stopPropagation()} sx={{ display: "flex", justifyContent: "center" }}>
+                <Checkbox
+                  size="small"
+                  checked={selectedBomDeleteIds.includes(row.id)}
+                  onChange={() => toggleBomSelection(row.id)}
+                  inputProps={{ "aria-label": `Select BOM ${row.bomNumber || "record"} for permanent delete` }}
+                  sx={{ p: 0.35, color: "var(--mf-text-muted)", "&.Mui-checked": { color: "var(--mf-danger-text)" } }}
+                />
+              </Box>
+            );
             if (column.key === "product") return <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />;
             if (column.key === "bom") return <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing not assigned"}</Typography></Box>;
             if (column.key === "revision") return <Typography sx={rowSecondarySx}>Rev {row.revisionNo}</Typography>;
@@ -389,6 +505,39 @@ export function MatFlowBomListPage() {
           </Box>
         )}
       </Card>
+
+      <Dialog open={bulkDeleteOpen} onClose={closeBulkDelete} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+        <DialogTitle sx={dialogTitleSx}>ADMIN · Permanently Delete Selected BOMs?</DialogTitle>
+        <DialogContent sx={dialogContentSx}>
+          <Box sx={{ display: "grid", gap: 1, pt: 0.5 }}>
+            <Typography sx={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--mf-danger-text)", fontWeight: 850 }}>
+              This action is irreversible.
+            </Typography>
+            <Typography sx={{ fontSize: 10.5, lineHeight: 1.6, color: "var(--mf-text-secondary)" }}>
+              {selectedBomDeleteIds.length} selected BOM{selectedBomDeleteIds.length === 1 ? "" : "s"} will be permanently removed in one transaction, including matching current and legacy BOM copies and their dependent BOM records.
+            </Typography>
+            <Typography sx={{ fontSize: 9.4, color: "var(--mf-text-muted)" }}>If any selected BOM cannot be purged, the entire batch is rolled back.</Typography>
+            <TextField
+              label='Type DELETE to confirm'
+              value={bulkDeleteConfirm}
+              onChange={(event) => setBulkDeleteConfirm(event.target.value)}
+              autoComplete="off"
+              sx={fieldSx}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={dialogActionsSx}>
+          <Button onClick={closeBulkDelete} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+          <Button
+            onClick={permanentlyDeleteSelectedBoms}
+            disabled={working || !selectedBomDeleteIds.length || bulkDeleteConfirm.trim().toUpperCase() !== "DELETE"}
+            startIcon={<DeleteOutlineOutlinedIcon />}
+            sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: "var(--mf-danger-soft)" }}
+          >
+            {working ? "Deleting..." : `Permanently Delete ${selectedBomDeleteIds.length} BOM${selectedBomDeleteIds.length === 1 ? "" : "s"}`}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={open} onClose={() => !working && setOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
         <DialogTitle sx={dialogTitleSx}>Start Product BOM inside PD / Project</DialogTitle>

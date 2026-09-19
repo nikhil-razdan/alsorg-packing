@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Chip,
   Collapse,
   Drawer,
@@ -405,7 +406,7 @@ function ProjectProductionFilePanel({ project, onOpen }) {
   );
 }
 
-function ProductMasterRow({ project, product, boms, canEdit, canPermanentDelete, showEngineering, onEdit, onImage, onOpenBom, onPermanentDelete }) {
+function ProductMasterRow({ project, product, boms, canEdit, canPermanentDelete, selectedForDelete, showEngineering, onEdit, onImage, onOpenBom, onPermanentDelete, onToggleDeleteSelection }) {
   const [expanded, setExpanded] = useState(false);
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
 
@@ -422,14 +423,26 @@ function ProductMasterRow({ project, product, boms, canEdit, canPermanentDelete,
             Drawing {product.drawingNo || "Not assigned"}{product.drawingRevision ? ` · Rev ${product.drawingRevision}` : ""} · {product.unitQuantity || 1} unit{Number(product.unitQuantity || 1) === 1 ? "" : "s"}
           </Typography>
         </Box>
-        <Button
-          size="small"
-          endIcon={expanded ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
-          onClick={() => setExpanded((value) => !value)}
-          sx={{ ...secondaryBtnSx, minWidth: 0, px: 0.8, py: 0.35, fontSize: 9 }}
-        >
-          {expanded ? "Less" : "Details"}
-        </Button>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
+          {canPermanentDelete && (
+            <Checkbox
+              size="small"
+              checked={Boolean(selectedForDelete)}
+              onClick={(event) => event.stopPropagation()}
+              onChange={() => onToggleDeleteSelection?.(product.id)}
+              inputProps={{ "aria-label": `Select ${product.productName || "Product"} for permanent delete` }}
+              sx={{ p: 0.35, color: "var(--mf-text-muted)", "&.Mui-checked": { color: "var(--mf-danger-text)" } }}
+            />
+          )}
+          <Button
+            size="small"
+            endIcon={expanded ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+            onClick={() => setExpanded((value) => !value)}
+            sx={{ ...secondaryBtnSx, minWidth: 0, px: 0.8, py: 0.35, fontSize: 9 }}
+          >
+            {expanded ? "Less" : "Details"}
+          </Button>
+        </Box>
       </Box>
 
       <Collapse in={expanded} unmountOnExit>
@@ -549,6 +562,8 @@ export function MatFlowProjectsPage() {
   const [clientCreating, setClientCreating] = useState(false);
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
   const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState("");
+  const [selectedProjectDeleteIds, setSelectedProjectDeleteIds] = useState([]);
+  const [selectedProductDeleteIds, setSelectedProductDeleteIds] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -739,6 +754,28 @@ export function MatFlowProjectsPage() {
     [rows, selectedProjectId]
   );
 
+  const visibleProjectIds = useMemo(
+    () => filteredRows.map((project) => project.id).filter(Boolean),
+    [filteredRows]
+  );
+  const visibleSelectedProjectCount = visibleProjectIds.filter((idValue) => selectedProjectDeleteIds.includes(idValue)).length;
+  const allVisibleProjectsSelected = Boolean(visibleProjectIds.length)
+    && visibleSelectedProjectCount === visibleProjectIds.length;
+
+  useEffect(() => {
+    const valid = new Set(rows.map((project) => project.id));
+    setSelectedProjectDeleteIds((current) => current.filter((idValue) => valid.has(idValue)));
+  }, [rows]);
+
+  useEffect(() => {
+    if (!selectedProjectId || !selectedProject) {
+      setSelectedProductDeleteIds([]);
+      return;
+    }
+    const valid = new Set((selectedProject.products || []).map((product) => product.id));
+    setSelectedProductDeleteIds((current) => current.filter((idValue) => valid.has(idValue)));
+  }, [selectedProjectId, selectedProject]);
+
   const openProjectDetails = (project) => setSelectedProjectId(project?.id || "");
   const closeProjectDetails = () => setSelectedProjectId("");
 
@@ -887,6 +924,53 @@ export function MatFlowProjectsPage() {
 
   const openBom = (bom) => navigate(`/matflow/boms/${bom.id}`);
 
+  const toggleProjectDeleteSelection = (projectId) => {
+    if (!canPermanentDelete || !projectId) return;
+    setSelectedProjectDeleteIds((current) => current.includes(projectId)
+      ? current.filter((idValue) => idValue !== projectId)
+      : [...current, projectId]);
+  };
+
+  const toggleVisibleProjectDeleteSelection = () => {
+    if (!canPermanentDelete || !visibleProjectIds.length) return;
+    setSelectedProjectDeleteIds((current) => {
+      const next = new Set(current);
+      if (allVisibleProjectsSelected) visibleProjectIds.forEach((idValue) => next.delete(idValue));
+      else visibleProjectIds.forEach((idValue) => next.add(idValue));
+      return Array.from(next);
+    });
+  };
+
+  const toggleProductDeleteSelection = (productId) => {
+    if (!canPermanentDelete || !productId) return;
+    setSelectedProductDeleteIds((current) => current.includes(productId)
+      ? current.filter((idValue) => idValue !== productId)
+      : [...current, productId]);
+  };
+
+  const toggleAllProductsForDelete = () => {
+    if (!canPermanentDelete || !selectedProject) return;
+    const ids = (selectedProject.products || []).map((product) => product.id).filter(Boolean);
+    const allSelected = ids.length > 0 && ids.every((idValue) => selectedProductDeleteIds.includes(idValue));
+    setSelectedProductDeleteIds(allSelected ? [] : ids);
+  };
+
+  const openBulkProjectDelete = () => {
+    if (!canPermanentDelete || !selectedProjectDeleteIds.length) return;
+    setPermanentDeleteConfirm("");
+    setPermanentDeleteTarget({ kind: "PROJECT_BULK", projectIds: [...selectedProjectDeleteIds] });
+  };
+
+  const openBulkProductDelete = () => {
+    if (!canPermanentDelete || !selectedProject || !selectedProductDeleteIds.length) return;
+    setPermanentDeleteConfirm("");
+    setPermanentDeleteTarget({
+      kind: "PRODUCT_BULK",
+      project: selectedProject,
+      productIds: [...selectedProductDeleteIds],
+    });
+  };
+
   const openPermanentDelete = (target) => {
     if (!canPermanentDelete || !target) return;
     setPermanentDeleteConfirm("");
@@ -908,12 +992,21 @@ export function MatFlowProjectsPage() {
         await matflowApi.permanentlyDeleteProject(target.project.id);
       } else if (target.kind === "PRODUCT") {
         await matflowApi.permanentlyDeleteProjectProduct(target.project.id, target.product.id);
+      } else if (target.kind === "PROJECT_BULK") {
+        await matflowApi.permanentlyDeleteProjects(target.projectIds);
+      } else if (target.kind === "PRODUCT_BULK") {
+        await matflowApi.permanentlyDeleteProjectProducts(target.project.id, target.productIds);
       }
     });
 
     if (ok) {
       const deletingProjectId = target.project?.id;
       if (target.kind === "PROJECT" && selectedProjectId === deletingProjectId) closeProjectDetails();
+      if (target.kind === "PROJECT_BULK") {
+        if (target.projectIds.includes(selectedProjectId)) closeProjectDetails();
+        setSelectedProjectDeleteIds([]);
+      }
+      if (target.kind === "PRODUCT_BULK") setSelectedProductDeleteIds([]);
       setPermanentDeleteTarget(null);
       setPermanentDeleteConfirm("");
       await refresh();
@@ -956,6 +1049,34 @@ export function MatFlowProjectsPage() {
         />
       </Card>
 
+      {canPermanentDelete && filteredRows.length > 0 && (
+        <Card sx={{ ...panelSx, p: 0.8, display: "flex", alignItems: "center", gap: 0.6, flexWrap: "wrap", borderColor: selectedProjectDeleteIds.length ? "var(--mf-danger-border)" : "var(--mf-border)" }}>
+          <Checkbox
+            size="small"
+            checked={allVisibleProjectsSelected}
+            indeterminate={visibleSelectedProjectCount > 0 && !allVisibleProjectsSelected}
+            onChange={toggleVisibleProjectDeleteSelection}
+            inputProps={{ "aria-label": "Select all visible PD / Projects for permanent delete" }}
+            sx={{ p: 0.35, color: "var(--mf-text-muted)", "&.Mui-checked, &.MuiCheckbox-indeterminate": { color: "var(--mf-danger-text)" } }}
+          />
+          <Typography sx={{ fontSize: 9.2, fontWeight: 900, color: selectedProjectDeleteIds.length ? "var(--mf-danger-text)" : "var(--mf-text-secondary)" }}>
+            {selectedProjectDeleteIds.length ? `${selectedProjectDeleteIds.length} PD / Project${selectedProjectDeleteIds.length === 1 ? "" : "s"} selected` : "ADMIN multi-select permanent delete"}
+          </Typography>
+          <Box sx={{ ml: { xs: 0, sm: "auto" }, display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+            {selectedProjectDeleteIds.length > 0 && <Button size="small" onClick={() => setSelectedProjectDeleteIds([])} sx={secondaryBtnSx}>Clear</Button>}
+            <Button
+              size="small"
+              disabled={!selectedProjectDeleteIds.length || working}
+              startIcon={<DeleteOutlineOutlinedIcon />}
+              onClick={openBulkProjectDelete}
+              sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: selectedProjectDeleteIds.length ? "var(--mf-danger-soft)" : undefined }}
+            >
+              Delete Selected{selectedProjectDeleteIds.length ? ` (${selectedProjectDeleteIds.length})` : ""}
+            </Button>
+          </Box>
+        </Card>
+      )}
+
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1 }}>
         <Summary label={juniorDesignerOnly ? "My PDs" : "Projects"} value={summary.projects} />
         <Summary label={juniorDesignerOnly ? "My Products" : "Products / Drawings"} value={summary.products} />
@@ -975,6 +1096,7 @@ export function MatFlowProjectsPage() {
         <Box sx={{ display: "grid", gap: 1 }}>
           <MatFlowListGrid
             columns={[
+              ...(canPermanentDelete ? [{ key: "select", label: "", width: "48px", align: "center" }] : []),
               { key: "pd", label: "PD No.", width: "125px" },
               { key: "project", label: "Project / Client", width: "minmax(220px,1.08fr)" },
               { key: "products", label: "Products / Project File", width: "160px" },
@@ -984,11 +1106,15 @@ export function MatFlowProjectsPage() {
               { key: "actions", label: "", width: "100px", align: "right" },
             ]}
             rows={filteredRows}
-            minWidth={1080}
+            minWidth={canPermanentDelete ? 1128 : 1080}
             getRowKey={(project) => project.id}
             onRowClick={(project) => openProjectDetails(project)}
             rowAriaLabel={(project) => `Open PD ${project.projectCode || "Project"} details`}
-            rowSx={(project) => selectedProjectId === project.id ? { background: "var(--mf-primary-soft)", "&:hover": { background: "var(--mf-primary-soft)" } } : {}}
+            rowSx={(project) => selectedProjectDeleteIds.includes(project.id)
+              ? { background: "var(--mf-danger-soft)", "&:hover": { background: "var(--mf-danger-soft)" } }
+              : selectedProjectId === project.id
+                ? { background: "var(--mf-primary-soft)", "&:hover": { background: "var(--mf-primary-soft)" } }
+                : {}}
             rowAccent={(project) => {
               const health = String(project.releaseHealth || "").toUpperCase();
               if (health === "RED") return "var(--mf-danger-text)";
@@ -1005,6 +1131,17 @@ export function MatFlowProjectsPage() {
               const projectHealth = healthValues.includes("RED") ? "RED" : healthValues.includes("AMBER") ? "AMBER" : healthValues.includes("GREEN") && healthValues.length ? "GREEN" : "PENDING";
               const bomCount = products.reduce((total, product) => total + (bomsByProduct.get(product.id) || []).length, 0);
               const productsWithBom = products.filter((product) => (bomsByProduct.get(product.id) || []).length > 0).length;
+              if (column.key === "select") return (
+                <Box onClick={(event) => event.stopPropagation()} sx={{ display: "flex", justifyContent: "center" }}>
+                  <Checkbox
+                    size="small"
+                    checked={selectedProjectDeleteIds.includes(project.id)}
+                    onChange={() => toggleProjectDeleteSelection(project.id)}
+                    inputProps={{ "aria-label": `Select PD ${project.projectCode || project.projectName || "Project"} for permanent delete` }}
+                    sx={{ p: 0.35, color: "var(--mf-text-muted)", "&.Mui-checked": { color: "var(--mf-danger-text)" } }}
+                  />
+                </Box>
+              );
               if (column.key === "pd") return <Box><Typography sx={{ fontSize: 10.7, fontWeight: 950, color: "var(--mf-text)" }}>{project.projectCode || "Not assigned"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.7, color: "var(--mf-text-muted)" }}>{project.plantCode || "No plant"}</Typography></Box>;
               if (column.key === "project") return <Box><Typography noWrap sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{project.projectName || "Unnamed Project"}</Typography><Typography noWrap sx={{ mt: 0.08, fontSize: 9, color: "var(--mf-text-secondary)" }}>{project.clientName || "Client not assigned"}</Typography></Box>;
               if (column.key === "products") return <Box><Typography sx={{ fontSize: 10.2, fontWeight: 900, color: "var(--mf-text)" }}>{products.length} product{products.length === 1 ? "" : "s"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{productionFiles.length ? "Project file active" : "Project file pending"}{canSeeEngineeringReference ? ` · ${productsWithBom}/${products.length || 0} with BOM · ${bomCount} rev` : ""}</Typography></Box>;
@@ -1042,7 +1179,7 @@ export function MatFlowProjectsPage() {
             const owner = project.projectManager || project.designer1 || "Unassigned";
 
             return (
-              <Card key={project.id} sx={ticketCardSx(projectHealth)}>
+              <Card key={project.id} sx={{ ...ticketCardSx(projectHealth), borderColor: selectedProjectDeleteIds.includes(project.id) ? "var(--mf-danger-border)" : undefined }}>
                 <Box sx={ticketTopSx}>
                   <Box sx={{ minWidth: 0, flex: 1 }}>
                     <Box sx={{ display: "flex", gap: 0.55, alignItems: "center", minWidth: 0 }}>
@@ -1060,6 +1197,15 @@ export function MatFlowProjectsPage() {
                     </Typography>
                   </Box>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.45, flex: "0 0 auto" }}>
+                    {canPermanentDelete && (
+                      <Checkbox
+                        size="small"
+                        checked={selectedProjectDeleteIds.includes(project.id)}
+                        onChange={() => toggleProjectDeleteSelection(project.id)}
+                        inputProps={{ "aria-label": `Select PD ${project.projectCode || project.projectName || "Project"} for permanent delete` }}
+                        sx={{ p: 0.3, color: "var(--mf-text-muted)", "&.Mui-checked": { color: "var(--mf-danger-text)" } }}
+                      />
+                    )}
                     <Box sx={{ width: 8, height: 8, borderRadius: "50%", background: ticketHealthColor(projectHealth) }} />
                     <Typography sx={{ fontSize: 8.3, fontWeight: 900, color: ticketHealthColor(projectHealth), whiteSpace: "nowrap" }}>
                       {healthLabel(projectHealth) || "Pending"}
@@ -1186,7 +1332,25 @@ export function MatFlowProjectsPage() {
                     <Typography sx={{ fontSize: 11.2, fontWeight: 950, color: "var(--mf-text)" }}>Products</Typography>
                     <Typography sx={{ mt: 0.06, fontSize: 8.5, color: "var(--mf-text-muted)" }}>Products are child work inside this PD / Project. The Production File and departmental handoff belong to the whole Project; BOMs remain Product-specific.</Typography>
                   </Box>
-                  <Typography sx={{ fontSize: 9, fontWeight: 850, color: "var(--mf-text-muted)" }}>{(selectedProject.products || []).length} product{(selectedProject.products || []).length === 1 ? "" : "s"}</Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.45, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Typography sx={{ fontSize: 9, fontWeight: 850, color: "var(--mf-text-muted)" }}>{(selectedProject.products || []).length} product{(selectedProject.products || []).length === 1 ? "" : "s"}</Typography>
+                    {canPermanentDelete && (selectedProject.products || []).length > 0 && (
+                      <>
+                        <Button size="small" onClick={toggleAllProductsForDelete} sx={{ ...secondaryBtnSx, px: 0.7 }}>
+                          {(selectedProject.products || []).every((product) => selectedProductDeleteIds.includes(product.id)) ? "Clear Products" : "Select All Products"}
+                        </Button>
+                        <Button
+                          size="small"
+                          disabled={!selectedProductDeleteIds.length || working}
+                          startIcon={<DeleteOutlineOutlinedIcon />}
+                          onClick={openBulkProductDelete}
+                          sx={{ ...secondaryBtnSx, px: 0.7, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: selectedProductDeleteIds.length ? "var(--mf-danger-soft)" : undefined }}
+                        >
+                          Delete Selected{selectedProductDeleteIds.length ? ` (${selectedProductDeleteIds.length})` : ""}
+                        </Button>
+                      </>
+                    )}
+                  </Box>
                 </Box>
                 <Box sx={{ p: 0.75 }}>
                   {!(selectedProject.products || []).length ? (
@@ -1210,11 +1374,13 @@ export function MatFlowProjectsPage() {
                           boms={bomsByProduct.get(product.id) || []}
                           canEdit={canProjectWrite}
                           canPermanentDelete={canPermanentDelete}
+                          selectedForDelete={selectedProductDeleteIds.includes(product.id)}
                           showEngineering={canSeeEngineeringReference}
                           onEdit={openProductEdit}
                           onImage={uploadImage}
                           onOpenBom={openBom}
                           onPermanentDelete={openPermanentDelete}
+                          onToggleDeleteSelection={toggleProductDeleteSelection}
                         />
                       ))}
                     </Box>
@@ -1397,7 +1563,11 @@ export function MatFlowProjectsPage() {
             <Typography sx={{ fontSize: 10.5, lineHeight: 1.6, color: "var(--mf-text-secondary)" }}>
               {permanentDeleteTarget?.kind === "PROJECT"
                 ? `PD / Project ${permanentDeleteTarget?.project?.projectCode || permanentDeleteTarget?.project?.projectName || "selected record"} will be permanently removed together with its Products, current and legacy BOMs, Production File workflow records, revisions/attachments and MatFlow audit/history that depends on it.`
-                : `Product ${permanentDeleteTarget?.product?.productName || "selected record"} will be permanently removed together with all current and legacy BOM revisions and Product-specific MatFlow history.`}
+                : permanentDeleteTarget?.kind === "PROJECT_BULK"
+                  ? `${permanentDeleteTarget?.projectIds?.length || 0} selected PD / Projects will be permanently removed in one transaction together with their Products, current and legacy BOMs, Production File workflow records, revisions/attachments and dependent MatFlow history.`
+                  : permanentDeleteTarget?.kind === "PRODUCT_BULK"
+                    ? `${permanentDeleteTarget?.productIds?.length || 0} selected Products inside ${permanentDeleteTarget?.project?.projectCode || permanentDeleteTarget?.project?.projectName || "this PD / Project"} will be permanently removed in one transaction together with all current and legacy BOM revisions and Product-specific MatFlow history.`
+                    : `Product ${permanentDeleteTarget?.product?.productName || "selected record"} will be permanently removed together with all current and legacy BOM revisions and Product-specific MatFlow history.`}
             </Typography>
             <Typography sx={{ fontSize: 9.4, color: "var(--mf-text-muted)" }}>Shared masters such as Users, Client Directory, Plants and Materials are not deleted.</Typography>
             <TextField
@@ -1417,7 +1587,13 @@ export function MatFlowProjectsPage() {
             startIcon={<DeleteOutlineOutlinedIcon />}
             sx={{ ...secondaryBtnSx, color: "var(--mf-danger-text)", borderColor: "var(--mf-danger-border)", background: "var(--mf-danger-soft)" }}
           >
-            {working ? "Deleting..." : "Permanently Delete"}
+            {working
+              ? "Deleting..."
+              : permanentDeleteTarget?.kind === "PROJECT_BULK"
+                ? `Permanently Delete ${permanentDeleteTarget?.projectIds?.length || 0} Projects`
+                : permanentDeleteTarget?.kind === "PRODUCT_BULK"
+                  ? `Permanently Delete ${permanentDeleteTarget?.productIds?.length || 0} Products`
+                  : "Permanently Delete"}
           </Button>
         </DialogActions>
       </Dialog>

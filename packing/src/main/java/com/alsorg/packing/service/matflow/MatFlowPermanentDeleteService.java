@@ -59,6 +59,19 @@ public class MatFlowPermanentDeleteService {
         this.accessService = accessService;
     }
 
+    /**
+     * Permanently removes multiple PD / Projects in one atomic transaction.
+     * If any selected record fails validation or cannot be purged, the whole
+     * batch is rolled back and attachment cleanup is not executed.
+     */
+    @Transactional
+    public void permanentlyDeleteProjects(List<UUID> projectIds) {
+        requireAdmin();
+        for (UUID projectId : normalizeBatchIds(projectIds, "Project / PD IDs")) {
+            permanentlyDeleteProject(projectId);
+        }
+    }
+
     /** Permanently removes an entire PD / Project and all MatFlow descendants. */
     @Transactional
     public void permanentlyDeleteProject(UUID projectId) {
@@ -143,6 +156,19 @@ public class MatFlowPermanentDeleteService {
         }
     }
 
+    /**
+     * Permanently removes multiple Products under one PD / Project in one atomic
+     * transaction. This is the backend for the ADMIN Product multi-select UI.
+     */
+    @Transactional
+    public void permanentlyDeleteProducts(UUID projectId, List<UUID> productIds) {
+        requireAdmin();
+        requireId(projectId, "Project / PD ID");
+        for (UUID productId : normalizeBatchIds(productIds, "Product IDs")) {
+            permanentlyDeleteProduct(projectId, productId);
+        }
+    }
+
     /** Permanently removes one Product, all of its BOMs and Product-specific history. */
     @Transactional
     public void permanentlyDeleteProduct(UUID projectId, UUID productId) {
@@ -159,6 +185,34 @@ public class MatFlowPermanentDeleteService {
             throw ex;
         } catch (DataAccessException ex) {
             throw deleteConflict("Product", ex);
+        }
+    }
+
+    /**
+     * Permanently removes multiple current and/or legacy BOM revisions in one
+     * atomic transaction. Duplicate UUIDs are ignored.
+     */
+    @Transactional
+    public void permanentlyDeleteBoms(List<UUID> bomIds) {
+        requireAdmin();
+        List<UUID> selectedIds = normalizeBatchIds(bomIds, "BOM IDs");
+
+        /* Validate the whole selection before the first destructive statement. */
+        for (UUID bomId : selectedIds) {
+            if (resolveBomIdentity(bomId) == null) {
+                throw notFound("BOM not found: " + bomId);
+            }
+        }
+
+        for (UUID bomId : selectedIds) {
+            /*
+             * One selected legacy/current alias can remove its matching compatibility
+             * copy. If a later selected UUID was that alias, it is already satisfied
+             * by the earlier purge and must not turn the atomic batch into a false 404.
+             */
+            if (rowExists(CURRENT_BOM_TABLE, bomId) || rowExists(LEGACY_BOM_TABLE, bomId)) {
+                permanentlyDeleteBom(bomId);
+            }
         }
     }
 
@@ -562,6 +616,24 @@ public class MatFlowPermanentDeleteService {
 
     private void requireId(UUID id, String label) {
         if (id == null) throw badRequest(label + " is required");
+    }
+
+    private List<UUID> normalizeBatchIds(List<UUID> ids, String label) {
+        if (ids == null || ids.isEmpty()) {
+            throw badRequest("Select at least one record to permanently delete");
+        }
+
+        LinkedHashSet<UUID> unique = new LinkedHashSet<>();
+        for (UUID id : ids) {
+            if (id == null) throw badRequest(label + " cannot contain an empty ID");
+            unique.add(id);
+        }
+
+        /* Keep one destructive request bounded to avoid an accidental module-wide wipe. */
+        if (unique.size() > 500) {
+            throw badRequest("A maximum of 500 records can be permanently deleted in one request");
+        }
+        return List.copyOf(unique);
     }
 
     private boolean tableExists(String table) {

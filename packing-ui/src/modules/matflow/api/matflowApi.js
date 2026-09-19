@@ -35,7 +35,9 @@ export const matflowApi = {
   updateProjectProduct: (projectId, productId, body) => API.put(`${BASE}/projects/${id(projectId)}/products/${id(productId)}`, body),
   deactivateProjectProduct: (projectId, productId, rowVersion) => API.delete(`${BASE}/projects/${id(projectId)}/products/${id(productId)}`, { params: { rowVersion } }),
   permanentlyDeleteProject: (projectId) => API.delete(`${BASE}/admin/permanent-delete/projects/${id(projectId, "Project ID")}`),
+  permanentlyDeleteProjects: (projectIds) => API.post(`${BASE}/admin/permanent-delete/projects/bulk`, { projectIds }),
   permanentlyDeleteProjectProduct: (projectId, productId) => API.delete(`${BASE}/admin/permanent-delete/projects/${id(projectId, "Project ID")}/products/${id(productId, "Product ID")}`),
+  permanentlyDeleteProjectProducts: (projectId, productIds) => API.post(`${BASE}/admin/permanent-delete/products/bulk`, { projectId, productIds }),
   uploadProductImage: (projectId, productId, file) => {
     const form = new FormData(); form.append("file", file);
     return API.post(`${BASE}/projects/${id(projectId)}/products/${id(productId)}/image`, form, { headers: { "Content-Type": "multipart/form-data" } });
@@ -95,6 +97,7 @@ export const matflowApi = {
   deleteBomLine: (bomId, lineId, rowVersion) => API.delete(`${BASE}/boms/${id(bomId)}/lines/${id(lineId)}`, { params: { rowVersion } }),
   deleteDraftBom: (bomId, rowVersion) => API.delete(`${BASE}/boms/${id(bomId)}`, { params: { rowVersion } }),
   permanentlyDeleteBom: (bomId) => API.delete(`${BASE}/admin/permanent-delete/boms/${id(bomId, "BOM ID")}`),
+  permanentlyDeleteBoms: (bomIds) => API.post(`${BASE}/admin/permanent-delete/boms/bulk`, { bomIds }),
   submitBom: (bomId, body) => API.post(`${BASE}/boms/${id(bomId)}/submit`, body),
   createBomRevision: (bomId, body) => API.post(`${BASE}/boms/${id(bomId)}/revisions`, body),
 
