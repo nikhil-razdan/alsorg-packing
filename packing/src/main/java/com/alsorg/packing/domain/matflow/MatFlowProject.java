@@ -86,15 +86,4 @@ public class MatFlowProject extends MatFlowBaseEntity {
     public void setRemarks(String value) { this.remarks = clean(value); }
     public boolean isActive() { return active; }
     public void setActive(boolean value) { this.active = value; }
-
-    private static String clean(String value) {
-        if (value == null) return null;
-        String next = value.trim();
-        return next.isBlank() ? null : next;
-    }
-
-    private static String cleanUpper(String value) {
-        String next = clean(value);
-        return next == null ? null : next.toUpperCase(java.util.Locale.ROOT);
-    }
 }

@@ -194,13 +194,4 @@ public class MatFlowProjectDrawing extends MatFlowBaseEntity {
         if (value == null) return null;
         return value.signum() < 0 ? BigDecimal.ZERO : value;
     }
-    private static String clean(String value) {
-        if (value == null) return null;
-        String next = value.trim();
-        return next.isBlank() ? null : next;
-    }
-    private static String cleanUpper(String value) {
-        String next = clean(value);
-        return next == null ? null : next.toUpperCase(java.util.Locale.ROOT);
-    }
 }

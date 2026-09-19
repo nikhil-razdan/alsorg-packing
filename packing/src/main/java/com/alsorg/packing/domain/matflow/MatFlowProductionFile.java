@@ -269,14 +269,4 @@ public class MatFlowProductionFile extends MatFlowBaseEntity {
     public void setRemarks(String v) { remarks = clean(v); }
     public boolean isActive() { return active; }
     public void setActive(boolean v) { active = v; }
-
-    private static String clean(String value) {
-        if (value == null) return null;
-        String next = value.trim();
-        return next.isBlank() ? null : next;
-    }
-    private static String cleanUpper(String value) {
-        String next = clean(value);
-        return next == null ? null : next.toUpperCase(java.util.Locale.ROOT);
-    }
 }

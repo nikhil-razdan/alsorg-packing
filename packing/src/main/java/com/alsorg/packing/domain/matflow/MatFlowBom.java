@@ -108,15 +108,4 @@ public class MatFlowBom extends MatFlowBaseEntity {
 
     public LocalDateTime getReleasedAt() { return releasedAt; }
     public void setReleasedAt(LocalDateTime value) { this.releasedAt = value; }
-
-    private static String clean(String value) {
-        if (value == null) return null;
-        String next = value.trim();
-        return next.isEmpty() ? null : next;
-    }
-
-    private static String cleanUpper(String value) {
-        String next = clean(value);
-        return next == null ? null : next.toUpperCase(java.util.Locale.ROOT);
-    }
 }
